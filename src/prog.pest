@@ -1,0 +1,10 @@
+StringContent = ${(!"\"" ~ ANY)*}
+String = @{ "\"" ~ StringContent ~ "\"" }
+Ident = ${(!(SEPARATOR|";") ~ ANY)*}
+Print = ${ ^"Print" ~ SPACE_SEPARATOR*? ~ String ~ ";" }
+DefBegin = ${ ^"DefBegin" ~ SPACE_SEPARATOR*? ~ Ident ~ ";" }
+DefEnd = ${ ^"DefEnd;" }
+Call = ${^"Call" ~ SPACE_SEPARATOR*? ~ Ident ~ ";"}
+StmtTypes = @{ (Print | DefBegin | DefEnd | Call) }
+Statement = @{ (SPACE_SEPARATOR)* ~ StmtTypes ~ (SPACE_SEPARATOR | NEWLINE)*}
+Prog = @{ Statement* }
