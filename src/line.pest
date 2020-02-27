@@ -1,0 +1,5 @@
+StringContent = ${(!"\"" ~ ANY)*}
+String = @{ "\"" ~ StringContent ~ "\"" }
+PrintLine = { ^"print" ~ SPACE_SEPARATOR*? ~ String ~ ";" }
+Line = _{ (PrintLine) ~ (SPACE_SEPARATOR | NEWLINE)*}
+Lines = _{ Line* }
