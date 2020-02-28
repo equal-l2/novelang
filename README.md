@@ -4,8 +4,8 @@
 
 - `print string`
 - `call ident`
-- `defbegin ident`
-- `defend`
+- `fnbegin ident`
+- `fnend`
 
 ## TODO
 - Add `if`

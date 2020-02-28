@@ -9,15 +9,15 @@ struct ProgParser;
 #[derive(Debug, Clone)]
 enum StmtType {
     Print { text: String },
-    DefBegin { name: String, offset_to_end: usize },
-    DefEnd,
+    FnBegin { name: String, offset_to_end: usize },
+    FnEnd,
     Call { name: String },
 }
 
 #[derive(Debug, Clone)]
 struct Program {
     stmts: Vec<StmtType>,
-    defs: HashMap<String, usize>,
+    fns: HashMap<String, usize>,
 }
 
 fn parse_stmts(s: String) -> Option<Program> {
@@ -29,8 +29,8 @@ fn parse_stmts(s: String) -> Option<Program> {
     let stmts = stmts.unwrap().next().unwrap().into_inner();
 
     let mut stmt_list = vec![];
-    let mut defs = HashMap::new();
-    let mut def_start = None;
+    let mut fns = HashMap::new();
+    let mut fn_start = None;
     //dbg!(&stmts);
     for stmt in stmts {
         //dbg!(&stmt);
@@ -44,40 +44,40 @@ fn parse_stmts(s: String) -> Option<Program> {
                     .as_str()
                     .to_owned(),
             }),
-            Rule::DefBegin => {
-                if def_start.is_some() {
-                    eprintln!("You cannot nest DefBegin.");
+            Rule::FnBegin => {
+                if fn_start.is_some() {
+                    eprintln!("You cannot nest FnBegin.");
                     std::process::exit(1);
                 }
-                let def_name = stmt
+                let fn_name = stmt
                     .into_inner()
                     .next()
                     .unwrap()
                     .into_inner()
                     .as_str()
                     .to_owned();
-                def_start = Some(stmt_list.len());
-                defs.insert(def_name.clone(), stmt_list.len());
-                stmt_list.push(StmtType::DefBegin {
-                    name: def_name,
+                fn_start = Some(stmt_list.len());
+                fns.insert(fn_name.clone(), stmt_list.len());
+                stmt_list.push(StmtType::FnBegin {
+                    name: fn_name,
                     offset_to_end: 0,
                 });
             }
-            Rule::DefEnd => {
-                if def_start.is_none() {
-                    eprintln!("A stray DefEnd detected.");
+            Rule::FnEnd => {
+                if fn_start.is_none() {
+                    eprintln!("A stray FnEnd detected.");
                     std::process::exit(1);
                 }
-                let start = def_start.take().unwrap();
-                if let StmtType::DefBegin { ref name, .. } = stmt_list[start] {
-                    stmt_list[start] = StmtType::DefBegin {
+                let start = fn_start.take().unwrap();
+                if let StmtType::FnBegin { ref name, .. } = stmt_list[start] {
+                    stmt_list[start] = StmtType::FnBegin {
                         name: name.clone(),
                         offset_to_end: stmt_list.len() - start,
                     };
                 } else {
                     unreachable!();
                 }
-                stmt_list.push(StmtType::DefEnd);
+                stmt_list.push(StmtType::FnEnd);
             }
             Rule::Call => stmt_list.push(StmtType::Call {
                 name: stmt
@@ -93,7 +93,7 @@ fn parse_stmts(s: String) -> Option<Program> {
     }
     Some(Program {
         stmts: stmt_list,
-        defs,
+        fns,
     })
 }
 
@@ -125,18 +125,18 @@ fn process_stmts(prog: Program) {
                 let _ = wait_keypress();
                 i += 1;
             }
-            StmtType::DefBegin { offset_to_end, .. } => {
+            StmtType::FnBegin { offset_to_end, .. } => {
                 i += offset_to_end + 1;
             }
             StmtType::Call { name } => {
-                if let Some(idx) = prog.defs.get(name) {
+                if let Some(idx) = prog.fns.get(name) {
                     ret_idx = Some(i+1);
                     i = *idx + 1;
                 } else {
                     unreachable!()
                 }
             }
-            StmtType::DefEnd => {
+            StmtType::FnEnd => {
                 if ret_idx.is_some() {
                     i = ret_idx.take().unwrap();
                 } else {
