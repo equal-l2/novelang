@@ -8,6 +8,9 @@
 - `fnend`
 
 ## TODO
-- Add `if`
-- Add `loop` and `break`
-- Add variable
+- Implement call stack
+    - Support nested function call
+    - Add `loop` and `break` (implement as a function?)
+- Add arithmetic and comparison
+    - Add `if`
+- Add variable (integer only?)
