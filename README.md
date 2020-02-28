@@ -8,9 +8,8 @@
 - `fnend`
 
 ## TODO
-- Implement call stack
-    - Support nested function call
-    - Add `loop` and `break` (implement as a function?)
+- ~Implement call stack~(Done)
+    - Add `loop` and `break` (implement using call stack?)
 - Add arithmetic and comparison
     - Add `if`
 - Add variable (integer only?)

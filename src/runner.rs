@@ -1,28 +1,27 @@
 use super::Program;
 use super::StmtType;
+use std::collections::HashMap;
 
-pub fn run(prog: Program) {
-    ctrlc::set_handler(|| {
-        let _ = crossterm::terminal::disable_raw_mode();
-    })
-    .unwrap();
-    let _ = crossterm::terminal::enable_raw_mode();
-    process_stmts(prog);
-    let _ = crossterm::terminal::disable_raw_mode();
+struct CallFrame {
+    ret_idx: usize,
+    vars: HashMap<String, Variable>,
 }
 
-fn wait_keypress() {
-    use crossterm::event::*;
-    loop {
-        if let Event::Key(KeyEvent { .. }) = read().unwrap() {
-            return;
-        }
+impl CallFrame {
+    fn new(ret_idx: usize) -> Self {
+        Self { ret_idx, vars: HashMap::new() }
     }
+}
+
+struct Variable {
+    is_mutable: bool,
+    value: usize,
 }
 
 fn process_stmts(prog: Program) {
     use std::io::Write;
-    let mut ret_idx = None;
+    //let mut global_vars = HashMap::new();
+    let mut call_stack = vec![];
     let mut i = 0;
     while i < prog.stmts.len() {
         match &prog.stmts[i] {
@@ -44,7 +43,7 @@ fn process_stmts(prog: Program) {
             }
             StmtType::Call { name } => {
                 if let Some(idx) = prog.fns.get(name) {
-                    ret_idx = Some(i + 1);
+                    call_stack.push(CallFrame::new(i + 1));
                     i = *idx + 1;
                 } else {
                     let _ = crossterm::terminal::disable_raw_mode();
@@ -53,13 +52,32 @@ fn process_stmts(prog: Program) {
                 }
             }
             StmtType::FnEnd => {
-                if ret_idx.is_some() {
-                    i = ret_idx.take().unwrap();
+                if let Some(frame) = call_stack.pop() {
+                    i = frame.ret_idx;
                 } else {
                     unreachable!()
                 }
             }
             _ => unreachable!(),
+        }
+    }
+}
+
+pub fn run(prog: Program) {
+    ctrlc::set_handler(|| {
+        let _ = crossterm::terminal::disable_raw_mode();
+    })
+    .unwrap();
+    let _ = crossterm::terminal::enable_raw_mode();
+    process_stmts(prog);
+    let _ = crossterm::terminal::disable_raw_mode();
+}
+
+fn wait_keypress() {
+    use crossterm::event::*;
+    loop {
+        if let Event::Key(KeyEvent { .. }) = read().unwrap() {
+            return;
         }
     }
 }
