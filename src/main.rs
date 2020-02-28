@@ -26,38 +26,28 @@ fn parse_stmts(s: String) -> Option<Program> {
         eprintln!("{}", e);
         return None;
     }
-    let stmts = stmts.unwrap().next().unwrap().into_inner();
+    let stmts = stmts.unwrap();
 
     let mut stmt_list = vec![];
     let mut fns = HashMap::new();
     let mut fn_start = None;
-    //dbg!(&stmts);
     for stmt in stmts {
-        //dbg!(&stmt);
         match stmt.as_rule() {
             Rule::Print => stmt_list.push(StmtType::Print {
-                text: stmt
-                    .into_inner()
-                    .next()
-                    .unwrap()
-                    .into_inner()
-                    .as_str()
-                    .to_owned(),
+                text: stmt.into_inner().as_str().to_owned(),
             }),
             Rule::FnBegin => {
                 if fn_start.is_some() {
-                    eprintln!("You cannot nest FnBegin.");
+                    eprintln!("Semantic error: you cannot nest FnBegin.");
                     std::process::exit(1);
                 }
-                let fn_name = stmt
-                    .into_inner()
-                    .next()
-                    .unwrap()
-                    .into_inner()
-                    .as_str()
-                    .to_owned();
+                let fn_name = stmt.into_inner().as_str().to_owned();
                 fn_start = Some(stmt_list.len());
-                fns.insert(fn_name.clone(), stmt_list.len());
+                let old = fns.insert(fn_name.clone(), stmt_list.len());
+                if old.is_some() {
+                    eprintln!("Semantic error: function name \"{}\" is conflicting", fn_name);
+                    std::process::exit(1);
+                }
                 stmt_list.push(StmtType::FnBegin {
                     name: fn_name,
                     offset_to_end: 0,
@@ -65,7 +55,7 @@ fn parse_stmts(s: String) -> Option<Program> {
             }
             Rule::FnEnd => {
                 if fn_start.is_none() {
-                    eprintln!("A stray FnEnd detected.");
+                    eprintln!("Semantic error: a stray FnEnd detected.");
                     std::process::exit(1);
                 }
                 let start = fn_start.take().unwrap();
@@ -80,15 +70,12 @@ fn parse_stmts(s: String) -> Option<Program> {
                 stmt_list.push(StmtType::FnEnd);
             }
             Rule::Call => stmt_list.push(StmtType::Call {
-                name: stmt
-                    .into_inner()
-                    .next()
-                    .unwrap()
-                    .into_inner()
-                    .as_str()
-                    .to_owned(),
+                name: stmt.into_inner().as_str().to_owned(),
             }),
-            _ => unreachable!(),
+            Rule::EOI => break,
+            other => {
+                panic!("unexpected rule : {:?}", other);
+            }
         }
     }
     Some(Program {
@@ -97,7 +84,7 @@ fn parse_stmts(s: String) -> Option<Program> {
     })
 }
 
-pub fn wait_keypress() {
+fn wait_keypress() {
     use crossterm::event::*;
     loop {
         if let Event::Key(KeyEvent { .. }) = read().unwrap() {
@@ -111,17 +98,16 @@ fn process_stmts(prog: Program) {
     let mut ret_idx = None;
     let mut i = 0;
     while i < prog.stmts.len() {
-        //dbg!(i);
-        //dbg!(&prog.stmts[i]);
         match &prog.stmts[i] {
             StmtType::Print { text } => {
                 crossterm::execute!(
                     std::io::stdout(),
+                    crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine),
                     crossterm::style::Print(format!(
                         "{:04} : {}\r\n[Proceed with any key]\r",
                         i, text
                     ))
-                );
+                ).unwrap();
                 let _ = wait_keypress();
                 i += 1;
             }
@@ -130,10 +116,12 @@ fn process_stmts(prog: Program) {
             }
             StmtType::Call { name } => {
                 if let Some(idx) = prog.fns.get(name) {
-                    ret_idx = Some(i+1);
+                    ret_idx = Some(i + 1);
                     i = *idx + 1;
                 } else {
-                    unreachable!()
+                    let _ = crossterm::terminal::disable_raw_mode();
+                    eprintln!("Runtime error: function \"{}\" was not found", name);
+                    std::process::exit(1);
                 }
             }
             StmtType::FnEnd => {
