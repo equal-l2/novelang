@@ -1,26 +1,19 @@
 mod parser;
 mod runner;
+mod exprs;
 
-#[derive(Debug, Clone)]
-pub enum StmtType {
-    Print { text: String },
-    FnBegin { name: String, offset_to_end: usize },
-    FnEnd,
-    Call { name: String },
-}
+use structopt::StructOpt;
 
-#[derive(Debug, Clone)]
-pub struct Program {
-    stmts: Vec<StmtType>,
-    fns: std::collections::HashMap<String, usize>,
+#[derive(StructOpt)]
+struct Opt {
+    #[structopt(long)]
+    wait: bool,
+    filename: String
 }
 
 fn main() {
-    let path = std::env::args().nth(1).unwrap_or_else(|| {
-        eprintln!("File error: filename was not provided");
-        std::process::exit(1);
-    });
-    let s = std::fs::read_to_string(path).unwrap_or_else(|e| {
+    let opt = Opt::from_args();
+    let s = std::fs::read_to_string(opt.filename).unwrap_or_else(|e| {
         eprintln!("File error: file could not be read : {}", e);
         std::process::exit(1);
     });
@@ -30,7 +23,7 @@ fn main() {
     eprintln!("Info: load completed");
 
     if let Some(i) = parsed {
-        runner::run(i);
+        runner::run(i, opt.wait);
     } else {
         std::process::exit(1);
     }

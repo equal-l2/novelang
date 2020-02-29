@@ -1,31 +1,71 @@
-use super::Program;
-use super::StmtType;
+use crate::parser::Program;
+use crate::parser::Inst;
 use std::collections::HashMap;
 
-struct CallFrame {
-    ret_idx: usize,
-    vars: HashMap<String, Variable>,
+pub type VarTable = HashMap<String, Variable>;
+
+pub struct CallStack {
+    ret_stack: Vec<usize>,
+    vars_stack: Vec<VarTable>,
 }
 
-impl CallFrame {
-    fn new(ret_idx: usize) -> Self {
-        Self { ret_idx, vars: HashMap::new() }
+impl CallStack {
+    fn new() -> Self {
+        // init with one vartable for global vars
+        Self { ret_stack: vec![], vars_stack: vec![VarTable::new()] }
+    }
+
+    fn pop(&mut self) -> Option<usize> {
+        self.vars_stack.pop().unwrap();
+        self.ret_stack.pop()
+    }
+
+    fn push(&mut self, ret_index: usize) {
+        self.vars_stack.push(Default::default());
+        self.ret_stack.push(ret_index)
+    }
+
+    // get the highest variable in the stack with the specified name
+    pub fn get_var(&self, name: &String) -> Option<&Variable> {
+        for table in self.vars_stack.iter().rev() {
+            if let Some(v) = table.get(name) {
+                return Some(v);
+            }
+        }
+        None
+    }
+
+    fn get_var_mut(&mut self, name: &String) -> Option<&mut Variable> {
+        for table in self.vars_stack.iter_mut().rev() {
+            if let Some(v) = table.get_mut(name) {
+                return Some(v);
+            }
+        }
+        None
     }
 }
 
-struct Variable {
+pub struct Variable {
     is_mutable: bool,
-    value: usize,
+    pub value: usize,
 }
 
-fn process_stmts(prog: Program) {
+macro_rules! die {
+    ($( $x:expr ),*) => {
+        let _ = crossterm::terminal::disable_raw_mode();
+        eprintln!($($x,)*);
+        std::process::exit(1);
+    }
+}
+
+fn process_stmts(prog: Program, wait: bool) {
     use std::io::Write;
-    //let mut global_vars = HashMap::new();
-    let mut call_stack = vec![];
+
+    let mut call_stack = CallStack::new();
     let mut i = 0;
     while i < prog.stmts.len() {
         match &prog.stmts[i] {
-            StmtType::Print { text } => {
+            Inst::Print { text } => {
                 crossterm::execute!(
                     std::io::stdout(),
                     crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine),
@@ -35,41 +75,55 @@ fn process_stmts(prog: Program) {
                     ))
                 )
                 .unwrap();
-                let _ = wait_keypress();
+                if wait {let _ = wait_keypress();}
                 i += 1;
             }
-            StmtType::FnBegin { offset_to_end, .. } => {
+            Inst::Sub { offset_to_end, .. } => {
                 i += offset_to_end + 1;
             }
-            StmtType::Call { name } => {
-                if let Some(idx) = prog.fns.get(name) {
-                    call_stack.push(CallFrame::new(i + 1));
+            Inst::Call { name } => {
+                if let Some(idx) = prog.subs.get(name) {
+                    call_stack.push(i + 1);
                     i = *idx + 1;
                 } else {
-                    let _ = crossterm::terminal::disable_raw_mode();
-                    eprintln!("Runtime error: function \"{}\" was not found", name);
-                    std::process::exit(1);
+                    die!("Runtime error: function \"{}\" was not found", name);
                 }
             }
-            StmtType::FnEnd => {
-                if let Some(frame) = call_stack.pop() {
-                    i = frame.ret_idx;
+            Inst::End => {
+                if let Some(ret_idx) = call_stack.pop() {
+                    i = ret_idx;
                 } else {
-                    unreachable!()
+                    die!("Runtime error: index to return was not set");
                 }
             }
-            _ => unreachable!(),
+            Inst::While { cond, offset_to_end } => {
+                use crate::exprs::Eval;
+                if let Some(b) = cond.eval(&call_stack) {
+                    if b {
+                        call_stack.push(i);
+                        i += 1;
+                    } else {
+                        i += offset_to_end + 1;
+                    }
+                } else {
+                    die!("Runtime error: condition expression is corrupted");
+                }
+            }
+            other => {
+                die!("Runtime error: unknown instruction type : {:?}", other);
+            }
         }
     }
 }
 
-pub fn run(prog: Program) {
+pub fn run(prog: Program, wait: bool) {
     ctrlc::set_handler(|| {
         let _ = crossterm::terminal::disable_raw_mode();
+        std::process::exit(-1);
     })
     .unwrap();
-    let _ = crossterm::terminal::enable_raw_mode();
-    process_stmts(prog);
+    if wait { let _ = crossterm::terminal::enable_raw_mode(); }
+    process_stmts(prog, wait);
     let _ = crossterm::terminal::disable_raw_mode();
 }
 
