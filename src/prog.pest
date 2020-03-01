@@ -6,7 +6,7 @@ IdentChars = _{!(SEPARATOR|";"|"<"|">"|"="|"!"|"+"|",") ~ ANY}
 Ident = {(!ASCII_DIGIT ~ IdentChars) ~ IdentChars*}
 
 Op = { "+" }
-IdentOrNum = _{ Ident | Num }
+IdentOrNum = { Ident | Num }
 TrueExpr = { IdentOrNum ~ SP ~ Op ~ SP ~ Expr }
 Expr = { TrueExpr | IdentOrNum }
 CompOp = { "<" | ">" | "<=" | ">=" | "!=" | "==" }
@@ -15,15 +15,18 @@ CompExpr = { Expr ~ SP ~ CompOp ~ SP ~ Expr }
 StringContent = {(!"\"" ~ ANY)*}
 String = _{ "\"" ~ StringContent ~ "\"" }
 
-Print = { ^"Print" ~ SP ~ String } // show string
+StrOrExpr = _{ String | Expr }
+
+Print = { ^"Print" ~ SP ~ StrOrExpr ~ SP ~ ("," ~ SP ~ StrOrExpr ~ SP)* } // show string and expr value
 Sub = { ^"Sub" ~ SP ~ Ident } // start of subroutine definition
 Call = { ^"Call" ~ SP ~ Ident } // call subroutine
 While = { ^"While" ~ SP ~ CompExpr } // start of while
 Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr } // variable declaration
 LetMut = { ^"LetMut" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr } // variable declaration (mutable)
 Modify = { ^"Modify" ~ SP ~ Ident ~ SP ~ ^"To" ~ SP ~ Expr } // variable modification
+Input = { ^"Input" ~ SP ~ ^"To" ~ SP ~ Ident }
 End = { ^"End" } // end of something
 
-StmtTypes = _{ Print | Sub | Call | While | Let | LetMut | Modify | End }
+StmtTypes = _{ Print | Sub | Call | While | Let | LetMut | Modify | Input | End }
 Statement = _{ SP ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
 Prog = _{ SOI ~ Statement* ~ EOI }

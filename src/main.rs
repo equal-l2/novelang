@@ -1,6 +1,6 @@
+mod exprs;
 mod parser;
 mod runner;
-mod exprs;
 
 use structopt::StructOpt;
 
@@ -8,7 +8,7 @@ use structopt::StructOpt;
 struct Opt {
     #[structopt(long)]
     wait: bool,
-    filename: String
+    filename: String,
 }
 
 fn main() {

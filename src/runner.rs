@@ -1,8 +1,8 @@
-use crate::parser::Program;
 use crate::parser::Inst;
-use std::collections::HashMap;
+use crate::parser::PrintArgs;
+use crate::parser::Program;
 
-pub type VarTable = HashMap<String, Variable>;
+pub type VarTable = std::collections::HashMap<String, Variable>;
 
 pub struct CallStack {
     ret_stack: Vec<usize>,
@@ -12,7 +12,10 @@ pub struct CallStack {
 impl CallStack {
     fn new() -> Self {
         // init with one vartable for global vars
-        Self { ret_stack: vec![], vars_stack: vec![VarTable::new()] }
+        Self {
+            ret_stack: vec![],
+            vars_stack: vec![VarTable::new()],
+        }
     }
 
     fn pop(&mut self) -> Option<usize> {
@@ -67,17 +70,28 @@ fn run_insts(prog: Program, wait: bool) {
     while i < prog.insts.len() {
         use crate::exprs::Eval;
         match &prog.insts[i] {
-            Inst::Print { text } => {
-                crossterm::execute!(
-                    std::io::stdout(),
-                    crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine),
-                    crossterm::style::Print(format!(
-                        "{:04} : {}\r\n[Proceed with any key]\r",
-                        i, text
-                    ))
-                )
-                .unwrap();
-                if wait {let _ = wait_keypress();}
+            Inst::Print { args } => {
+                use crossterm::*;
+                let mut stdout = std::io::stdout();
+                queue!(
+                    stdout,
+                    terminal::Clear(terminal::ClearType::CurrentLine),
+                    style::Print(format!("{:04} :", i)),
+                );
+                for arg in args {
+                    stdout.queue(style::Print(match arg {
+                        PrintArgs::String(i) => format!(" {}", i),
+                        PrintArgs::Expr(i) => format!(" {}", i.eval(&call_stack).unwrap()),
+                    }));
+                }
+
+                stdout.queue(style::Print("\r\n[Proceed with any key]\r"));
+
+                let _ = stdout.flush();
+
+                if wait {
+                    let _ = wait_keypress();
+                }
             }
             Inst::Sub { offset_to_end, .. } => {
                 i += offset_to_end;
@@ -90,7 +104,10 @@ fn run_insts(prog: Program, wait: bool) {
                     die!("Runtime error: function \"{}\" was not found", name);
                 }
             }
-            Inst::While { cond, offset_to_end } => {
+            Inst::While {
+                cond,
+                offset_to_end,
+            } => {
                 if let Some(b) = cond.eval(&call_stack) {
                     if b {
                         call_stack.push(i);
@@ -101,27 +118,41 @@ fn run_insts(prog: Program, wait: bool) {
                     die!("Runtime error: condition expression is corrupted");
                 }
             }
-            Inst::Let {name, init} => {
+            Inst::Let { name, init } => {
                 let init_var = Variable {
                     is_mutable: false,
                     value: init.eval(&call_stack).unwrap_or_else(|| {
-                    die!("Runtime error: init value of Let is None");
-                })};
-                if call_stack.vars_stack.last_mut().unwrap().insert(name.clone(), init_var).is_some() {
+                        die!("Runtime error: init value of Let is None");
+                    }),
+                };
+                if call_stack
+                    .vars_stack
+                    .last_mut()
+                    .unwrap()
+                    .insert(name.clone(), init_var)
+                    .is_some()
+                {
                     die!("Runtime error: variable {} is already declared", name);
                 }
             }
-            Inst::LetMut {name, init} => {
+            Inst::LetMut { name, init } => {
                 let init_var = Variable {
                     is_mutable: true,
                     value: init.eval(&call_stack).unwrap_or_else(|| {
-                    die!("Runtime error: init value of Let is None");
-                })};
-                if call_stack.vars_stack.last_mut().unwrap().insert(name.clone(), init_var).is_some() {
+                        die!("Runtime error: init value of Let is None");
+                    }),
+                };
+                if call_stack
+                    .vars_stack
+                    .last_mut()
+                    .unwrap()
+                    .insert(name.clone(), init_var)
+                    .is_some()
+                {
                     die!("Runtime error: variable {} is already declared", name);
                 }
             }
-            Inst::Modify {name, expr} => {
+            Inst::Modify { name, expr } => {
                 let to_value = expr.eval(&call_stack).unwrap_or_else(|| {
                     die!("Runtime error: expr value of Modify is None");
                 });
@@ -156,7 +187,9 @@ pub fn run(prog: Program, wait: bool) {
         std::process::exit(-1);
     })
     .unwrap();
-    if wait { let _ = crossterm::terminal::enable_raw_mode(); }
+    if wait {
+        let _ = crossterm::terminal::enable_raw_mode();
+    }
     run_insts(prog, wait);
     let _ = crossterm::terminal::disable_raw_mode();
 }

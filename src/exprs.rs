@@ -2,8 +2,7 @@ use crate::parser::Rule;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Ident(String),
-    Num(usize),
+    IdentOrNum(IdentOrNum),
     TrueExpr(TrueExpr),
 }
 
@@ -13,8 +12,14 @@ pub enum ExprOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum IdentOrNum {
+    Ident(String),
+    Num(usize),
+}
+
+#[derive(Debug, Clone)]
 pub struct TrueExpr {
-    lhs: Box<Expr>,
+    lhs: IdentOrNum,
     op: ExprOp,
     rhs: Box<Expr>,
 }
@@ -68,8 +73,7 @@ impl FromStmt for Expr {
     fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
         let stmt = stmt.into_inner().next().unwrap();
         match stmt.as_rule() {
-            Rule::Ident => Self::Ident(stmt.as_str().to_owned()),
-            Rule::Num => Self::Num(stmt.as_str().parse().unwrap()),
+            Rule::IdentOrNum => Self::IdentOrNum(IdentOrNum::parse_stmt(stmt)),
             Rule::TrueExpr => Self::TrueExpr(TrueExpr::parse_stmt(stmt)),
             other => {
                 panic!("Semantic error: unexpected rule : {:?}", other);
@@ -87,11 +91,24 @@ impl FromStmt for ExprOp {
     }
 }
 
+impl FromStmt for IdentOrNum {
+    fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
+        let it = stmt.into_inner().next().unwrap();
+        match it.as_rule() {
+            Rule::Ident => Self::Ident(it.as_str().to_owned()),
+            Rule::Num => Self::Num(it.as_str().parse().unwrap()),
+            other => {
+                panic!("Semantic error: unexpected rule : {:?}", other);
+            }
+        }
+    }
+}
+
 impl FromStmt for TrueExpr {
     fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
         let mut it = stmt.into_inner();
         Self {
-            lhs: Box::new(Expr::parse_stmt(it.next().unwrap())),
+            lhs: IdentOrNum::parse_stmt(it.next().unwrap()),
             op: ExprOp::parse_stmt(it.next().unwrap()),
             rhs: Box::new(Expr::parse_stmt(it.next().unwrap())),
         }
@@ -139,9 +156,18 @@ impl Eval for Expr {
     type T = usize;
     fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T> {
         Some(match self {
+            Self::IdentOrNum(ion) => ion.eval(call_stack)?,
+            Self::TrueExpr(x) => x.eval(call_stack)?,
+        })
+    }
+}
+
+impl Eval for IdentOrNum {
+    type T = usize;
+    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T> {
+        Some(match self {
             Self::Ident(name) => call_stack.get_var(&name)?.value,
             Self::Num(num) => *num,
-            Self::TrueExpr(x) => x.eval(call_stack)?,
         })
     }
 }

@@ -6,9 +6,15 @@ use pest::Parser;
 struct ProgParser;
 
 #[derive(Debug, Clone)]
+pub enum PrintArgs {
+    String(String),
+    Expr(Expr),
+}
+
+#[derive(Debug, Clone)]
 pub enum Inst {
     Print {
-        text: String,
+        args: Vec<PrintArgs>,
     },
     Sub {
         name: String,
@@ -55,13 +61,22 @@ pub fn parse(s: String) -> Option<Program> {
     }
     let stmts = stmts.unwrap();
 
-    let mut insts = vec![]; // statements parsed
+    let mut insts = vec![];
     let mut waits_end_stack: Vec<WaitsEnd> = vec![]; // stmts waiting for End
     let mut subs = std::collections::HashMap::new(); // subroutines defined
     for stmt in stmts {
         match stmt.as_rule() {
             Rule::Print => insts.push(Inst::Print {
-                text: stmt.into_inner().as_str().to_owned(),
+                args: stmt
+                    .into_inner()
+                    .map(|s| match s.as_rule() {
+                        Rule::StringContent => PrintArgs::String(s.as_str().to_owned()),
+                        Rule::Expr => PrintArgs::Expr(Expr::parse_stmt(s)),
+                        other => {
+                            panic!("Semantic error: unexpected rule : {:?}", other);
+                        }
+                    })
+                    .collect(),
             }),
             Rule::Sub => {
                 // check if the Sub is nested (which is not allowed)
