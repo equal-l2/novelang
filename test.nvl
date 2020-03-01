@@ -23,6 +23,8 @@ while 0==1;
     print "ここはたどり着くことのないゲームの終わりだ。";
 end;
 
-while 1==1;
-    print "ここからは出られない。今のところは。";
+let cnt be 0;
+while cnt != 3;
+    print "君はこの文を3回見ることになる";
+    modify cnt to cnt+1;
 end;

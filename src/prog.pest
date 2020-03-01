@@ -1,17 +1,16 @@
 SP = _{SPACE_SEPARATOR*}
 
-DecNum = { ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
-HexNum = { "0x" ~ ASCII_HEX_DIGIT+ }
-Num = { DecNum | HexNum }
+Num = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 
-Ident = {!ASCII_DIGIT ~ (!(SEPARATOR|";") ~ ANY)*}
+IdentChars = _{!(SEPARATOR|";"|"<"|">"|"="|"!"|"+"|",") ~ ANY}
+Ident = {(!ASCII_DIGIT ~ IdentChars) ~ IdentChars*}
 
 Op = { "+" }
-IdentOrNum = _{ (Ident | Num) }
-TrueExpr = { IdentOrNum ~ Op ~ Expr }
-Expr = { IdentOrNum | TrueExpr }
-CompOp = { ("<" | ">" | "<=" | ">=" | "!=" | "==") }
-CompExpr = { Expr ~ CompOp ~ Expr }
+IdentOrNum = _{ Ident | Num }
+TrueExpr = { IdentOrNum ~ SP ~ Op ~ SP ~ Expr }
+Expr = { TrueExpr | IdentOrNum }
+CompOp = { "<" | ">" | "<=" | ">=" | "!=" | "==" }
+CompExpr = { Expr ~ SP ~ CompOp ~ SP ~ Expr }
 
 StringContent = {(!"\"" ~ ANY)*}
 String = _{ "\"" ~ StringContent ~ "\"" }
@@ -20,11 +19,11 @@ Print = { ^"Print" ~ SP ~ String } // show string
 Sub = { ^"Sub" ~ SP ~ Ident } // start of subroutine definition
 Call = { ^"Call" ~ SP ~ Ident } // call subroutine
 While = { ^"While" ~ SP ~ CompExpr } // start of while
-Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ Expr } // variable declaration
-LetMut = { ^"LetMut" ~ SP ~ Ident ~ SP ~ ^"Be" ~ Expr } // variable declaration (mutable)
-Modify = { ^"Modify" ~ SP ~ Ident ~ "To" ~ Expr } // variable modification
+Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr } // variable declaration
+LetMut = { ^"LetMut" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr } // variable declaration (mutable)
+Modify = { ^"Modify" ~ SP ~ Ident ~ SP ~ ^"To" ~ SP ~ Expr } // variable modification
 End = { ^"End" } // end of something
 
-StmtTypes = _{ (Print | Sub | Call | While | Let | Modify | End ) }
+StmtTypes = _{ Print | Sub | Call | While | Let | LetMut | Modify | End }
 Statement = _{ SP ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
 Prog = _{ SOI ~ Statement* ~ EOI }

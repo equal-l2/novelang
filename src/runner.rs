@@ -45,6 +45,7 @@ impl CallStack {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Variable {
     is_mutable: bool,
     pub value: usize,
@@ -58,13 +59,14 @@ macro_rules! die {
     }
 }
 
-fn process_stmts(prog: Program, wait: bool) {
+fn run_insts(prog: Program, wait: bool) {
     use std::io::Write;
 
     let mut call_stack = CallStack::new();
     let mut i = 0;
-    while i < prog.stmts.len() {
-        match &prog.stmts[i] {
+    while i < prog.insts.len() {
+        use crate::exprs::Eval;
+        match &prog.insts[i] {
             Inst::Print { text } => {
                 crossterm::execute!(
                     std::io::stdout(),
@@ -76,17 +78,60 @@ fn process_stmts(prog: Program, wait: bool) {
                 )
                 .unwrap();
                 if wait {let _ = wait_keypress();}
-                i += 1;
             }
             Inst::Sub { offset_to_end, .. } => {
-                i += offset_to_end + 1;
+                i += offset_to_end;
             }
             Inst::Call { name } => {
                 if let Some(idx) = prog.subs.get(name) {
                     call_stack.push(i + 1);
-                    i = *idx + 1;
+                    i = *idx;
                 } else {
                     die!("Runtime error: function \"{}\" was not found", name);
+                }
+            }
+            Inst::While { cond, offset_to_end } => {
+                if let Some(b) = cond.eval(&call_stack) {
+                    if b {
+                        call_stack.push(i);
+                    } else {
+                        i += offset_to_end;
+                    }
+                } else {
+                    die!("Runtime error: condition expression is corrupted");
+                }
+            }
+            Inst::Let {name, init} => {
+                let init_var = Variable {
+                    is_mutable: false,
+                    value: init.eval(&call_stack).unwrap_or_else(|| {
+                    die!("Runtime error: init value of Let is None");
+                })};
+                if call_stack.vars_stack.last_mut().unwrap().insert(name.clone(), init_var).is_some() {
+                    die!("Runtime error: variable {} is already declared", name);
+                }
+            }
+            Inst::LetMut {name, init} => {
+                let init_var = Variable {
+                    is_mutable: true,
+                    value: init.eval(&call_stack).unwrap_or_else(|| {
+                    die!("Runtime error: init value of Let is None");
+                })};
+                if call_stack.vars_stack.last_mut().unwrap().insert(name.clone(), init_var).is_some() {
+                    die!("Runtime error: variable {} is already declared", name);
+                }
+            }
+            Inst::Modify {name, expr} => {
+                let to_value = expr.eval(&call_stack).unwrap_or_else(|| {
+                    die!("Runtime error: expr value of Modify is None");
+                });
+                let var = call_stack.get_var_mut(name).unwrap_or_else(|| {
+                    die!("Runtime error: target variable of Modify was not found");
+                });
+                if var.is_mutable {
+                    var.value = to_value;
+                } else {
+                    die!("Runtime error: variable {} is immutable", name);
                 }
             }
             Inst::End => {
@@ -95,24 +140,13 @@ fn process_stmts(prog: Program, wait: bool) {
                 } else {
                     die!("Runtime error: index to return was not set");
                 }
-            }
-            Inst::While { cond, offset_to_end } => {
-                use crate::exprs::Eval;
-                if let Some(b) = cond.eval(&call_stack) {
-                    if b {
-                        call_stack.push(i);
-                        i += 1;
-                    } else {
-                        i += offset_to_end + 1;
-                    }
-                } else {
-                    die!("Runtime error: condition expression is corrupted");
-                }
+                continue;
             }
             other => {
                 die!("Runtime error: unknown instruction type : {:?}", other);
             }
         }
+        i += 1;
     }
 }
 
@@ -123,7 +157,7 @@ pub fn run(prog: Program, wait: bool) {
     })
     .unwrap();
     if wait { let _ = crossterm::terminal::enable_raw_mode(); }
-    process_stmts(prog, wait);
+    run_insts(prog, wait);
     let _ = crossterm::terminal::disable_raw_mode();
 }
 

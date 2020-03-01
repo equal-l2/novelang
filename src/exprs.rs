@@ -69,24 +69,10 @@ impl FromStmt for Expr {
         let stmt = stmt.into_inner().next().unwrap();
         match stmt.as_rule() {
             Rule::Ident => Self::Ident(stmt.as_str().to_owned()),
-            Rule::Num => {
-                let stmt = stmt.into_inner().next().unwrap();
-                Self::Num(
-                    usize::from_str_radix(
-                        stmt.as_str(),
-                        match stmt.as_rule() {
-                            Rule::DecNum => 10,
-                            Rule::HexNum => 16,
-                            _ => unreachable!(),
-                        },
-                    )
-                    .unwrap(),
-                )
-            }
+            Rule::Num => Self::Num(stmt.as_str().parse().unwrap()),
             Rule::TrueExpr => Self::TrueExpr(TrueExpr::parse_stmt(stmt)),
-            //_ => unreachable!(),
             other => {
-                panic!("unexpected rule : {:?}", other);
+                panic!("Semantic error: unexpected rule : {:?}", other);
             }
         }
     }

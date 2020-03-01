@@ -9,7 +9,7 @@
 - `while compexpr`
 
 ## TODO
-- ~Implement call stack~(Done)
+- ~Implement call stack~
     - ~Add `call`~
     - ~Add `while` (implement using call stack?)~
     - Add `break`
@@ -18,7 +18,7 @@
     - Add `if`
     - Add `else`
     - Add `elif`?
-- Add variable (integer only?)
-    - Add `let` (immutable decl)
-    - Add `letmut` (mutable decl)
-    - Add `modify` (modify the value of variable)
+- ~Add variable (integer only?)~
+    - ~Add `let` (immutable decl)~
+    - ~Add `letmut` (mutable decl)~
+    - ~Add `modify` (modify the value of variable)~
