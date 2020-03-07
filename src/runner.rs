@@ -77,15 +77,20 @@ fn run_insts(prog: Program, wait: bool) {
                     stdout,
                     terminal::Clear(terminal::ClearType::CurrentLine),
                     style::Print(format!("{:04} :", i)),
-                ).unwrap();
+                )
+                .unwrap();
                 for arg in args {
-                    stdout.queue(style::Print(match arg {
-                        PrintArgs::String(i) => format!(" {}", i),
-                        PrintArgs::Expr(i) => format!(" {}", i.eval(&call_stack).unwrap()),
-                    })).unwrap();
+                    stdout
+                        .queue(style::Print(match arg {
+                            PrintArgs::String(i) => format!(" {}", i),
+                            PrintArgs::Expr(i) => format!(" {}", i.eval(&call_stack).unwrap()),
+                        }))
+                        .unwrap();
                 }
 
-                stdout.queue(style::Print("\r\n[Proceed with any key]\r")).unwrap();
+                stdout
+                    .queue(style::Print("\r\n[Proceed with any key]\r"))
+                    .unwrap();
 
                 let _ = stdout.flush();
 
@@ -107,22 +112,18 @@ fn run_insts(prog: Program, wait: bool) {
             Inst::While {
                 cond,
                 offset_to_end,
-            } => {
-                if let Some(b) = cond.eval(&call_stack) {
-                    if b {
-                        call_stack.push(i);
-                    } else {
-                        i += offset_to_end;
-                    }
-                } else {
-                    die!("Runtime error: condition expression is corrupted");
+            } => match cond.eval(&call_stack) {
+                Ok(true) => call_stack.push(i),
+                Ok(false) => i += offset_to_end,
+                Err(e) => {
+                    die!("Runtime error: CondExpr cannot be evaled: {}", e);
                 }
-            }
+            },
             Inst::Let { name, init, is_mut } => {
                 let init_var = Variable {
                     is_mutable: *is_mut,
-                    value: init.eval(&call_stack).unwrap_or_else(|| {
-                        die!("Runtime error: init value of Let is None");
+                    value: init.eval(&call_stack).unwrap_or_else(|e| {
+                        die!("Runtime error: cannot eval the init value: {}", e);
                     }),
                 };
                 if call_stack
@@ -136,11 +137,11 @@ fn run_insts(prog: Program, wait: bool) {
                 }
             }
             Inst::Modify { name, expr } => {
-                let to_value = expr.eval(&call_stack).unwrap_or_else(|| {
-                    die!("Runtime error: expr value of Modify is None");
+                let to_value = expr.eval(&call_stack).unwrap_or_else(|e| {
+                    die!("Runtime error: cannot eval the value: {}", e);
                 });
                 let var = call_stack.get_var_mut(name).unwrap_or_else(|| {
-                    die!("Runtime error: target variable of Modify was not found");
+                    die!("Runtime error: variable was not found");
                 });
                 if var.is_mutable {
                     var.value = to_value;

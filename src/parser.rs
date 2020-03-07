@@ -124,9 +124,7 @@ pub fn parse(s: String) -> Option<Program> {
                 let init = Expr::parse_stmt(it.next().unwrap());
                 let is_mut = it.next().is_some();
 
-                insts.push(Inst::Let {
-                    name, init, is_mut
-                });
+                insts.push(Inst::Let { name, init, is_mut });
             }
             Rule::Modify => {
                 let mut it = stmt.into_inner();

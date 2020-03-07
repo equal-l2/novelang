@@ -1,4 +1,4 @@
-SP = _{SPACE_SEPARATOR*}
+SP = _{SPACE_SEPARATOR+}
 
 Num = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 
@@ -7,10 +7,10 @@ Ident = {(!ASCII_DIGIT ~ IdentChars) ~ IdentChars*}
 
 Op = { "+" }
 IdentOrNum = { Ident | Num }
-TrueExpr = { IdentOrNum ~ SP ~ Op ~ SP ~ Expr }
+TrueExpr = { IdentOrNum ~ SP? ~ Op ~ SP? ~ Expr }
 Expr = { TrueExpr | IdentOrNum }
 CompOp = { "<" | ">" | "<=" | ">=" | "!=" | "==" }
-CompExpr = { Expr ~ SP ~ CompOp ~ SP ~ Expr }
+CompExpr = { Expr ~ SP? ~ CompOp ~ SP? ~ Expr }
 
 StringContent = {(!"\"" ~ ANY)*}
 String = _{ "\"" ~ StringContent ~ "\"" }
@@ -19,7 +19,7 @@ StrOrExpr = _{ String | Expr }
 
 MutMark = { ^"AsMut" }
 
-Print = { ^"Print" ~ SP ~ StrOrExpr ~ SP ~ ("," ~ SP ~ StrOrExpr ~ SP)* } // show string and expr value
+Print = { ^"Print" ~ SP ~ StrOrExpr ~ SP? ~ ("," ~ SP? ~ StrOrExpr ~ SP?)* } // show string and expr value
 Sub = { ^"Sub" ~ SP ~ Ident } // start of subroutine definition
 Call = { ^"Call" ~ SP ~ Ident } // call subroutine
 While = { ^"While" ~ SP ~ CompExpr } // start of while
@@ -29,5 +29,5 @@ Input = { ^"Input" ~ SP ~ ^"To" ~ SP ~ Ident } // input
 End = { ^"End" } // end of something
 
 StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | End }
-Statement = _{ SP ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
+Statement = _{ SP? ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
 Prog = _{ SOI ~ Statement* ~ EOI }

@@ -24,3 +24,5 @@
     - ~Add `modify` (modify the value of variable)~
     - Add `freeze` (make the variable immutable)
     - Add lateinit variable?
+- Implement return values
+    - Add `NextInto`? (get return value of next line)

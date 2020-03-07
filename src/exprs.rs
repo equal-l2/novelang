@@ -1,5 +1,28 @@
 use crate::parser::Rule;
 
+#[derive(Debug)]
+pub enum ExprRuntimeError {
+    IdentNotFound(String),
+    OverFlow,
+}
+
+impl std::fmt::Display for ExprRuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::IdentNotFound(s) => {
+                    format!("Ident \"{}\" was not found", s)
+                }
+                Self::OverFlow => {
+                    format!("Expr overflowed")
+                }
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     IdentOrNum(IdentOrNum),
@@ -135,38 +158,45 @@ impl FromStmt for CompExpr {
 
 pub trait Eval {
     type T;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T>;
+    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError>;
 }
 
 impl Eval for CompExpr {
     type T = bool;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T> {
-        Some(match self.op {
-            CompOp::LessThan => self.lhs.eval(call_stack)? < self.rhs.eval(call_stack)?,
-            CompOp::GreaterThan => self.lhs.eval(call_stack)? > self.rhs.eval(call_stack)?,
-            CompOp::Equal => self.lhs.eval(call_stack)? == self.rhs.eval(call_stack)?,
-            CompOp::NotEqual => self.lhs.eval(call_stack)? != self.rhs.eval(call_stack)?,
-            CompOp::LessEqual => self.lhs.eval(call_stack)? <= self.rhs.eval(call_stack)?,
-            CompOp::GreaterEqual => self.lhs.eval(call_stack)? >= self.rhs.eval(call_stack)?,
+    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+        let lhs = self.lhs.eval(call_stack)?;
+        let rhs = self.rhs.eval(call_stack)?;
+        Ok(match self.op {
+            CompOp::LessThan => lhs < rhs,
+            CompOp::GreaterThan => lhs > rhs,
+            CompOp::Equal => lhs == rhs,
+            CompOp::NotEqual => lhs != rhs,
+            CompOp::LessEqual => lhs <= rhs,
+            CompOp::GreaterEqual => lhs >= rhs,
         })
     }
 }
 
 impl Eval for Expr {
     type T = usize;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T> {
-        Some(match self {
-            Self::IdentOrNum(ion) => ion.eval(call_stack)?,
-            Self::TrueExpr(x) => x.eval(call_stack)?,
-        })
+    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+        match self {
+            Self::IdentOrNum(ion) => ion.eval(call_stack),
+            Self::TrueExpr(x) => x.eval(call_stack),
+        }
     }
 }
 
 impl Eval for IdentOrNum {
     type T = usize;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T> {
-        Some(match self {
-            Self::Ident(name) => call_stack.get_var(&name)?.value,
+    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+        Ok(match self {
+            Self::Ident(name) => {
+                call_stack
+                    .get_var(&name)
+                    .ok_or_else(|| ExprRuntimeError::IdentNotFound(name.clone()))?
+                    .value
+            }
             Self::Num(num) => *num,
         })
     }
@@ -174,9 +204,17 @@ impl Eval for IdentOrNum {
 
 impl Eval for TrueExpr {
     type T = usize;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Option<Self::T> {
-        Some(match self.op {
-            ExprOp::Add => self.lhs.eval(call_stack)? + self.rhs.eval(call_stack)?,
-        })
+    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+        let lhs = self.lhs.eval(call_stack)?;
+        let rhs = self.rhs.eval(call_stack)?;
+        match self.op {
+            ExprOp::Add => {
+                if let Some(i) = lhs.checked_add(rhs) {
+                    Ok(i)
+                } else {
+                    return Err(ExprRuntimeError::OverFlow);
+                }
+            }
+        }
     }
 }
