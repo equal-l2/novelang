@@ -30,10 +30,7 @@ pub enum Inst {
     Let {
         name: String,
         init: Expr,
-    },
-    LetMut {
-        name: String,
-        init: Expr,
+        is_mut: bool,
     },
     Modify {
         name: String,
@@ -123,16 +120,12 @@ pub fn parse(s: String) -> Option<Program> {
             }
             Rule::Let => {
                 let mut it = stmt.into_inner();
+                let name = it.next().unwrap().as_str().to_owned();
+                let init = Expr::parse_stmt(it.next().unwrap());
+                let is_mut = it.next().is_some();
+
                 insts.push(Inst::Let {
-                    name: it.next().unwrap().as_str().to_owned(),
-                    init: Expr::parse_stmt(it.next().unwrap()),
-                });
-            }
-            Rule::LetMut => {
-                let mut it = stmt.into_inner();
-                insts.push(Inst::LetMut {
-                    name: it.next().unwrap().as_str().to_owned(),
-                    init: Expr::parse_stmt(it.next().unwrap()),
+                    name, init, is_mut
                 });
             }
             Rule::Modify => {

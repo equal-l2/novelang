@@ -77,15 +77,15 @@ fn run_insts(prog: Program, wait: bool) {
                     stdout,
                     terminal::Clear(terminal::ClearType::CurrentLine),
                     style::Print(format!("{:04} :", i)),
-                );
+                ).unwrap();
                 for arg in args {
                     stdout.queue(style::Print(match arg {
                         PrintArgs::String(i) => format!(" {}", i),
                         PrintArgs::Expr(i) => format!(" {}", i.eval(&call_stack).unwrap()),
-                    }));
+                    })).unwrap();
                 }
 
-                stdout.queue(style::Print("\r\n[Proceed with any key]\r"));
+                stdout.queue(style::Print("\r\n[Proceed with any key]\r")).unwrap();
 
                 let _ = stdout.flush();
 
@@ -118,26 +118,9 @@ fn run_insts(prog: Program, wait: bool) {
                     die!("Runtime error: condition expression is corrupted");
                 }
             }
-            Inst::Let { name, init } => {
+            Inst::Let { name, init, is_mut } => {
                 let init_var = Variable {
-                    is_mutable: false,
-                    value: init.eval(&call_stack).unwrap_or_else(|| {
-                        die!("Runtime error: init value of Let is None");
-                    }),
-                };
-                if call_stack
-                    .vars_stack
-                    .last_mut()
-                    .unwrap()
-                    .insert(name.clone(), init_var)
-                    .is_some()
-                {
-                    die!("Runtime error: variable {} is already declared", name);
-                }
-            }
-            Inst::LetMut { name, init } => {
-                let init_var = Variable {
-                    is_mutable: true,
+                    is_mutable: *is_mut,
                     value: init.eval(&call_stack).unwrap_or_else(|| {
                         die!("Runtime error: init value of Let is None");
                     }),

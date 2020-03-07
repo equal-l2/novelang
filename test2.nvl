@@ -1,0 +1,11 @@
+let i be 0 asmut;
+let j be 1 asmut;
+let cnt be 0 asmut;
+
+while 1==1;
+    print cnt, i;
+    let oldi be i;
+    modify i to j;
+    modify j to oldi+j;
+    modify cnt to cnt+1;
+end;

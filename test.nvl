@@ -23,7 +23,7 @@ while 0==1;
     print "ここはたどり着くことのないゲームの終わりだ。";
 end;
 
-letmut cnt be 0;
+let cnt be 0 asmut;
 while cnt != 3;
     print "君はこの文を繰り返し", cnt, "回見たはずだ。";
     modify cnt to cnt+1;

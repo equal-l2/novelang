@@ -17,16 +17,17 @@ String = _{ "\"" ~ StringContent ~ "\"" }
 
 StrOrExpr = _{ String | Expr }
 
+MutMark = { ^"AsMut" }
+
 Print = { ^"Print" ~ SP ~ StrOrExpr ~ SP ~ ("," ~ SP ~ StrOrExpr ~ SP)* } // show string and expr value
 Sub = { ^"Sub" ~ SP ~ Ident } // start of subroutine definition
 Call = { ^"Call" ~ SP ~ Ident } // call subroutine
 While = { ^"While" ~ SP ~ CompExpr } // start of while
-Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr } // variable declaration
-LetMut = { ^"LetMut" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr } // variable declaration (mutable)
+Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr ~ (SP ~ MutMark)? } // variable declaration
 Modify = { ^"Modify" ~ SP ~ Ident ~ SP ~ ^"To" ~ SP ~ Expr } // variable modification
-Input = { ^"Input" ~ SP ~ ^"To" ~ SP ~ Ident }
+Input = { ^"Input" ~ SP ~ ^"To" ~ SP ~ Ident } // input
 End = { ^"End" } // end of something
 
-StmtTypes = _{ Print | Sub | Call | While | Let | LetMut | Modify | Input | End }
+StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | End }
 Statement = _{ SP ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
 Prog = _{ SOI ~ Statement* ~ EOI }
