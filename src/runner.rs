@@ -29,7 +29,7 @@ impl CallStack {
     }
 
     // get the highest variable in the stack with the specified name
-    pub fn get_var(&self, name: &String) -> Option<&Variable> {
+    pub fn get_var(&self, name: &str) -> Option<&Variable> {
         for table in self.vars_stack.iter().rev() {
             if let Some(v) = table.get(name) {
                 return Some(v);
@@ -38,7 +38,7 @@ impl CallStack {
         None
     }
 
-    fn get_var_mut(&mut self, name: &String) -> Option<&mut Variable> {
+    fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
         for table in self.vars_stack.iter_mut().rev() {
             if let Some(v) = table.get_mut(name) {
                 return Some(v);
@@ -95,7 +95,7 @@ fn run_insts(prog: Program, wait: bool) {
                 let _ = stdout.flush();
 
                 if wait {
-                    let _ = wait_keypress();
+                    wait_keypress();
                 }
             }
             Inst::Sub { offset_to_end, .. } => {

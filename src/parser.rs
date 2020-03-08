@@ -1,6 +1,13 @@
 use crate::exprs::*;
 use pest::Parser;
 
+macro_rules! die {
+    ($( $x:expr ),*) => {
+        eprintln!($($x,)*);
+        std::process::exit(1);
+    }
+}
+
 #[derive(pest_derive::Parser)]
 #[grammar = "prog.pest"]
 struct ProgParser;
@@ -50,7 +57,7 @@ struct WaitsEnd {
     index: usize,
 }
 
-pub fn parse(s: String) -> Option<Program> {
+pub fn parse(s: &str) -> Option<Program> {
     let stmts = ProgParser::parse(Rule::Prog, &s);
     if let Err(e) = stmts {
         eprintln!("{}", e);
@@ -70,7 +77,7 @@ pub fn parse(s: String) -> Option<Program> {
                         Rule::StringContent => PrintArgs::String(s.as_str().to_owned()),
                         Rule::Expr => PrintArgs::Expr(Expr::parse_stmt(s)),
                         other => {
-                            panic!("Semantic error: unexpected rule : {:?}", other);
+                            die!("Semantic error: unexpected rule : {:?}", other);
                         }
                     })
                     .collect(),
@@ -79,19 +86,17 @@ pub fn parse(s: String) -> Option<Program> {
                 // check if the Sub is nested (which is not allowed)
                 if let Some(i) = waits_end_stack.last() {
                     if let Inst::Sub { .. } = i.kind {
-                        eprintln!("Semantic error: you cannot nest Sub.");
-                        std::process::exit(1);
+                        die!("Semantic error: you cannot nest Sub.");
                     }
                 }
 
                 // register the sub to the name table
                 let fn_name = stmt.into_inner().as_str().to_owned();
                 if subs.insert(fn_name.clone(), insts.len()).is_some() {
-                    eprintln!(
+                    die!(
                         "Semantic error: function name \"{}\" is conflicting",
                         fn_name
                     );
-                    std::process::exit(1);
                 }
 
                 let inst_obj = Inst::Sub {
@@ -135,8 +140,7 @@ pub fn parse(s: String) -> Option<Program> {
             }
             Rule::End => {
                 let start = waits_end_stack.pop().unwrap_or_else(|| {
-                    eprintln!("Semantic error: a stray End detected.");
-                    std::process::exit(1);
+                    die!("Semantic error: a stray End detected.");
                 });
                 insts[start.index] = match start.kind {
                     Inst::Sub { ref name, .. } => Inst::Sub {
@@ -148,14 +152,14 @@ pub fn parse(s: String) -> Option<Program> {
                         offset_to_end: insts.len() - start.index,
                     },
                     other => {
-                        panic!("cannot End {:?}", other);
+                        die!("cannot End {:?}", other);
                     }
                 };
                 insts.push(Inst::End);
             }
             Rule::EOI => break,
             other => {
-                panic!("Semantic error: unexpected rule : {:?}", other);
+                die!("Semantic error: unexpected rule : {:?}", other);
             }
         }
     }

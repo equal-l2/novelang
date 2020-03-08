@@ -8,18 +8,14 @@ pub enum ExprRuntimeError {
 
 impl std::fmt::Display for ExprRuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(
-            f,
-            "{}",
             match self {
                 Self::IdentNotFound(s) => {
-                    format!("Ident \"{}\" was not found", s)
+                    write!(f, "Ident \"{}\" was not found", s)
                 }
                 Self::OverFlow => {
-                    format!("Expr overflowed")
+                    write!(f, "Expr overflowed")
                 }
             }
-        )
     }
 }
 
@@ -141,7 +137,7 @@ impl FromStmt for TrueExpr {
 impl FromStmt for CompOp {
     fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
         use std::str::FromStr;
-        CompOp::from_str(stmt.as_str()).unwrap()
+        Self::from_str(stmt.as_str()).unwrap()
     }
 }
 
@@ -158,12 +154,12 @@ impl FromStmt for CompExpr {
 
 pub trait Eval {
     type T;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError>;
+    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError>;
 }
 
 impl Eval for CompExpr {
     type T = bool;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;
         Ok(match self.op {
@@ -179,7 +175,7 @@ impl Eval for CompExpr {
 
 impl Eval for Expr {
     type T = usize;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         match self {
             Self::IdentOrNum(ion) => ion.eval(call_stack),
             Self::TrueExpr(x) => x.eval(call_stack),
@@ -189,11 +185,11 @@ impl Eval for Expr {
 
 impl Eval for IdentOrNum {
     type T = usize;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         Ok(match self {
             Self::Ident(name) => {
                 call_stack
-                    .get_var(&name)
+                    .get_var(name)
                     .ok_or_else(|| ExprRuntimeError::IdentNotFound(name.clone()))?
                     .value
             }
@@ -208,13 +204,7 @@ impl Eval for TrueExpr {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;
         match self.op {
-            ExprOp::Add => {
-                if let Some(i) = lhs.checked_add(rhs) {
-                    Ok(i)
-                } else {
-                    return Err(ExprRuntimeError::OverFlow);
-                }
-            }
+            ExprOp::Add => lhs.checked_add(rhs).ok_or(ExprRuntimeError::OverFlow)
         }
     }
 }
