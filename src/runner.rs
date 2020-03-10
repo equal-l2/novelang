@@ -30,21 +30,21 @@ impl CallStack {
 
     // get the highest variable in the stack with the specified name
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
-        for table in self.vars_stack.iter().rev() {
-            if let Some(v) = table.get(name) {
-                return Some(v);
-            }
-        }
-        None
+        self.vars_stack
+            .iter()
+            .rev()
+            .map(|t| t.get(name))
+            .find(|v| v.is_some())
+            .flatten()
     }
 
     fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
-        for table in self.vars_stack.iter_mut().rev() {
-            if let Some(v) = table.get_mut(name) {
-                return Some(v);
-            }
-        }
-        None
+        self.vars_stack
+            .iter_mut()
+            .rev()
+            .map(|t| t.get_mut(name))
+            .find(|v| v.is_some())
+            .flatten()
     }
 }
 

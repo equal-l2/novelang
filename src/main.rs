@@ -19,7 +19,7 @@ fn main() {
     });
 
     eprintln!("Info: loading the file");
-    let parsed = parser::parse(s);
+    let parsed = parser::parse(&s);
     eprintln!("Info: load completed");
 
     if let Some(i) = parsed {
