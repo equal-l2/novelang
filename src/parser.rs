@@ -43,6 +43,15 @@ pub enum Inst {
         name: String,
         expr: Expr,
     },
+    If {
+        cond: CompExpr,
+        offset_to_else: Option<usize>,
+        offset_to_end: usize,
+    },
+    Else {
+        if_idx: usize, // TODO: remove this field
+        offset_to_end: usize,
+    },
     End,
 }
 
@@ -58,7 +67,7 @@ struct WaitsEnd {
 }
 
 pub fn parse(s: &str) -> Option<Program> {
-    let stmts = ProgParser::parse(Rule::Prog, &s);
+    let stmts = ProgParser::parse(Rule::Prog, s);
     if let Err(e) = stmts {
         eprintln!("{}", e);
         return None;
@@ -138,23 +147,88 @@ pub fn parse(s: &str) -> Option<Program> {
                     expr: Expr::parse_stmt(it.next().unwrap()),
                 });
             }
+            Rule::If => {
+                let inst_obj = Inst::If {
+                    cond: CompExpr::parse_stmt(stmt.into_inner().next().unwrap()),
+                    offset_to_else: None,
+                    offset_to_end: 0,
+                };
+                waits_end_stack.push(WaitsEnd {
+                    kind: inst_obj.clone(),
+                    index: insts.len(),
+                });
+                insts.push(inst_obj);
+            }
+            Rule::Else => {
+                let start = waits_end_stack.pop().unwrap_or_else(|| {
+                    die!("Semantic error: a stray Else detected.");
+                });
+                if let Inst::If { cond, .. } = start.kind {
+                    insts[start.index] = Inst::If {
+                        cond: cond.clone(),
+                        offset_to_else: Some(insts.len() - start.index),
+                        offset_to_end: 0,
+                    };
+                    let inst_obj = Inst::Else {
+                        if_idx: start.index,
+                        offset_to_end: 0,
+                    };
+                    waits_end_stack.push(WaitsEnd {
+                        kind: inst_obj.clone(),
+                        index: insts.len(),
+                    });
+                } else {
+                    die!("Semantic error: cannot find corresponding If for Else");
+                }
+            }
             Rule::End => {
                 let start = waits_end_stack.pop().unwrap_or_else(|| {
                     die!("Semantic error: a stray End detected.");
                 });
+                let offset_to_end = insts.len() - start.index;
                 insts[start.index] = match start.kind {
-                    Inst::Sub { ref name, .. } => Inst::Sub {
-                        name: name.clone(),
-                        offset_to_end: insts.len() - start.index,
+                    Inst::Sub { name, .. } => Inst::Sub {
+                        name,
+                        offset_to_end,
                     },
-                    Inst::While { ref cond, .. } => Inst::While {
-                        cond: cond.clone(),
-                        offset_to_end: insts.len() - start.index,
+                    Inst::While { cond, .. } => Inst::While {
+                        cond,
+                        offset_to_end,
+                    },
+                    Inst::If { cond, .. } => Inst::If {
+                        cond,
+                        offset_to_else: None,
+                        offset_to_end,
+                    },
+                    Inst::Else { if_idx, .. } => Inst::Else {
+                        if_idx,
+                        offset_to_end,
                     },
                     other => {
-                        die!("cannot End {:?}", other);
+                        die!("Semantic error: cannot End {:?}", other);
                     }
                 };
+
+                // set offset_to_end of If
+                if let Inst::Else {
+                    if_idx,
+                    offset_to_end,
+                } = insts[start.index]
+                {
+                    if let Inst::If {
+                        ref cond,
+                        offset_to_else,
+                        ..
+                    } = insts[if_idx]
+                    {
+                        insts[if_idx] = Inst::If {
+                            cond: cond.clone(),
+                            offset_to_else,
+                            offset_to_end,
+                        };
+                    }
+                }
+
                 insts.push(Inst::End);
             }
             Rule::EOI => break,

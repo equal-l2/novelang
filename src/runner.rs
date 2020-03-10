@@ -149,6 +149,26 @@ fn run_insts(prog: Program, wait: bool) {
                     die!("Runtime error: variable {} is immutable", name);
                 }
             }
+            Inst::If {
+                cond,
+                offset_to_else,
+                offset_to_end,
+            } => match cond.eval(&call_stack) {
+                Ok(true) => call_stack.push(i + offset_to_end + 1),
+                Ok(false) => {
+                    i += if let Some(idx) = offset_to_else {
+                        idx
+                    } else {
+                        offset_to_end
+                    }
+                }
+                Err(e) => {
+                    die!("Runtime error: CondExpr cannot be evaled: {}", e);
+                }
+            },
+            Inst::Else { offset_to_end, .. } => {
+                call_stack.push(i + offset_to_end + 1);
+            }
             Inst::End => {
                 if let Some(ret_idx) = call_stack.pop() {
                     i = ret_idx;
@@ -157,6 +177,7 @@ fn run_insts(prog: Program, wait: bool) {
                 }
                 continue;
             }
+            #[allow(unreachable_patterns)]
             other => {
                 die!("Runtime error: unknown instruction type : {:?}", other);
             }

@@ -14,11 +14,22 @@
     - ~Add `call`~
     - ~Add `while` (implement using call stack?)~
     - Add `break`
-    - Add `for`?
+    - Add `for`
 - Add arithmetic and comparison
-    - Add `if`
-    - Add `else`
-    - Add `elif`?
+    - ~Add comparison operators~
+    - Add arithmetic operators
+        - ~Add `+`~
+        - Add `-`
+        - Add `*`
+        - Add `/`
+        - Add `%`
+    - Add compound conditions
+        - Add `&&`
+        - Add `||`
+- Add conditionals
+    - ~Add `if`~
+    - ~Add `else`~
+    - Add `elif`
 - ~Add variable (integer only?)~
     - ~Add `let`
     - ~Add `modify` (modify the value of variable)~

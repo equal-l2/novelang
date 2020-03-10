@@ -1,0 +1,18 @@
+let i be 0 asmut;
+while i < 10;
+    print "while begin ( i =", i, ")";
+    if i == 2;
+        print "i is 2";
+    end;
+    if i == 3;
+        print "i is 3";
+    end;
+    if i == 5;
+        print "i is 5";
+    end;
+    if i == 7;
+        print "i is 7";
+    end;
+    print "while end ( i =", i, ")";
+    modify i to i+1;
+end;

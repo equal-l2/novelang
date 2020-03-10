@@ -8,14 +8,10 @@ pub enum ExprRuntimeError {
 
 impl std::fmt::Display for ExprRuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-            match self {
-                Self::IdentNotFound(s) => {
-                    write!(f, "Ident \"{}\" was not found", s)
-                }
-                Self::OverFlow => {
-                    write!(f, "Expr overflowed")
-                }
-            }
+        match self {
+            Self::IdentNotFound(s) => write!(f, "Ident \"{}\" was not found", s),
+            Self::OverFlow => write!(f, "Expr overflowed"),
+        }
     }
 }
 
@@ -204,7 +200,7 @@ impl Eval for TrueExpr {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;
         match self.op {
-            ExprOp::Add => lhs.checked_add(rhs).ok_or(ExprRuntimeError::OverFlow)
+            ExprOp::Add => lhs.checked_add(rhs).ok_or(ExprRuntimeError::OverFlow),
         }
     }
 }

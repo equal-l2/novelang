@@ -26,8 +26,10 @@ While = { ^"While" ~ SP ~ CompExpr } // start of while
 Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr ~ (SP ~ MutMark)? } // variable declaration
 Modify = { ^"Modify" ~ SP ~ Ident ~ SP ~ ^"To" ~ SP ~ Expr } // variable modification
 Input = { ^"Input" ~ SP ~ ^"To" ~ SP ~ Ident } // input
+If = { ^"If" ~ SP ~ CompExpr } // if
+Else = { ^"Else" } // else
 End = { ^"End" } // end of something
 
-StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | End }
+StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | If | Else | End }
 Statement = _{ SP? ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
 Prog = _{ SOI ~ Statement* ~ EOI }
