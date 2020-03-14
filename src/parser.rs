@@ -177,6 +177,7 @@ pub fn parse(s: &str) -> Option<Program> {
                         kind: inst_obj.clone(),
                         index: insts.len(),
                     });
+                    insts.push(inst_obj);
                 } else {
                     die!("Semantic error: cannot find corresponding If for Else");
                 }
