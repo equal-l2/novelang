@@ -17,12 +17,7 @@
     - Add `for`
 - Add arithmetic and comparison
     - ~Add comparison operators~
-    - Add arithmetic operators
-        - ~Add `+`~
-        - Add `-`
-        - Add `*`
-        - Add `/`
-        - Add `%`
+    - ~Add arithmetic operators~
     - Add compound conditions
         - Add `&&`
         - Add `||`

@@ -51,7 +51,7 @@ impl CallStack {
 #[derive(Debug, Clone)]
 pub struct Variable {
     is_mutable: bool,
-    pub value: usize,
+    pub value: isize,
 }
 
 macro_rules! die {
@@ -84,7 +84,12 @@ fn run_insts(prog: Program, wait: bool) {
                     stdout
                         .queue(style::Print(match arg {
                             PrintArgs::String(i) => format!(" {}", i),
-                            PrintArgs::Expr(i) => format!(" {}", i.eval(&call_stack).unwrap()),
+                            PrintArgs::Expr(i) => format!(
+                                " {}",
+                                i.eval(&call_stack).unwrap_or_else(|e| {
+                                    die!("Runtime error: cannot eval expr: {}", e);
+                                })
+                            ),
                         }))
                         .unwrap();
                 }

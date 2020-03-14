@@ -4,6 +4,7 @@ use crate::parser::Rule;
 pub enum ExprRuntimeError {
     IdentNotFound(String),
     OverFlow,
+    ZeroDivision,
 }
 
 impl std::fmt::Display for ExprRuntimeError {
@@ -11,6 +12,7 @@ impl std::fmt::Display for ExprRuntimeError {
         match self {
             Self::IdentNotFound(s) => write!(f, "Ident \"{}\" was not found", s),
             Self::OverFlow => write!(f, "Expr overflowed"),
+            Self::ZeroDivision => write!(f, "Divided by zero"),
         }
     }
 }
@@ -24,17 +26,21 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum ExprOp {
     Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
+    Mod, // %
 }
 
 #[derive(Debug, Clone)]
 pub enum IdentOrNum {
     Ident(String),
-    Num(usize),
+    Num(isize),
 }
 
 #[derive(Debug, Clone)]
 pub struct TrueExpr {
-    lhs: IdentOrNum,
+    lhs: Box<Expr>,
     op: ExprOp,
     rhs: Box<Expr>,
 }
@@ -84,24 +90,56 @@ pub trait FromStmt {
     fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self;
 }
 
+fn consume(
+    pair: pest::iterators::Pair<Rule>,
+    climber: &pest::prec_climber::PrecClimber<Rule>,
+) -> Expr {
+    let primary = |pair| consume(pair, climber);
+    let infix = |lhs: Expr, op: pest::iterators::Pair<Rule>, rhs: Expr| -> Expr {
+        Expr::TrueExpr(TrueExpr {
+            lhs: Box::new(lhs),
+            op: match op.as_rule() {
+                Rule::Plus => ExprOp::Add,
+                Rule::Minus => ExprOp::Sub,
+                Rule::Times => ExprOp::Mul,
+                Rule::Div => ExprOp::Div,
+                Rule::Mod => ExprOp::Mod,
+                _ => unreachable!(),
+            },
+            rhs: Box::new(rhs),
+        })
+    };
+
+    match pair.as_rule() {
+        Rule::Expr => climber.climb(pair.into_inner(), primary, infix),
+        Rule::ExprUnit => pair.into_inner().next().map(primary).unwrap(),
+        Rule::IdentOrNum => Expr::IdentOrNum(IdentOrNum::parse_stmt(pair)),
+        _ => unreachable!(),
+    }
+}
+
 impl FromStmt for Expr {
     fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
-        let stmt = stmt.into_inner().next().unwrap();
-        match stmt.as_rule() {
-            Rule::IdentOrNum => Self::IdentOrNum(IdentOrNum::parse_stmt(stmt)),
-            Rule::TrueExpr => Self::TrueExpr(TrueExpr::parse_stmt(stmt)),
-            other => {
-                panic!("Semantic error: unexpected rule : {:?}", other);
-            }
-        }
+        use pest::prec_climber::{Assoc, Operator, PrecClimber};
+        let climber = PrecClimber::new(vec![
+            Operator::new(Rule::Plus, Assoc::Left) | Operator::new(Rule::Minus, Assoc::Left),
+            Operator::new(Rule::Times, Assoc::Left)
+                | Operator::new(Rule::Div, Assoc::Left)
+                | Operator::new(Rule::Mod, Assoc::Left),
+        ]);
+        consume(stmt, &climber)
     }
 }
 
 impl FromStmt for ExprOp {
     fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
-        match stmt.as_str() {
-            "+" => Self::Add,
-            _ => unreachable!(),
+        match stmt.as_rule() {
+            Rule::Plus => Self::Add,
+            Rule::Minus => Self::Sub,
+            Rule::Times => Self::Mul,
+            Rule::Div => Self::Div,
+            Rule::Mod => Self::Mod,
+            _ => unreachable!(stmt),
         }
     }
 }
@@ -115,17 +153,6 @@ impl FromStmt for IdentOrNum {
             other => {
                 panic!("Semantic error: unexpected rule : {:?}", other);
             }
-        }
-    }
-}
-
-impl FromStmt for TrueExpr {
-    fn parse_stmt(stmt: pest::iterators::Pair<Rule>) -> Self {
-        let mut it = stmt.into_inner();
-        Self {
-            lhs: IdentOrNum::parse_stmt(it.next().unwrap()),
-            op: ExprOp::parse_stmt(it.next().unwrap()),
-            rhs: Box::new(Expr::parse_stmt(it.next().unwrap())),
         }
     }
 }
@@ -170,7 +197,7 @@ impl Eval for CompExpr {
 }
 
 impl Eval for Expr {
-    type T = usize;
+    type T = isize;
     fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         match self {
             Self::IdentOrNum(ion) => ion.eval(call_stack),
@@ -180,7 +207,7 @@ impl Eval for Expr {
 }
 
 impl Eval for IdentOrNum {
-    type T = usize;
+    type T = isize;
     fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         Ok(match self {
             Self::Ident(name) => {
@@ -195,12 +222,17 @@ impl Eval for IdentOrNum {
 }
 
 impl Eval for TrueExpr {
-    type T = usize;
+    type T = isize;
     fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;
         match self.op {
             ExprOp::Add => lhs.checked_add(rhs).ok_or(ExprRuntimeError::OverFlow),
+            ExprOp::Sub => lhs.checked_sub(rhs).ok_or(ExprRuntimeError::OverFlow),
+            ExprOp::Mul => lhs.checked_mul(rhs).ok_or(ExprRuntimeError::OverFlow),
+            ExprOp::Div => lhs.checked_div(rhs).ok_or(ExprRuntimeError::ZeroDivision),
+            ExprOp::Mod => lhs.checked_rem(rhs).ok_or(ExprRuntimeError::OverFlow),
+            _ => unimplemented!(),
         }
     }
 }

@@ -2,14 +2,22 @@ SP = _{SPACE_SEPARATOR+}
 
 Num = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 
-IdentChars = _{!(SEPARATOR|";"|"<"|">"|"="|"!"|"+"|",") ~ ANY}
+IdentChars = _{!(SEPARATOR|";"|"<"|">"|"="|"!"|","|"+"|"-"|"*"|"/"|"%") ~ ANY}
 Ident = {(!ASCII_DIGIT ~ IdentChars) ~ IdentChars*}
 
-Op = { "+" }
+Plus = { "+" }
+Minus = { "-" }
+Times = { "*" }
+Div = { "/" }
+Mod = { "%" }
+
+Op = _{ Plus | Minus | Times | Div | Mod }
+
 IdentOrNum = { Ident | Num }
-TrueExpr = { IdentOrNum ~ SP? ~ Op ~ SP? ~ Expr }
-Expr = { TrueExpr | IdentOrNum }
-CompOp = { "<" | ">" | "<=" | ">=" | "!=" | "==" }
+ExprUnit = { "(" ~ Expr ~ ")" | IdentOrNum }
+Expr = { ExprUnit ~ ( SP? ~ Op ~ SP? ~ ExprUnit )* }
+
+CompOp = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
 CompExpr = { Expr ~ SP? ~ CompOp ~ SP? ~ Expr }
 
 StringContent = {(!"\"" ~ ANY)*}
