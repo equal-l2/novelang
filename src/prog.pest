@@ -31,5 +31,7 @@ Else = { ^"Else" } // else
 End = { ^"End" } // end of something
 
 StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | If | Else | End }
-Statement = _{ SP? ~ StmtTypes ~ ";" ~ (SPACE_SEPARATOR | NEWLINE)*}
-Prog = _{ SOI ~ Statement* ~ EOI }
+Statement = _{ SP? ~ StmtTypes ~ ";" ~ SP?}
+Comment = {"#" ~ (!NEWLINE ~ ANY)* }
+Line = _{ SP? ~ (Comment | Statement+)? ~ NEWLINE }
+Prog = _{ SOI ~ Line* ~ EOI }

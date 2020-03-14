@@ -179,7 +179,7 @@ fn run_insts(prog: Program, wait: bool) {
             }
             #[allow(unreachable_patterns)]
             other => {
-                die!("Runtime error: unknown instruction type : {:?}", other);
+                die!("Runtime error: unknown instruction: {:?}", other);
             }
         }
         i += 1;

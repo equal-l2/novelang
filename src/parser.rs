@@ -67,12 +67,12 @@ struct WaitsEnd {
 }
 
 pub fn parse(s: &str) -> Option<Program> {
-    let stmts = ProgParser::parse(Rule::Prog, s);
-    if let Err(e) = stmts {
+    let lines = ProgParser::parse(Rule::Prog, s);
+    if let Err(e) = lines {
         eprintln!("{}", e);
         return None;
     }
-    let stmts = stmts.unwrap();
+    let stmts = lines.unwrap();
 
     let mut insts = vec![];
     let mut waits_end_stack: Vec<WaitsEnd> = vec![]; // stmts waiting for End
@@ -232,6 +232,7 @@ pub fn parse(s: &str) -> Option<Program> {
                 insts.push(Inst::End);
             }
             Rule::EOI => break,
+            Rule::Comment => {},
             other => {
                 die!("Semantic error: unexpected rule : {:?}", other);
             }
