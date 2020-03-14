@@ -45,11 +45,17 @@ pub enum Inst {
     },
     If {
         cond: CompExpr,
-        offset_to_else: Option<usize>,
+        offset_to_next: Option<usize>,
+        offset_to_end: usize,
+    },
+    ElIf {
+        cond: CompExpr,
+        prev_idx: usize, // prev if or elif FIXME: this member is only used by the parsing stage
+        offset_to_next: Option<usize>,
         offset_to_end: usize,
     },
     Else {
-        if_idx: usize, // TODO: remove this field
+        prev_idx: usize, // prev if or elif FIXME: this member is only used by the parsing stage
         offset_to_end: usize,
     },
     End,
@@ -64,6 +70,28 @@ pub struct Program {
 struct WaitsEnd {
     kind: Inst,
     index: usize,
+}
+
+impl std::fmt::Display for WaitsEnd {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{} at {}",
+            match self.kind {
+                Inst::Print { .. } => "Print",
+                Inst::Sub { .. } => "Sub",
+                Inst::Call { .. } => "Call",
+                Inst::While { .. } => "While",
+                Inst::Let { .. } => "Let",
+                Inst::Modify { .. } => "Modify",
+                Inst::If { .. } => "If",
+                Inst::ElIf { .. } => "ElIf",
+                Inst::Else { .. } => "Else",
+                Inst::End => "End",
+            },
+            self.index,
+        )
+    }
 }
 
 pub fn parse(s: &str) -> Option<Program> {
@@ -150,7 +178,45 @@ pub fn parse(s: &str) -> Option<Program> {
             Rule::If => {
                 let inst_obj = Inst::If {
                     cond: CompExpr::parse_stmt(stmt.into_inner().next().unwrap()),
-                    offset_to_else: None,
+                    offset_to_next: None,
+                    offset_to_end: 0,
+                };
+                waits_end_stack.push(WaitsEnd {
+                    kind: inst_obj.clone(),
+                    index: insts.len(),
+                });
+                insts.push(inst_obj);
+            }
+            Rule::ElIf => {
+                let prev = waits_end_stack.pop().unwrap_or_else(|| {
+                    die!("Semantic error: a stray ElIf detected.");
+                });
+
+                match prev.kind {
+                    Inst::If { cond, .. } => {
+                        insts[prev.index] = Inst::If {
+                            cond: cond.clone(),
+                            offset_to_next: Some(insts.len() - prev.index),
+                            offset_to_end: 0,
+                        };
+                    }
+                    Inst::ElIf { cond, prev_idx, .. } => {
+                        insts[prev.index] = Inst::ElIf {
+                            cond: cond.clone(),
+                            prev_idx: prev_idx,
+                            offset_to_next: Some(insts.len() - prev.index),
+                            offset_to_end: 0,
+                        }
+                    }
+                    _ => {
+                        die!("Semantic error: cannot find corresponding Element for ElIf");
+                    }
+                }
+
+                let inst_obj = Inst::ElIf {
+                    cond: CompExpr::parse_stmt(stmt.into_inner().next().unwrap()),
+                    prev_idx: prev.index,
+                    offset_to_next: None,
                     offset_to_end: 0,
                 };
                 waits_end_stack.push(WaitsEnd {
@@ -160,74 +226,100 @@ pub fn parse(s: &str) -> Option<Program> {
                 insts.push(inst_obj);
             }
             Rule::Else => {
-                let start = waits_end_stack.pop().unwrap_or_else(|| {
+                let prev = waits_end_stack.pop().unwrap_or_else(|| {
                     die!("Semantic error: a stray Else detected.");
                 });
-                if let Inst::If { cond, .. } = start.kind {
-                    insts[start.index] = Inst::If {
-                        cond: cond.clone(),
-                        offset_to_else: Some(insts.len() - start.index),
-                        offset_to_end: 0,
-                    };
-                    let inst_obj = Inst::Else {
-                        if_idx: start.index,
-                        offset_to_end: 0,
-                    };
-                    waits_end_stack.push(WaitsEnd {
-                        kind: inst_obj.clone(),
-                        index: insts.len(),
-                    });
-                    insts.push(inst_obj);
-                } else {
-                    die!("Semantic error: cannot find corresponding If for Else");
+                match prev.kind {
+                    Inst::If { cond, .. } => {
+                        insts[prev.index] = Inst::If {
+                            cond: cond.clone(),
+                            offset_to_next: Some(insts.len() - prev.index),
+                            offset_to_end: 0,
+                        };
+                    }
+                    Inst::ElIf { cond, prev_idx, .. } => {
+                        insts[prev.index] = Inst::ElIf {
+                            cond: cond.clone(),
+                            prev_idx: prev_idx,
+                            offset_to_next: Some(insts.len() - prev.index),
+                            offset_to_end: 0,
+                        }
+                    }
+                    _ => {
+                        die!("Semantic error: cannot find corresponding Element for ElIf");
+                    }
                 }
+                let inst_obj = Inst::Else {
+                    prev_idx: prev.index,
+                    offset_to_end: 0,
+                };
+                waits_end_stack.push(WaitsEnd {
+                    kind: inst_obj.clone(),
+                    index: insts.len(),
+                });
+                insts.push(inst_obj);
             }
             Rule::End => {
                 let start = waits_end_stack.pop().unwrap_or_else(|| {
                     die!("Semantic error: a stray End detected.");
                 });
-                let offset_to_end = insts.len() - start.index;
-                insts[start.index] = match start.kind {
-                    Inst::Sub { name, .. } => Inst::Sub {
-                        name,
-                        offset_to_end,
-                    },
-                    Inst::While { cond, .. } => Inst::While {
-                        cond,
-                        offset_to_end,
-                    },
-                    Inst::If { cond, .. } => Inst::If {
-                        cond,
-                        offset_to_else: None,
-                        offset_to_end,
-                    },
-                    Inst::Else { if_idx, .. } => Inst::Else {
-                        if_idx,
-                        offset_to_end,
-                    },
-                    other => {
-                        die!("Semantic error: cannot End {:?}", other);
+                if matches!(start.kind, Inst::If{..}|Inst::ElIf{..}|Inst::Else{..}) {
+                    let mut idx = start.index;
+                    loop {
+                        match insts[idx] {
+                            Inst::If {
+                                ref cond,
+                                offset_to_next,
+                                ..
+                            } => {
+                                insts[idx] = Inst::If {
+                                    cond: cond.clone(),
+                                    offset_to_next,
+                                    offset_to_end: insts.len() - idx,
+                                };
+                                break;
+                            }
+                            Inst::ElIf {
+                                ref cond,
+                                prev_idx,
+                                offset_to_next,
+                                ..
+                            } => {
+                                insts[idx] = Inst::ElIf {
+                                    cond: cond.clone(),
+                                    prev_idx,
+                                    offset_to_next,
+                                    offset_to_end: insts.len() - idx,
+                                };
+                                idx = prev_idx;
+                            }
+                            Inst::Else { prev_idx, .. } => {
+                                insts[idx] = Inst::Else {
+                                    prev_idx,
+                                    offset_to_end: insts.len() - idx,
+                                };
+                                idx = prev_idx;
+                            }
+                            _ => {
+                                unreachable!();
+                            }
+                        }
                     }
-                };
-
-                // set offset_to_end of If
-                if let Inst::Else {
-                    if_idx,
-                    offset_to_end,
-                } = insts[start.index]
-                {
-                    if let Inst::If {
-                        ref cond,
-                        offset_to_else,
-                        ..
-                    } = insts[if_idx]
-                    {
-                        insts[if_idx] = Inst::If {
-                            cond: cond.clone(),
-                            offset_to_else,
+                } else {
+                    let offset_to_end = insts.len() - start.index;
+                    insts[start.index] = match start.kind {
+                        Inst::Sub { name, .. } => Inst::Sub {
+                            name,
                             offset_to_end,
-                        };
-                    }
+                        },
+                        Inst::While { cond, .. } => Inst::While {
+                            cond,
+                            offset_to_end,
+                        },
+                        other => {
+                            die!("Semantic error: cannot End {:?}", other);
+                        }
+                    };
                 }
 
                 insts.push(Inst::End);

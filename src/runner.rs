@@ -67,6 +67,7 @@ fn run_insts(prog: Program, wait: bool) {
 
     let mut call_stack = CallStack::new();
     let mut i = 0;
+    let mut in_if = false;
     while i < prog.insts.len() {
         use crate::exprs::Eval;
         match &prog.insts[i] {
@@ -88,13 +89,15 @@ fn run_insts(prog: Program, wait: bool) {
                         .unwrap();
                 }
 
-                stdout
-                    .queue(style::Print("\r\n[Proceed with any key]\r"))
-                    .unwrap();
+                stdout.queue(style::Print("\r\n")).unwrap();
 
                 let _ = stdout.flush();
 
                 if wait {
+                    stdout
+                        .queue(style::Print("[Proceed with any key]\r"))
+                        .unwrap();
+                    let _ = stdout.flush();
                     wait_keypress();
                 }
             }
@@ -151,12 +154,13 @@ fn run_insts(prog: Program, wait: bool) {
             }
             Inst::If {
                 cond,
-                offset_to_else,
+                offset_to_next,
                 offset_to_end,
             } => match cond.eval(&call_stack) {
                 Ok(true) => call_stack.push(i + offset_to_end + 1),
                 Ok(false) => {
-                    i += if let Some(idx) = offset_to_else {
+                    i += if let Some(idx) = offset_to_next {
+                        in_if = true;
                         *idx
                     } else {
                         offset_to_end + 1
@@ -167,8 +171,52 @@ fn run_insts(prog: Program, wait: bool) {
                     die!("Runtime error: CondExpr cannot be evaled: {}", e);
                 }
             },
+            Inst::ElIf {
+                cond,
+                offset_to_next,
+                offset_to_end,
+                ..
+            } => {
+                if in_if {
+                    match cond.eval(&call_stack) {
+                        Ok(true) => {
+                            in_if = false;
+                            call_stack.push(i + offset_to_end + 1);
+                        }
+                        Ok(false) => {
+                            i += if let Some(idx) = offset_to_next {
+                                *idx
+                            } else {
+                                in_if = false;
+                                offset_to_end + 1
+                            };
+                            continue;
+                        }
+                        Err(e) => {
+                            die!("Runtime error: CondExpr cannot be evaled: {}", e);
+                        }
+                    }
+                } else {
+                    if let Some(ret_idx) = call_stack.pop() {
+                        i = ret_idx;
+                    } else {
+                        die!("Runtime error: end index for if-block was not set");
+                    }
+                    continue;
+                }
+            }
             Inst::Else { offset_to_end, .. } => {
-                call_stack.push(i + offset_to_end + 1);
+                if in_if {
+                    in_if = false;
+                    call_stack.push(i + offset_to_end + 1);
+                } else {
+                    if let Some(ret_idx) = call_stack.pop() {
+                        i = ret_idx;
+                    } else {
+                        die!("Runtime error: end index for if-block was not set");
+                    }
+                    continue;
+                }
             }
             Inst::End => {
                 if let Some(ret_idx) = call_stack.pop() {

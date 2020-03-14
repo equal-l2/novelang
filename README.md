@@ -29,7 +29,7 @@
 - Add conditionals
     - ~Add `if`~
     - ~Add `else`~
-    - Add `elif`
+    - ~Add `elif`~
 - ~Add variable (integer only?)~
     - ~Add `let`
     - ~Add `modify` (modify the value of variable)~

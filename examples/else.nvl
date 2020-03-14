@@ -1,9 +1,0 @@
-let i be 0 asmut;
-while i < 10;
-    if i == 1;
-        print "i is 1";
-    else;
-        print "i is not 1";
-    end;
-    modify i to i+1;
-end;
