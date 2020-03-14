@@ -157,10 +157,11 @@ fn run_insts(prog: Program, wait: bool) {
                 Ok(true) => call_stack.push(i + offset_to_end + 1),
                 Ok(false) => {
                     i += if let Some(idx) = offset_to_else {
-                        idx
+                        *idx
                     } else {
-                        offset_to_end
-                    }
+                        offset_to_end + 1
+                    };
+                    continue;
                 }
                 Err(e) => {
                     die!("Runtime error: CondExpr cannot be evaled: {}", e);

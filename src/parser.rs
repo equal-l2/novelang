@@ -232,7 +232,7 @@ pub fn parse(s: &str) -> Option<Program> {
                 insts.push(Inst::End);
             }
             Rule::EOI => break,
-            Rule::Comment => {},
+            Rule::Comment => {}
             other => {
                 die!("Semantic error: unexpected rule : {:?}", other);
             }
