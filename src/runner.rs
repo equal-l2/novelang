@@ -62,9 +62,43 @@ macro_rules! die {
     }
 }
 
-fn run_insts(prog: Program, wait: bool) {
+fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintArgs>) {
+    use crate::exprs::Eval;
+    use crossterm::*;
     use std::io::Write;
+    let mut stdout = std::io::stdout();
 
+    queue!(
+        stdout,
+        terminal::Clear(terminal::ClearType::CurrentLine),
+        style::Print(format!("{:04} :", idx)),
+    )
+    .unwrap();
+    for arg in args {
+        stdout
+            .queue(style::Print(match arg {
+                PrintArgs::String(i) => format!(" {}", i),
+                PrintArgs::Expr(i) => format!(
+                    " {}",
+                    i.eval(&call_stack).unwrap_or_else(|e| {
+                        die!("Runtime error: cannot eval expr: {}", e);
+                    })
+                ),
+            }))
+            .unwrap();
+    }
+    stdout.queue(style::Print("\r\n")).unwrap();
+    let _ = stdout.flush();
+
+    if wait {
+        stdout
+            .execute(style::Print("[Proceed with any key]\r"))
+            .unwrap();
+        wait_keypress();
+    }
+}
+
+fn run_insts(prog: Program, wait: bool) {
     let mut call_stack = CallStack::new();
     let mut i = 0;
     let mut in_if = false;
@@ -72,39 +106,7 @@ fn run_insts(prog: Program, wait: bool) {
         use crate::exprs::Eval;
         match &prog.insts[i] {
             Inst::Print { args } => {
-                use crossterm::*;
-                let mut stdout = std::io::stdout();
-                queue!(
-                    stdout,
-                    terminal::Clear(terminal::ClearType::CurrentLine),
-                    style::Print(format!("{:04} :", i)),
-                )
-                .unwrap();
-                for arg in args {
-                    stdout
-                        .queue(style::Print(match arg {
-                            PrintArgs::String(i) => format!(" {}", i),
-                            PrintArgs::Expr(i) => format!(
-                                " {}",
-                                i.eval(&call_stack).unwrap_or_else(|e| {
-                                    die!("Runtime error: cannot eval expr: {}", e);
-                                })
-                            ),
-                        }))
-                        .unwrap();
-                }
-
-                stdout.queue(style::Print("\r\n")).unwrap();
-
-                let _ = stdout.flush();
-
-                if wait {
-                    stdout
-                        .queue(style::Print("[Proceed with any key]\r"))
-                        .unwrap();
-                    let _ = stdout.flush();
-                    wait_keypress();
-                }
+                exec_print(i, &call_stack, wait, args);
             }
             Inst::Sub { offset_to_end, .. } => {
                 i += offset_to_end;
