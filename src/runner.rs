@@ -100,8 +100,8 @@ fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintAr
 
 fn run_insts(prog: Program, wait: bool) {
     let mut call_stack = CallStack::new();
-    let mut i = 0;
 
+    let mut i = 1; // index 0 is reserved (unreachable)
     let mut if_eval = false;
 
     while i < prog.insts.len() {

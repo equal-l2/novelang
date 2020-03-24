@@ -55,6 +55,7 @@ pub enum Inst {
         offset_to_end: usize,
     },
     End,
+    Ill,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +85,7 @@ impl std::fmt::Display for WaitsEnd {
                 Inst::ElIf { .. } => "ElIf",
                 Inst::Else { .. } => "Else",
                 Inst::End => "End",
+                Inst::Ill => "Ill"
             },
             self.index,
         )
@@ -98,7 +100,7 @@ pub fn parse(s: &str) -> Option<Program> {
     }
     let stmts = lines.unwrap();
 
-    let mut insts = vec![];
+    let mut insts = vec![Inst::Ill];
     let mut waits_end_stack: Vec<WaitsEnd> = vec![]; // stmts waiting for End
     let mut subs = std::collections::HashMap::new(); // subroutines defined
     for stmt in stmts {
