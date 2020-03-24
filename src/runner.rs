@@ -1,3 +1,4 @@
+use crate::exprs::VarIntType;
 use crate::parser::Inst;
 use crate::parser::PrintArgs;
 use crate::parser::Program;
@@ -46,12 +47,27 @@ impl CallStack {
             .find(|v| v.is_some())
             .flatten()
     }
+
+    fn modify_var(&mut self, name: &str, new_value: VarIntType) -> Result<(), VarModError> {
+        let mut var = self.get_var_mut(name).ok_or(VarModError::NotFound)?;
+        if var.is_mutable {
+            var.value = new_value;
+            Ok(())
+        } else {
+            Err(VarModError::Immutable)
+        }
+    }
+}
+
+pub enum VarModError {
+    NotFound,
+    Immutable,
 }
 
 #[derive(Debug, Clone)]
 pub struct Variable {
     is_mutable: bool,
-    pub value: isize,
+    pub value: VarIntType,
 }
 
 macro_rules! die {
@@ -145,20 +161,24 @@ fn run_insts(prog: Program, wait: bool) {
                     .insert(name.clone(), init_var)
                     .is_some()
                 {
-                    die!("Runtime error: variable {} is already declared", name);
+                    die!(
+                        "Runtime error: variable {} is already declared in current scope",
+                        name
+                    );
                 }
             }
             Inst::Modify { name, expr } => {
                 let to_value = expr.eval(&call_stack).unwrap_or_else(|e| {
                     die!("Runtime error: cannot eval the value: {}", e);
                 });
-                let var = call_stack.get_var_mut(name).unwrap_or_else(|| {
-                    die!("Runtime error: variable was not found");
-                });
-                if var.is_mutable {
-                    var.value = to_value;
-                } else {
-                    die!("Runtime error: variable {} is immutable", name);
+                match call_stack.modify_var(name, to_value) {
+                    Err(VarModError::NotFound) => {
+                        die!("Runtime error: variable {} was not found", name);
+                    }
+                    Err(VarModError::Immutable) => {
+                        die!("Runtime error: variable {} is immutable", name);
+                    }
+                    _ => {}
                 }
             }
             Inst::If {
@@ -236,6 +256,18 @@ fn run_insts(prog: Program, wait: bool) {
                     }
                 }
             }
+            Inst::Input { dest } => {
+                let v = get_input();
+                match call_stack.modify_var(dest, v) {
+                    Err(VarModError::NotFound) => {
+                        die!("Runtime error: variable {} was not found", dest);
+                    }
+                    Err(VarModError::Immutable) => {
+                        die!("Runtime error: variable {} is immutable", dest);
+                    }
+                    _ => {}
+                }
+            }
             #[allow(unreachable_patterns)]
             other => {
                 die!("Runtime error: unknown instruction: {:?}", other);
@@ -251,9 +283,7 @@ pub fn run(prog: Program, wait: bool) {
         std::process::exit(-1);
     })
     .unwrap();
-    if wait {
-        let _ = crossterm::terminal::enable_raw_mode();
-    }
+    let _ = crossterm::terminal::enable_raw_mode();
     run_insts(prog, wait);
     let _ = crossterm::terminal::disable_raw_mode();
 }
@@ -263,6 +293,21 @@ fn wait_keypress() {
     loop {
         if let Event::Key(KeyEvent { .. }) = read().unwrap() {
             return;
+        }
+    }
+}
+
+fn get_input() -> VarIntType {
+    use crossterm::event::*;
+    loop {
+        match read().unwrap() {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(c @ '0'..='9'),
+                ..
+            }) => {
+                return c.to_digit(10).unwrap() as VarIntType;
+            }
+            _ => {}
         }
     }
 }

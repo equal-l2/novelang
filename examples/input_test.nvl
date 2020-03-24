@@ -1,0 +1,7 @@
+Let i be 0 asMut;
+while i < 10;
+    let in be 0 asmut;
+    InputTo in;
+    print in;
+    modify i to i+1;
+end;

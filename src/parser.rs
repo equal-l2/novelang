@@ -54,6 +54,9 @@ pub enum Inst {
     Else {
         offset_to_end: usize,
     },
+    Input {
+        dest: String,
+    },
     End,
     Ill,
 }
@@ -84,8 +87,9 @@ impl std::fmt::Display for WaitsEnd {
                 Inst::If { .. } => "If",
                 Inst::ElIf { .. } => "ElIf",
                 Inst::Else { .. } => "Else",
+                Inst::Input { .. } => "Input",
                 Inst::End => "End",
-                Inst::Ill => "Ill"
+                Inst::Ill => "Ill",
             },
             self.index,
         )
@@ -269,6 +273,9 @@ pub fn parse(s: &str) -> Option<Program> {
 
                 insts.push(Inst::End);
             }
+            Rule::Input => insts.push(Inst::Input {
+                dest: stmt.into_inner().as_str().to_owned(),
+            }),
             Rule::EOI => break,
             Rule::Comment => {}
             other => {
