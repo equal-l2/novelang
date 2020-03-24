@@ -100,8 +100,10 @@ fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintAr
 
 fn run_insts(prog: Program, wait: bool) {
     let mut call_stack = CallStack::new();
-    let mut i = 0;
-    let mut in_if = false;
+
+    let mut i = 1; // index 0 is reserved (unreachable)
+    let mut if_eval = false;
+
     while i < prog.insts.len() {
         use crate::exprs::Eval;
         match &prog.insts[i] {
@@ -162,41 +164,39 @@ fn run_insts(prog: Program, wait: bool) {
             Inst::If {
                 cond,
                 offset_to_next,
-                offset_to_end,
-            } => match cond.eval(&call_stack) {
-                Ok(true) => call_stack.push(i + offset_to_end + 1),
-                Ok(false) => {
-                    i += if let Some(idx) = offset_to_next {
-                        in_if = true;
-                        *idx
-                    } else {
-                        offset_to_end + 1
-                    };
-                    continue;
+            } => {
+                // use a scope, but don't use a return address
+                // push a frame always to unify End behavior
+                call_stack.push(0);
+                match cond.eval(&call_stack) {
+                    Ok(true) => {
+                        // go to body
+                        // no-op
+                    }
+                    Ok(false) => {
+                        i += offset_to_next;
+                        if_eval = true;
+                        continue;
+                    }
+                    Err(e) => {
+                        die!("Runtime error: CondExpr cannot be evaled: {}", e);
+                    }
                 }
-                Err(e) => {
-                    die!("Runtime error: CondExpr cannot be evaled: {}", e);
-                }
-            },
+            }
             Inst::ElIf {
                 cond,
                 offset_to_next,
-                offset_to_end,
                 ..
             } => {
-                if in_if {
+                if if_eval {
                     match cond.eval(&call_stack) {
                         Ok(true) => {
-                            in_if = false;
-                            call_stack.push(i + offset_to_end + 1);
+                            // don't push a frame
+                            // since If pushed one already
+                            if_eval = false;
                         }
                         Ok(false) => {
-                            i += if let Some(idx) = offset_to_next {
-                                *idx
-                            } else {
-                                in_if = false;
-                                offset_to_end + 1
-                            };
+                            i += offset_to_next;
                             continue;
                         }
                         Err(e) => {
@@ -204,34 +204,37 @@ fn run_insts(prog: Program, wait: bool) {
                         }
                     }
                 } else {
-                    if let Some(ret_idx) = call_stack.pop() {
-                        i = ret_idx;
-                    } else {
-                        die!("Runtime error: end index for if-block was not set");
-                    }
+                    i += offset_to_next;
                     continue;
                 }
             }
             Inst::Else { offset_to_end, .. } => {
-                if in_if {
-                    in_if = false;
-                    call_stack.push(i + offset_to_end + 1);
+                if if_eval {
+                    // don't push a frame
+                    // since If pushed one already
+                    if_eval = false;
                 } else {
-                    if let Some(ret_idx) = call_stack.pop() {
-                        i = ret_idx;
-                    } else {
-                        die!("Runtime error: end index for if-block was not set");
-                    }
+                    i += offset_to_end;
                     continue;
                 }
             }
             Inst::End => {
-                if let Some(ret_idx) = call_stack.pop() {
-                    i = ret_idx;
-                } else {
-                    die!("Runtime error: index to return was not set");
+                if_eval = false;
+                let top = call_stack.pop();
+                match top {
+                    Some(0) => {
+                        // return address unspecified
+                        // no-op
+                    }
+                    Some(ret_idx) => {
+                        // return to the specified address
+                        i = ret_idx;
+                        continue;
+                    }
+                    _ => {
+                        die!("Runtime error: index to return was not set");
+                    }
                 }
-                continue;
             }
             #[allow(unreachable_patterns)]
             other => {
