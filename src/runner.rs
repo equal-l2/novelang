@@ -7,14 +7,58 @@ pub type VarTable = std::collections::HashMap<String, Variable>;
 pub struct CallStack {
     ret_stack: Vec<usize>,
     vars_stack: Vec<VarTable>,
+    internal_vars: VarTable,
+}
+
+macro_rules! die {
+    ($( $x:expr ),*) => {
+        let _ = crossterm::terminal::disable_raw_mode();
+        eprintln!($($x,)*);
+        std::process::exit(1);
+    }
 }
 
 impl CallStack {
     fn new() -> Self {
         // init with one vartable for global vars
+        let internal_vars = {
+            let mut vt = VarTable::new();
+            vt.insert(
+                "_result".to_owned(),
+                Variable {
+                    is_mutable: true,
+                    value: 0,
+                },
+            );
+            vt
+        };
         Self {
             ret_stack: vec![],
             vars_stack: vec![VarTable::new()],
+            internal_vars,
+        }
+    }
+
+    fn decl_var(&mut self, name: &str, val: Variable) {
+        if self
+            .vars_stack
+            .last_mut()
+            .unwrap()
+            .insert(name.to_owned(), val)
+            .is_some()
+        {
+            die!("Runtime error: variable {} is already declared", name);
+        }
+    }
+
+    fn modify_var(&mut self, name: &str, val: isize) {
+        let var = self.get_var_mut(name).unwrap_or_else(|| {
+            die!("Runtime error: variable was not found");
+        });
+        if var.is_mutable {
+            var.value = val;
+        } else {
+            die!("Runtime error: variable {} is immutable", name);
         }
     }
 
@@ -30,21 +74,30 @@ impl CallStack {
 
     // get the highest variable in the stack with the specified name
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
-        self.vars_stack
-            .iter()
-            .rev()
-            .map(|t| t.get(name))
-            .find(|v| v.is_some())
-            .flatten()
+        if let Some(i) = self.internal_vars.get(name) {
+            Some(i)
+        } else {
+            self.vars_stack
+                .iter()
+                .rev()
+                .map(|t| t.get(name))
+                .find(|v| v.is_some())
+                .flatten()
+        }
     }
 
     fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
-        self.vars_stack
-            .iter_mut()
-            .rev()
-            .map(|t| t.get_mut(name))
-            .find(|v| v.is_some())
-            .flatten()
+        if let Some(i) = self.internal_vars.get_mut(name) {
+            // this path will not used by Modify
+            Some(i)
+        } else {
+            self.vars_stack
+                .iter_mut()
+                .rev()
+                .map(|t| t.get_mut(name))
+                .find(|v| v.is_some())
+                .flatten()
+        }
     }
 }
 
@@ -52,14 +105,6 @@ impl CallStack {
 pub struct Variable {
     is_mutable: bool,
     pub value: isize,
-}
-
-macro_rules! die {
-    ($( $x:expr ),*) => {
-        let _ = crossterm::terminal::disable_raw_mode();
-        eprintln!($($x,)*);
-        std::process::exit(1);
-    }
 }
 
 fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintArgs>) {
@@ -138,28 +183,13 @@ fn run_insts(prog: Program, wait: bool) {
                         die!("Runtime error: cannot eval the init value: {}", e);
                     }),
                 };
-                if call_stack
-                    .vars_stack
-                    .last_mut()
-                    .unwrap()
-                    .insert(name.clone(), init_var)
-                    .is_some()
-                {
-                    die!("Runtime error: variable {} is already declared", name);
-                }
+                call_stack.decl_var(name, init_var);
             }
             Inst::Modify { name, expr } => {
                 let to_value = expr.eval(&call_stack).unwrap_or_else(|e| {
                     die!("Runtime error: cannot eval the value: {}", e);
                 });
-                let var = call_stack.get_var_mut(name).unwrap_or_else(|| {
-                    die!("Runtime error: variable was not found");
-                });
-                if var.is_mutable {
-                    var.value = to_value;
-                } else {
-                    die!("Runtime error: variable {} is immutable", name);
-                }
+                call_stack.modify_var(name, to_value);
             }
             Inst::If {
                 cond,
@@ -236,6 +266,29 @@ fn run_insts(prog: Program, wait: bool) {
                     }
                 }
             }
+            Inst::Input => {
+                unimplemented!();
+            }
+            Inst::Roll { count, face } => {
+                let count = count.eval(&call_stack).unwrap_or_else(|e| {
+                    die!("Runtime error: cannot eval expr: {}", e);
+                });
+                let face = face.eval(&call_stack).unwrap_or_else(|e| {
+                    die!("Runtime error: cannot eval expr: {}", e);
+                });
+
+                if count <= 0 {
+                    die!("Runtime error: Count for Roll must be a positive integer");
+                }
+
+                if face <= 0 {
+                    die!("Runtime error: Face for Roll must be a positive integer");
+                }
+                {
+                    let res = call_stack.internal_vars.get_mut("_result").unwrap();
+                    res.value = roll_dice(count, face);
+                }
+            }
             #[allow(unreachable_patterns)]
             other => {
                 die!("Runtime error: unknown instruction: {:?}", other);
@@ -265,4 +318,16 @@ fn wait_keypress() {
             return;
         }
     }
+}
+
+fn roll_dice(count: isize, face: isize) -> isize {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let mut sum = 0;
+
+    for _ in 0..count {
+        sum += rng.gen_range(1, face + 1);
+    }
+
+    sum
 }

@@ -55,6 +55,11 @@ pub enum Inst {
         offset_to_end: usize,
     },
     End,
+    Input,
+    Roll {
+        count: Expr,
+        face: Expr,
+    },
     Ill,
 }
 
@@ -85,7 +90,9 @@ impl std::fmt::Display for WaitsEnd {
                 Inst::ElIf { .. } => "ElIf",
                 Inst::Else { .. } => "Else",
                 Inst::End => "End",
-                Inst::Ill => "Ill"
+                Inst::Input => "Input",
+                Inst::Roll { .. } => "Roll",
+                Inst::Ill => "Ill",
             },
             self.index,
         )
@@ -161,6 +168,9 @@ pub fn parse(s: &str) -> Option<Program> {
             Rule::Let => {
                 let mut it = stmt.into_inner();
                 let name = it.next().unwrap().as_str().to_owned();
+                if name.starts_with("_") {
+                    die!("Semantic error: Identifier starts with _ is reserved");
+                }
                 let init = Expr::parse_stmt(it.next().unwrap());
                 let is_mut = it.next().is_some();
 
@@ -168,9 +178,14 @@ pub fn parse(s: &str) -> Option<Program> {
             }
             Rule::Modify => {
                 let mut it = stmt.into_inner();
+                let name = it.next().unwrap().as_str().to_owned();
+                if name.starts_with("_") {
+                    die!("Semantic error: Identifier starts with _ is reserved and should not be modified");
+                }
+                let expr_stmt = it.next().unwrap();
                 insts.push(Inst::Modify {
-                    name: it.next().unwrap().as_str().to_owned(),
-                    expr: Expr::parse_stmt(it.next().unwrap()),
+                    name,
+                    expr: Expr::parse_stmt(expr_stmt),
                 });
             }
             Rule::If => {
@@ -268,6 +283,16 @@ pub fn parse(s: &str) -> Option<Program> {
                 };
 
                 insts.push(Inst::End);
+            }
+            Rule::Input => insts.push(Inst::Input),
+            Rule::Roll => {
+                let mut it = stmt.into_inner();
+                let count = it.next().unwrap();
+                let face = it.next().unwrap();
+                insts.push(Inst::Roll {
+                    count: Expr::parse_stmt(count),
+                    face: Expr::parse_stmt(face),
+                });
             }
             Rule::EOI => break,
             Rule::Comment => {}

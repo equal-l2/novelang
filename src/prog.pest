@@ -33,13 +33,14 @@ Call = { ^"Call" ~ SP ~ Ident } // call subroutine
 While = { ^"While" ~ SP ~ CompExpr } // start of while
 Let = { ^"Let" ~ SP ~ Ident ~ SP ~ ^"Be" ~ SP ~ Expr ~ (SP ~ MutMark)? } // variable declaration
 Modify = { ^"Modify" ~ SP ~ Ident ~ SP ~ ^"To" ~ SP ~ Expr } // variable modification
-Input = { ^"Input" ~ SP ~ ^"To" ~ SP ~ Ident } // input
+Input = { ^"Input" } // input
 If = { ^"If" ~ SP ~ CompExpr } // if
 ElIf = { ^"ElIf" ~ SP ~ CompExpr } // if
 Else = { ^"Else" } // else
 End = { ^"End" } // end of something
+Roll = { ^"Roll" ~ SP ~ Expr ~ SP ~ ^"Dice" ~ ^"s"? ~ SP? ~ ^"With" ~ SP ~ Expr ~ SP ~ ^"Face" ~ ^"s"? }
 
-StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | If | ElIf | Else | End }
+StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | If | ElIf | Else | End | Roll }
 Statement = _{ SP? ~ StmtTypes ~ ";" ~ SP?}
 Comment = {"#" ~ (!NEWLINE ~ ANY)* }
 Line = _{ SP? ~ (Comment | Statement+)? ~ NEWLINE }
