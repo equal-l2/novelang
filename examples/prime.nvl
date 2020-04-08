@@ -1,34 +1,33 @@
-input;
+input "素数判定する整数を入力してください";
 let n be _result;
 
 if n < 2;
-    print n, "is not a prime, since it is smaller than 2";
+    print n, "は 2 より小さいため素数ではありません";
     halt;
 elif n == 2;
-    print n, "is a prime";
+    print n, "は素数です";
     halt;
 elif n == 3;
-    print n, "is a prime";
+    print n, "は素数です";
     halt;
 elif n % 2 == 0;
-    print n, "is not a prime, can be divided by 2";
+    print n, "は 2 で割り切れるため素数ではありません";
     halt;
 elif n % 3 == 0;
-    print n, "is not a prime, can be divided by 3";
+    print n, "は 3 で割り切れるため素数ではありません";
     halt;
 end;
 
 let i be 5 asmut;
 while i*i <= n;
     if n % i == 0;
-        print n, "is not a prime, can be divided by", i;
+        print n, "は", i, "で割り切れるため素数ではありません";
         halt;
     elif n % (i+2) == 0;
-        print n, "is not a prime, can be divided by", i+2;
+        print n, "は", i+2, "で割り切れるため素数ではありません";
         halt;
     end;
     modify i to i + 6;
 end;
 
-print n, "is a prime";
-
+print n, "は素数です";

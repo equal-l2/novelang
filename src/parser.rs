@@ -55,7 +55,9 @@ pub enum Inst {
         offset_to_end: usize,
     },
     End,
-    Input,
+    Input {
+        prompt: Option<String>,
+    },
     Roll {
         count: Expr,
         face: Expr,
@@ -91,7 +93,7 @@ impl std::fmt::Display for WaitsEnd {
                 Inst::ElIf { .. } => "ElIf",
                 Inst::Else { .. } => "Else",
                 Inst::End => "End",
-                Inst::Input => "Input",
+                Inst::Input { .. } => "Input",
                 Inst::Roll { .. } => "Roll",
                 Inst::Halt => "Halt",
                 Inst::Ill => "Ill",
@@ -286,7 +288,12 @@ pub fn parse(s: &str) -> Option<Program> {
 
                 insts.push(Inst::End);
             }
-            Rule::Input => insts.push(Inst::Input),
+            Rule::Input => insts.push(Inst::Input {
+                prompt: stmt
+                    .into_inner()
+                    .next()
+                    .and_then(|i| Some(i.as_str().to_owned())),
+            }),
             Rule::Roll => {
                 let mut it = stmt.into_inner();
                 let count = it.next().unwrap();

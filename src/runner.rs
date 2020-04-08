@@ -149,11 +149,11 @@ fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintAr
     }
 }
 
-fn get_int_input() -> VarIntType {
+fn get_int_input(prompt: Option<&str>) -> VarIntType {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
     loop {
-        write!(lock, "Provide an integer > ").unwrap();
+        write!(lock, "{} > ", prompt.unwrap_or("Provide an integer")).unwrap();
         let _ = lock.flush();
         if let Ok(i) = read_line_from_stdin().parse() {
             return i;
@@ -285,8 +285,8 @@ fn run_insts(prog: Program, wait: bool) {
                     }
                 }
             }
-            Inst::Input => {
-                call_stack.modify_var("_result", get_int_input());
+            Inst::Input{ prompt } => {
+                call_stack.modify_var("_result", get_int_input(prompt.as_deref()));
             }
             Inst::Roll { count, face } => {
                 let count = count.eval(&call_stack).unwrap_or_else(|e| {
