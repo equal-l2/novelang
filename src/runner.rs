@@ -1,8 +1,12 @@
+use std::io::Write;
+
+use crate::exprs::Eval;
 use crate::parser::Inst;
 use crate::parser::PrintArgs;
 use crate::parser::Program;
 
 pub type VarTable = std::collections::HashMap<String, Variable>;
+pub type VarIntType = i64;
 
 pub struct CallStack {
     ret_stack: Vec<usize>,
@@ -50,7 +54,7 @@ impl CallStack {
         }
     }
 
-    fn modify_var(&mut self, name: &str, val: isize) {
+    fn modify_var(&mut self, name: &str, val: VarIntType) {
         let var = self.get_var_mut(name).unwrap_or_else(|| {
             die!("Runtime error: variable was not found");
         });
@@ -103,12 +107,10 @@ impl CallStack {
 #[derive(Debug, Clone)]
 pub struct Variable {
     is_mutable: bool,
-    pub value: isize,
+    pub value: VarIntType,
 }
 
 fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintArgs>) {
-    use crate::exprs::Eval;
-    use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
@@ -147,6 +149,20 @@ fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintAr
     }
 }
 
+fn get_int_input() -> VarIntType {
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    loop {
+        write!(lock, "Provide an integer > ").unwrap();
+        let _ = lock.flush();
+        if let Ok(i) = read_line_from_stdin().parse() {
+            return i;
+        }
+        writeln!(lock, "!! Provided input is invalid").unwrap();
+        let _ = lock.flush();
+    }
+}
+
 fn run_insts(prog: Program, wait: bool) {
     let mut call_stack = CallStack::new();
 
@@ -154,7 +170,6 @@ fn run_insts(prog: Program, wait: bool) {
     let mut if_eval = false;
 
     while i < prog.insts.len() {
-        use crate::exprs::Eval;
         match &prog.insts[i] {
             Inst::Print { args } => {
                 exec_print(i, &call_stack, wait, args);
@@ -271,7 +286,7 @@ fn run_insts(prog: Program, wait: bool) {
                 }
             }
             Inst::Input => {
-                unimplemented!();
+                call_stack.modify_var("_result", get_int_input());
             }
             Inst::Roll { count, face } => {
                 let count = count.eval(&call_stack).unwrap_or_else(|e| {
@@ -288,10 +303,10 @@ fn run_insts(prog: Program, wait: bool) {
                 if face <= 0 {
                     die!("Runtime error: Face for Roll must be a positive integer");
                 }
-                {
-                    let res = call_stack.internal_vars.get_mut("_result").unwrap();
-                    res.value = roll_dice(count, face);
-                }
+                call_stack.modify_var("_result", roll_dice(count, face));
+            }
+            Inst::Halt => {
+                return;
             }
             #[allow(unreachable_patterns)]
             other => {
@@ -313,7 +328,7 @@ fn read_line_from_stdin() -> String {
     it.next().unwrap().unwrap()
 }
 
-fn roll_dice(count: isize, face: isize) -> isize {
+fn roll_dice(count: VarIntType, face: VarIntType) -> VarIntType {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let mut sum = 0;

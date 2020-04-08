@@ -1,4 +1,5 @@
 use crate::parser::Rule;
+use crate::runner::VarIntType;
 
 #[derive(Debug)]
 pub enum ExprRuntimeError {
@@ -35,7 +36,7 @@ pub enum ExprOp {
 #[derive(Debug, Clone)]
 pub enum IdentOrNum {
     Ident(String),
-    Num(isize),
+    Num(VarIntType),
 }
 
 #[derive(Debug, Clone)]
@@ -197,7 +198,7 @@ impl Eval for CompExpr {
 }
 
 impl Eval for Expr {
-    type T = isize;
+    type T = VarIntType;
     fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         match self {
             Self::IdentOrNum(ion) => ion.eval(call_stack),
@@ -207,7 +208,7 @@ impl Eval for Expr {
 }
 
 impl Eval for IdentOrNum {
-    type T = isize;
+    type T = VarIntType;
     fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         Ok(match self {
             Self::Ident(name) => {
@@ -222,7 +223,7 @@ impl Eval for IdentOrNum {
 }
 
 impl Eval for TrueExpr {
-    type T = isize;
+    type T = VarIntType;
     fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;

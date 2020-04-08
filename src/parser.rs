@@ -60,6 +60,7 @@ pub enum Inst {
         count: Expr,
         face: Expr,
     },
+    Halt,
     Ill,
 }
 
@@ -92,6 +93,7 @@ impl std::fmt::Display for WaitsEnd {
                 Inst::End => "End",
                 Inst::Input => "Input",
                 Inst::Roll { .. } => "Roll",
+                Inst::Halt => "Halt",
                 Inst::Ill => "Ill",
             },
             self.index,
@@ -294,6 +296,7 @@ pub fn parse(s: &str) -> Option<Program> {
                     face: Expr::parse_stmt(face),
                 });
             }
+            Rule::Halt => insts.push(Inst::Halt),
             Rule::EOI => break,
             Rule::Comment => {}
             other => {

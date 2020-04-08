@@ -21,14 +21,15 @@
     - Add compound conditions
         - Add `&&`
         - Add `||`
-- Add conditionals
+- ~Add conditionals~
     - ~Add `if`~
     - ~Add `else`~
     - ~Add `elif`~
-- ~Add variable (integer only?)~
+- Add variable
     - ~Add `let`
     - ~Add `modify` (modify the value of variable)~
-    - Add `freeze` (make the variable immutable)
+    - Add `freeze`? (make the variable immutable)
     - Add lateinit variable?
-- Implement return values
-    - Add `NextInto`? (get return value of next line)
+    - Add `String` variable type
+- ~Implement return values~
+    - ~Add `NextInto`? (get return value of next line)~ (Superseded by variable `_result`)  
