@@ -12,7 +12,6 @@ pub struct CallStack {
 
 macro_rules! die {
     ($( $x:expr ),*) => {
-        let _ = crossterm::terminal::disable_raw_mode();
         eprintln!($($x,)*);
         std::process::exit(1);
     }
@@ -109,37 +108,42 @@ pub struct Variable {
 
 fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintArgs>) {
     use crate::exprs::Eval;
-    use crossterm::*;
     use std::io::Write;
-    let mut stdout = std::io::stdout();
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
 
-    queue!(
-        stdout,
-        terminal::Clear(terminal::ClearType::CurrentLine),
-        style::Print(format!("{:04} :", idx)),
-    )
-    .unwrap();
+    write!(lock, "{:04} :", idx).unwrap();
     for arg in args {
-        stdout
-            .queue(style::Print(match arg {
-                PrintArgs::String(i) => format!(" {}", i),
-                PrintArgs::Expr(i) => format!(
-                    " {}",
-                    i.eval(&call_stack).unwrap_or_else(|e| {
-                        die!("Runtime error: cannot eval expr: {}", e);
-                    })
-                ),
-            }))
-            .unwrap();
+        match arg {
+            PrintArgs::String(i) => write!(lock, " {}", i),
+            PrintArgs::Expr(i) => write!(
+                lock,
+                " {}",
+                i.eval(&call_stack).unwrap_or_else(|e| {
+                    die!("Runtime error: cannot eval expr: {}", e);
+                })
+            ),
+        }
+        .unwrap();
     }
-    stdout.queue(style::Print("\r\n")).unwrap();
-    let _ = stdout.flush();
+    write!(lock, "\n").unwrap();
+    let _ = lock.flush();
 
     if wait {
-        stdout
-            .execute(style::Print("[Proceed with any key]\r"))
+        write!(lock, "[Proceed with Enter⏎ ]").unwrap();
+        let _ = lock.flush();
+        let _ = read_line_from_stdin();
+        {
+            use crossterm::cursor;
+            use crossterm::execute;
+            use crossterm::terminal;
+            execute!(
+                lock,
+                cursor::MoveToPreviousLine(1),
+                terminal::Clear(terminal::ClearType::CurrentLine)
+            )
             .unwrap();
-        wait_keypress();
+        }
     }
 }
 
@@ -299,25 +303,14 @@ fn run_insts(prog: Program, wait: bool) {
 }
 
 pub fn run(prog: Program, wait: bool) {
-    ctrlc::set_handler(|| {
-        let _ = crossterm::terminal::disable_raw_mode();
-        std::process::exit(-1);
-    })
-    .unwrap();
-    if wait {
-        let _ = crossterm::terminal::enable_raw_mode();
-    }
     run_insts(prog, wait);
-    let _ = crossterm::terminal::disable_raw_mode();
 }
 
-fn wait_keypress() {
-    use crossterm::event::*;
-    loop {
-        if let Event::Key(KeyEvent { .. }) = read().unwrap() {
-            return;
-        }
-    }
+fn read_line_from_stdin() -> String {
+    use std::io::BufRead;
+    let stdin = std::io::stdin();
+    let mut it = stdin.lock().lines();
+    it.next().unwrap().unwrap()
 }
 
 fn roll_dice(count: isize, face: isize) -> isize {
