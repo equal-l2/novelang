@@ -1,0 +1,19 @@
+sub test;
+    print "hello";
+    if i != 5;
+        break;
+    end;
+    print "world";
+end;
+
+
+let i be 0 asmut;
+
+while 1==1;
+    print i;
+    call test;
+    modify i to i+1;
+    if i >= 10;
+        break;
+    end;
+end;

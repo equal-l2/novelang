@@ -64,6 +64,7 @@ pub enum Inst {
     },
     Halt,
     Ill,
+    Break,
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +98,7 @@ impl std::fmt::Display for WaitsEnd {
                 Inst::Roll { .. } => "Roll",
                 Inst::Halt => "Halt",
                 Inst::Ill => "Ill",
+                Inst::Break => "Break",
             },
             self.index,
         )
@@ -306,6 +308,7 @@ pub fn parse(s: &str) -> Option<Program> {
             Rule::Halt => insts.push(Inst::Halt),
             Rule::EOI => break,
             Rule::Comment => {}
+            Rule::Break => insts.push(Inst::Break),
             other => {
                 die!("Semantic error: unexpected rule : {:?}", other);
             }

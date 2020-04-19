@@ -40,8 +40,9 @@ Else = { ^"Else" } // else
 End = { ^"End" } // end of something
 Roll = { ^"Roll" ~ SP ~ Expr ~ SP ~ ^"Dice" ~ ^"s"? ~ SP? ~ ^"With" ~ SP ~ Expr ~ SP ~ ^"Face" ~ ^"s"? }
 Halt = { ^"Halt"}
+Break = { ^"Break" }
 
-StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | If | ElIf | Else | End | Roll | Halt }
+StmtTypes = _{ Print | Sub | Call | While | Let | Modify | Input | If | ElIf | Else | End | Roll | Halt | Break }
 Statement = _{ SP? ~ StmtTypes ~ ";" ~ SP?}
 Comment = {"#" ~ (!NEWLINE ~ ANY)* }
 Line = _{ SP? ~ (Comment | Statement+)? ~ NEWLINE }

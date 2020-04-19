@@ -13,7 +13,7 @@ let cnt5 be 0 asmut;
 let cnt6 be 0 asmut;
 
 modify cnt to 0;
-while cnt < 100000;
+while cnt < 10000;
     Roll 1 dice with 6 faces;
     if _result == 1;
         modify cnt1 to cnt1+1;

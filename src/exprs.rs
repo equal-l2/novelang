@@ -1,4 +1,5 @@
 use crate::parser::Rule;
+use crate::runner::ScopeStack;
 use crate::runner::VarIntType;
 
 #[derive(Debug)]
@@ -178,12 +179,12 @@ impl FromStmt for CompExpr {
 
 pub trait Eval {
     type T;
-    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError>;
+    fn eval(&self, call_stack: &ScopeStack) -> Result<Self::T, ExprRuntimeError>;
 }
 
 impl Eval for CompExpr {
     type T = bool;
-    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval(&self, call_stack: &ScopeStack) -> Result<Self::T, ExprRuntimeError> {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;
         Ok(match self.op {
@@ -199,7 +200,7 @@ impl Eval for CompExpr {
 
 impl Eval for Expr {
     type T = VarIntType;
-    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval(&self, call_stack: &ScopeStack) -> Result<Self::T, ExprRuntimeError> {
         match self {
             Self::IdentOrNum(ion) => ion.eval(call_stack),
             Self::TrueExpr(x) => x.eval(call_stack),
@@ -209,7 +210,7 @@ impl Eval for Expr {
 
 impl Eval for IdentOrNum {
     type T = VarIntType;
-    fn eval(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval(&self, call_stack: &ScopeStack) -> Result<Self::T, ExprRuntimeError> {
         Ok(match self {
             Self::Ident(name) => {
                 call_stack
@@ -224,7 +225,7 @@ impl Eval for IdentOrNum {
 
 impl Eval for TrueExpr {
     type T = VarIntType;
-    fn eval<'a>(&self, call_stack: &crate::runner::CallStack) -> Result<Self::T, ExprRuntimeError> {
+    fn eval<'a>(&self, call_stack: &ScopeStack) -> Result<Self::T, ExprRuntimeError> {
         let lhs = self.lhs.eval(call_stack)?;
         let rhs = self.rhs.eval(call_stack)?;
         match self.op {

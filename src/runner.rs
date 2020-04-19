@@ -5,15 +5,6 @@ use crate::parser::Inst;
 use crate::parser::PrintArgs;
 use crate::parser::Program;
 
-pub type VarTable = std::collections::HashMap<String, Variable>;
-pub type VarIntType = i64;
-
-pub struct CallStack {
-    ret_stack: Vec<usize>,
-    vars_stack: Vec<VarTable>,
-    internal_vars: VarTable,
-}
-
 macro_rules! die {
     ($( $x:expr ),*) => {
         eprintln!($($x,)*);
@@ -21,10 +12,40 @@ macro_rules! die {
     }
 }
 
-impl CallStack {
+pub type VarTable = std::collections::HashMap<String, Variable>;
+pub type VarIntType = i64;
+
+struct Scope {
+    kind: ScopeKind,
+    ret_idx: usize,
+    vars: VarTable,
+}
+
+impl Scope {
+    fn new(kind: ScopeKind, ret_idx: usize) -> Self {
+        Self {
+            kind,
+            ret_idx,
+            vars: VarTable::new(),
+        }
+    }
+}
+
+enum ScopeKind {
+    Branch,
+    Loop,
+    Sub,
+}
+
+pub struct ScopeStack {
+    stack: Vec<Scope>,
+    globals: VarTable,
+    internals: VarTable,
+}
+
+impl ScopeStack {
     fn new() -> Self {
-        // init with one vartable for global vars
-        let internal_vars = {
+        let internals = {
             let mut vt = VarTable::new();
             vt.insert(
                 "_result".to_owned(),
@@ -36,20 +57,19 @@ impl CallStack {
             vt
         };
         Self {
-            ret_stack: vec![],
-            vars_stack: vec![VarTable::new()],
-            internal_vars,
+            stack: vec![],
+            globals: VarTable::new(),
+            internals,
         }
     }
 
     fn decl_var(&mut self, name: &str, val: Variable) {
-        if self
-            .vars_stack
-            .last_mut()
-            .unwrap()
-            .insert(name.to_owned(), val)
-            .is_some()
-        {
+        let var_table = if self.stack.is_empty() {
+            &mut self.globals
+        } else {
+            &mut self.stack.last_mut().unwrap().vars
+        };
+        if var_table.insert(name.to_owned(), val).is_some() {
             die!("Runtime error: variable {} is already declared", name);
         }
     }
@@ -65,42 +85,41 @@ impl CallStack {
         }
     }
 
-    fn pop(&mut self) -> Option<usize> {
-        self.vars_stack.pop().unwrap();
-        self.ret_stack.pop()
+    fn pop(&mut self) -> Option<Scope> {
+        self.stack.pop()
     }
 
-    fn push(&mut self, ret_index: usize) {
-        self.vars_stack.push(Default::default());
-        self.ret_stack.push(ret_index)
+    fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
+        self.stack.push(Scope::new(kind, ret_idx))
+    }
+
+    fn vars_iter<'a>(&'a self) -> impl Iterator<Item = &'a VarTable> {
+        use std::iter::once;
+        once(&self.internals)
+            .chain(self.stack.iter().map(|f| &f.vars).rev())
+            .chain(once(&self.globals))
+    }
+
+    fn vars_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut VarTable> {
+        use std::iter::once;
+        once(&mut self.internals)
+            .chain(self.stack.iter_mut().map(|f| &mut f.vars).rev())
+            .chain(once(&mut self.globals))
     }
 
     // get the highest variable in the stack with the specified name
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
-        if let Some(i) = self.internal_vars.get(name) {
-            Some(i)
-        } else {
-            self.vars_stack
-                .iter()
-                .rev()
-                .map(|t| t.get(name))
-                .find(|v| v.is_some())
-                .flatten()
-        }
+        self.vars_iter()
+            .map(|t| t.get(name))
+            .find(|v| v.is_some())
+            .flatten()
     }
 
     fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
-        if let Some(i) = self.internal_vars.get_mut(name) {
-            // this path will not used by Modify
-            Some(i)
-        } else {
-            self.vars_stack
-                .iter_mut()
-                .rev()
-                .map(|t| t.get_mut(name))
-                .find(|v| v.is_some())
-                .flatten()
-        }
+        self.vars_iter_mut()
+            .map(|t| t.get_mut(name))
+            .find(|v| v.is_some())
+            .flatten()
     }
 }
 
@@ -110,7 +129,7 @@ pub struct Variable {
     pub value: VarIntType,
 }
 
-fn exec_print(idx: usize, call_stack: &CallStack, wait: bool, args: &Vec<PrintArgs>) {
+fn exec_print(idx: usize, call_stack: &ScopeStack, wait: bool, args: &Vec<PrintArgs>) {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
@@ -164,10 +183,11 @@ fn get_int_input(prompt: Option<&str>) -> VarIntType {
 }
 
 fn run_insts(prog: Program, wait: bool) {
-    let mut call_stack = CallStack::new();
+    let mut call_stack = ScopeStack::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
     let mut if_eval = false;
+    let mut breaking = false;
 
     while i < prog.insts.len() {
         match &prog.insts[i] {
@@ -179,7 +199,7 @@ fn run_insts(prog: Program, wait: bool) {
             }
             Inst::Call { name } => {
                 if let Some(idx) = prog.subs.get(name) {
-                    call_stack.push(i + 1);
+                    call_stack.push(ScopeKind::Sub, i + 1);
                     i = *idx;
                 } else {
                     die!("Runtime error: function \"{}\" was not found", name);
@@ -188,13 +208,20 @@ fn run_insts(prog: Program, wait: bool) {
             Inst::While {
                 cond,
                 offset_to_end,
-            } => match cond.eval(&call_stack) {
-                Ok(true) => call_stack.push(i),
-                Ok(false) => i += offset_to_end,
-                Err(e) => {
-                    die!("Runtime error: CondExpr cannot be evaled: {}", e);
+            } => {
+                if breaking {
+                    breaking = false;
+                    i += offset_to_end;
+                } else {
+                    match cond.eval(&call_stack) {
+                        Ok(true) => call_stack.push(ScopeKind::Loop, i),
+                        Ok(false) => i += offset_to_end,
+                        Err(e) => {
+                            die!("Runtime error: CondExpr cannot be evaled: {}", e);
+                        }
+                    }
                 }
-            },
+            }
             Inst::Let { name, init, is_mut } => {
                 let init_var = Variable {
                     is_mutable: *is_mut,
@@ -216,7 +243,7 @@ fn run_insts(prog: Program, wait: bool) {
             } => {
                 // use a scope, but don't use a return address
                 // push a frame always to unify End behavior
-                call_stack.push(0);
+                call_stack.push(ScopeKind::Branch, 0);
                 match cond.eval(&call_stack) {
                     Ok(true) => {
                         // go to body
@@ -269,7 +296,7 @@ fn run_insts(prog: Program, wait: bool) {
             }
             Inst::End => {
                 if_eval = false;
-                let top = call_stack.pop();
+                let top = call_stack.pop().map(|s| s.ret_idx);
                 match top {
                     Some(0) => {
                         // return address unspecified
@@ -285,7 +312,7 @@ fn run_insts(prog: Program, wait: bool) {
                     }
                 }
             }
-            Inst::Input{ prompt } => {
+            Inst::Input { prompt } => {
                 call_stack.modify_var("_result", get_int_input(prompt.as_deref()));
             }
             Inst::Roll { count, face } => {
@@ -307,6 +334,25 @@ fn run_insts(prog: Program, wait: bool) {
             }
             Inst::Halt => {
                 return;
+            }
+            Inst::Break => {
+                i = loop {
+                    if let Some(scope) = call_stack.pop() {
+                        match scope.kind {
+                            ScopeKind::Loop => {
+                                breaking = true;
+                                break scope.ret_idx;
+                            }
+                            ScopeKind::Sub => {
+                                break scope.ret_idx;
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        die!("Scope stack is empty");
+                    }
+                };
+                continue;
             }
             #[allow(unreachable_patterns)]
             other => {
