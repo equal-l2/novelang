@@ -65,6 +65,8 @@ pub enum Inst {
     Halt,
     Ill,
     Break,
+    EnableWait,
+    DisableWait,
 }
 
 #[derive(Debug, Clone)]
@@ -76,33 +78,6 @@ pub struct Program {
 struct WaitsEnd {
     kind: Inst,
     index: usize,
-}
-
-impl std::fmt::Display for WaitsEnd {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(
-            f,
-            "{} at {}",
-            match self.kind {
-                Inst::Print { .. } => "Print",
-                Inst::Sub { .. } => "Sub",
-                Inst::Call { .. } => "Call",
-                Inst::While { .. } => "While",
-                Inst::Let { .. } => "Let",
-                Inst::Modify { .. } => "Modify",
-                Inst::If { .. } => "If",
-                Inst::ElIf { .. } => "ElIf",
-                Inst::Else { .. } => "Else",
-                Inst::End => "End",
-                Inst::Input { .. } => "Input",
-                Inst::Roll { .. } => "Roll",
-                Inst::Halt => "Halt",
-                Inst::Ill => "Ill",
-                Inst::Break => "Break",
-            },
-            self.index,
-        )
-    }
 }
 
 pub fn parse(s: &str) -> Option<Program> {
@@ -309,6 +284,8 @@ pub fn parse(s: &str) -> Option<Program> {
             Rule::EOI => break,
             Rule::Comment => {}
             Rule::Break => insts.push(Inst::Break),
+            Rule::EnableWait => insts.push(Inst::EnableWait),
+            Rule::DisableWait => insts.push(Inst::DisableWait),
             other => {
                 die!("Semantic error: unexpected rule : {:?}", other);
             }

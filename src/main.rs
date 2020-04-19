@@ -6,8 +6,6 @@ use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct Opt {
-    #[structopt(long)]
-    wait: bool,
     filename: String,
 }
 
@@ -23,7 +21,7 @@ fn main() {
     eprintln!("Info: load completed");
 
     if let Some(i) = parsed {
-        runner::run(i, opt.wait);
+        runner::run(i);
     } else {
         std::process::exit(1);
     }

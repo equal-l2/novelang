@@ -182,7 +182,8 @@ fn get_int_input(prompt: Option<&str>) -> VarIntType {
     }
 }
 
-fn run_insts(prog: Program, wait: bool) {
+pub fn run(prog: Program) {
+    let mut wait = false;
     let mut call_stack = ScopeStack::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
@@ -354,6 +355,12 @@ fn run_insts(prog: Program, wait: bool) {
                 };
                 continue;
             }
+            Inst::EnableWait => {
+                wait = true;
+            }
+            Inst::DisableWait => {
+                wait = false;
+            }
             #[allow(unreachable_patterns)]
             other => {
                 die!("Runtime error: unknown instruction: {:?}", other);
@@ -363,15 +370,11 @@ fn run_insts(prog: Program, wait: bool) {
     }
 }
 
-pub fn run(prog: Program, wait: bool) {
-    run_insts(prog, wait);
-}
-
 fn read_line_from_stdin() -> String {
     use std::io::BufRead;
     let stdin = std::io::stdin();
     let mut it = stdin.lock().lines();
-    it.next().unwrap().unwrap()
+    it.next().unwrap_or(Ok("".to_owned())).unwrap()
 }
 
 fn roll_dice(count: VarIntType, face: VarIntType) -> VarIntType {
