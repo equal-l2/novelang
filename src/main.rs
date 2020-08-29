@@ -1,6 +1,6 @@
 mod exprs;
-mod parser;
-mod runner;
+mod parse;
+mod run;
 
 use structopt::StructOpt;
 
@@ -17,11 +17,11 @@ fn main() {
     });
 
     eprintln!("Info: loading the file");
-    let parsed = parser::parse(&s);
+    let parsed = parse::parse(&s);
     eprintln!("Info: load completed");
 
     if let Some(i) = parsed {
-        runner::run(i);
+        run::run(i);
     } else {
         std::process::exit(1);
     }

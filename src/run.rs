@@ -1,9 +1,9 @@
 use std::io::Write;
 
 use crate::exprs::Eval;
-use crate::parser::Inst;
-use crate::parser::PrintArgs;
-use crate::parser::Program;
+use crate::parse::Inst;
+use crate::parse::PrintArgs;
+use crate::parse::Program;
 
 macro_rules! die {
     ($( $x:expr ),*) => {

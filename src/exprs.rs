@@ -1,6 +1,6 @@
-use crate::parser::Rule;
-use crate::runner::ScopeStack;
-use crate::runner::VarIntType;
+use crate::parse::Rule;
+use crate::run::ScopeStack;
+use crate::run::VarIntType;
 
 #[derive(Debug)]
 pub enum ExprRuntimeError {
