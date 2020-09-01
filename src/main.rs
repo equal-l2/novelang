@@ -1,4 +1,5 @@
 mod exprs;
+mod lex;
 mod parse;
 mod run;
 
