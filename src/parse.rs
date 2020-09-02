@@ -1,25 +1,13 @@
-use crate::exprs::*;
-use pest::Parser;
-
-macro_rules! die {
-    ($( $x:expr ),*) => {
-        eprintln!($($x,)*);
-        std::process::exit(1);
-    }
-}
-
-#[derive(pest_derive::Parser)]
-#[grammar = "prog.pest"]
-struct ProgParser;
+use crate::exprs::Expr;
 
 #[derive(Debug, Clone)]
 pub enum PrintArgs {
-    String(String),
+    Str(String),
     Expr(Expr),
 }
 
 #[derive(Debug, Clone)]
-pub enum Inst {
+pub enum Insts {
     Print {
         args: Vec<PrintArgs>,
     },
@@ -31,7 +19,7 @@ pub enum Inst {
         name: String,
     },
     While {
-        cond: CompExpr,
+        cond: Expr,
         offset_to_end: usize,
     },
     Let {
@@ -44,11 +32,11 @@ pub enum Inst {
         expr: Expr,
     },
     If {
-        cond: CompExpr,
+        cond: Expr,
         offset_to_next: usize,
     },
     ElIf {
-        cond: CompExpr,
+        cond: Expr,
         offset_to_next: usize,
     },
     Else {
@@ -71,225 +59,423 @@ pub enum Inst {
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub insts: Vec<Inst>,
+    pub insts: Vec<Insts>,
     pub subs: std::collections::HashMap<String, usize>,
 }
 
 struct WaitsEnd {
-    kind: Inst,
+    kind: Insts,
     index: usize,
 }
 
-pub fn parse(s: &str) -> Option<Program> {
-    let lines = ProgParser::parse(Rule::Prog, s);
-    if let Err(e) = lines {
-        eprintln!("{}", e);
-        return None;
+macro_rules! die {
+    ($( $x:expr ),*) => {
+        eprintln!($($x,)*);
+        std::process::exit(1);
     }
-    let stmts = lines.unwrap();
+}
 
-    let mut insts = vec![Inst::Ill];
+macro_rules! die_cont {
+    ($msg: expr, $loc: expr, $lex: ident) => {
+        die!("Error: {}\n{}", $msg, $lex.generate_src_loc(&$loc));
+    };
+}
+
+macro_rules! expects {
+    ($msg: expr, $item: path, $i: ident, $lex: ident) => {
+        if $lex.tokens.len() <= $i || $lex.tokens[$i].item != $item {
+            die_cont!($msg, $lex.tokens[$i].loc, $lex);
+        }
+        $i += 1;
+    };
+}
+
+pub fn parse(lexed: crate::lex::Lexed) -> Program {
+    use crate::lex::{self, Item};
+    let mut insts = vec![Insts::Ill];
     let mut waits_end_stack: Vec<WaitsEnd> = vec![]; // stmts waiting for End
     let mut subs = std::collections::HashMap::new(); // subroutines defined
-    for stmt in stmts {
-        match stmt.as_rule() {
-            Rule::Print => insts.push(Inst::Print {
-                args: stmt
-                    .into_inner()
-                    .map(|s| match s.as_rule() {
-                        Rule::StringContent => PrintArgs::String(s.as_str().to_owned()),
-                        Rule::Expr => PrintArgs::Expr(Expr::parse_stmt(s)),
-                        other => {
-                            die!("Semantic error: unexpected rule : {:?}", other);
+    let mut i = 0;
+    let tks = &lexed.tokens;
+    while i < tks.len() {
+        match dbg!(&tks[i].item) {
+            Item::Inst(inst) => {
+                match inst {
+                    lex::Insts::Print => {
+                        i += 1;
+                        let mut args = Vec::new();
+                        while i < tks.len() && tks[i].item != Item::Semi {
+                            args.push(match &tks[i].item {
+                                Item::Str(s) => PrintArgs::Str(s.clone()),
+                                _ => {
+                                    let orig_i = i;
+                                    while i < tks.len()
+                                        && matches!(
+                                            tks[i].item,
+                                            Item::Ident(_) | Item::Num(_) | Item::Ari(_) | Item::Rel(_)
+                                        )
+                                    {
+                                        i += 1;
+                                    }
+                                    PrintArgs::Expr(
+                                        Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                                            die_cont!("Failed to parse expr", tk.loc, lexed);
+                                        }),
+                                    )
+                                }
+                            });
+                            i += 1;
                         }
-                    })
-                    .collect(),
-            }),
-            Rule::Sub => {
-                // check if the Sub is nested (which is not allowed)
-                if let Some(i) = waits_end_stack.last() {
-                    if let Inst::Sub { .. } = i.kind {
-                        die!("Semantic error: you cannot nest Sub.");
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        insts.push(Insts::Print { args })
+                    }
+                    lex::Insts::Sub => {
+                        i += 1;
+                        // check if the Sub is nested (which is not allowed)
+                        if let Some(i) = waits_end_stack.last() {
+                            if let Insts::Sub { .. } = i.kind {
+                                die!("Semantic error: you cannot nest Sub.");
+                            }
+                        }
+
+                        // register the sub to the name table
+                        match &tks[i].item {
+                            Item::Ident(name) => {
+                                i += 1;
+                                expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                                if subs.insert(name.clone(), insts.len()).is_some() {
+                                    die!(
+                                        "Semantic error: subroutine name \"{}\" is conflicting",
+                                        name
+                                    );
+                                }
+                                let inst_obj = Insts::Sub {
+                                    name: name.clone(),
+                                    offset_to_end: 0,
+                                };
+                                waits_end_stack.push(WaitsEnd {
+                                    kind: inst_obj.clone(),
+                                    index: insts.len(),
+                                });
+                                insts.push(inst_obj);
+                            }
+                            _ => {
+                                die!("Semantic error: subroutine name not found");
+                            }
+                        }
+                    }
+                    lex::Insts::Call => {
+                        i += 1;
+                        match &tks[i].item {
+                            Item::Ident(name) => {
+                                i += 1;
+                                expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                                insts.push(Insts::Call { name: name.clone() });
+                            }
+                            _ => {
+                                die!("Semantic error: subroutine name not found");
+                            }
+                        }
+                    }
+                    lex::Insts::While => {
+                        i += 1;
+                        let orig_i = i;
+                        while i < tks.len() && tks[i].item != lex::Item::Semi {
+                            i += 1;
+                        }
+                        if tks[i].item != lex::Item::Semi {
+                            die_cont!("Semicolon expected", tks[i].loc, lexed);
+                        }
+                        let inst_obj = Insts::While {
+                            cond: Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                                die_cont!("Failed to parse expr", tk.loc, lexed);
+                            }),
+                            offset_to_end: 0,
+                        };
+                        i += 1;
+                        waits_end_stack.push(WaitsEnd {
+                            kind: inst_obj.clone(),
+                            index: insts.len(),
+                        });
+                        insts.push(inst_obj);
+                    }
+                    lex::Insts::Let => {
+                        i += 1;
+                        match &tks[i].item {
+                            Item::Ident(name) => {
+                                i += 1;
+                                if name.starts_with("_") {
+                                    die!("Semantic error: Identifier starts with _ is reserved");
+                                }
+
+                                {
+                                    let be = lex::Item::Key(lex::Keywords::Be);
+                                    expects!("Be expected", be, i, lexed);
+                                }
+
+                                let orig_i = i;
+                                while i < tks.len()
+                                    && !matches!(
+                                        tks[i].item,
+                                        lex::Item::Semi | lex::Item::Key(lex::Keywords::AsMut)
+                                    )
+                                {
+                                    i += 1;
+                                }
+                                if !matches!(
+                                    tks[i].item,
+                                    lex::Item::Semi | lex::Item::Key(lex::Keywords::AsMut)
+                                ) {
+                                    die_cont!("AsMut or Semicolon expected", tks[i].loc, lexed);
+                                }
+                                let init =
+                                    Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                                        die_cont!("Failed to parse expr", tk.loc, lexed);
+                                    });
+                                let is_mut = {
+                                    if tks[i].item == lex::Item::Key(lex::Keywords::AsMut) {
+                                        i += 1;
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                };
+                                expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                                insts.push(Insts::Let {
+                                    name: name.clone(),
+                                    init,
+                                    is_mut,
+                                });
+                            }
+                            _ => {
+                                die!("Semantic error: ident expected");
+                            }
+                        }
+                    }
+                    lex::Insts::Modify => {
+                        i += 1;
+                        match &tks[i].item {
+                            Item::Ident(name) => {
+                                i += 1;
+                                if name.starts_with("_") {
+                                    die!("Semantic error: Identifier starts with _ is reserved and cannot be modified");
+                                }
+
+                                let orig_i = i;
+                                while i < tks.len()
+                                    && tks[i].item != lex::Item::Key(lex::Keywords::To)
+                                {
+                                    i += 1;
+                                }
+
+                                if tks[i].item != lex::Item::Key(lex::Keywords::To) {
+                                    die_cont!("To expected", tks[i].loc, lexed);
+                                }
+                                i += 1;
+
+                                let expr =
+                                    Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                                        die_cont!("Failed to parse expr", tk.loc, lexed);
+                                    });
+                                insts.push(Insts::Modify {
+                                    name: name.clone(),
+                                    expr,
+                                });
+                            }
+                            _ => {
+                                die!("Semantic error: ident expected");
+                            }
+                        }
+                    }
+                    lex::Insts::If => {
+                        i += 1;
+                        let orig_i = i;
+                        while i < tks.len() && tks[i].item != lex::Item::Semi {
+                            i += 1;
+                        }
+                        if tks[i].item != lex::Item::Semi {
+                            die_cont!("Semicolon expected", tks[i].loc, lexed);
+                        }
+                        let cond = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                            die_cont!("Failed to parse expr", tk.loc, lexed);
+                        });
+                        i += 1;
+                        let inst_obj = Insts::If {
+                            cond,
+                            offset_to_next: 0,
+                        };
+                        waits_end_stack.push(WaitsEnd {
+                            kind: inst_obj.clone(),
+                            index: insts.len(),
+                        });
+                        insts.push(inst_obj);
+                    }
+                    lex::Insts::ElIf => {
+                        let prev = waits_end_stack.pop().unwrap_or_else(|| {
+                            die!("Semantic error: a stray ElIf detected.");
+                        });
+
+                        let offset_to_next = insts.len() - prev.index;
+                        insts[prev.index] = match prev.kind {
+                            Insts::If { cond, .. } => Insts::If {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            Insts::ElIf { cond, .. } => Insts::ElIf {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            _ => {
+                                die!("Semantic error: cannot find corresponding Element for ElIf");
+                            }
+                        };
+
+                        i += 1;
+                        let orig_i = i;
+                        while i < tks.len() && tks[i].item != lex::Item::Semi {
+                            i += 1;
+                        }
+                        if tks[i].item != lex::Item::Semi {
+                            die_cont!("Semicolon expected", tks[i].loc, lexed);
+                        }
+                        let cond = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                            die_cont!("Failed to parse expr", tk.loc, lexed);
+                        });
+                        i += 1;
+
+                        let inst_obj = Insts::ElIf {
+                            cond,
+                            offset_to_next: 0,
+                        };
+                        waits_end_stack.push(WaitsEnd {
+                            kind: inst_obj.clone(),
+                            index: insts.len(),
+                        });
+                        insts.push(inst_obj);
+                    }
+                    lex::Insts::Else => {
+                        let prev = waits_end_stack.pop().unwrap_or_else(|| {
+                            die!("Semantic error: a stray Else detected.");
+                        });
+                        let offset_to_next = insts.len() - prev.index;
+                        insts[prev.index] = match prev.kind {
+                            Insts::If { cond, .. } => Insts::If {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            Insts::ElIf { cond, .. } => Insts::ElIf {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            _ => {
+                                die!("Semantic error: cannot find corresponding Element for Else");
+                            }
+                        };
+                        let inst_obj = Insts::Else { offset_to_end: 0 };
+                        waits_end_stack.push(WaitsEnd {
+                            kind: inst_obj.clone(),
+                            index: insts.len(),
+                        });
+                        insts.push(inst_obj);
+                    }
+                    lex::Insts::End => {
+                        i += 1;
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        let start = waits_end_stack.pop().unwrap_or_else(|| {
+                            die!("Semantic error: a stray End detected.");
+                        });
+                        let offset_to_end = insts.len() - start.index;
+                        insts[start.index] = match start.kind {
+                            Insts::Sub { name, .. } => Insts::Sub {
+                                name,
+                                offset_to_end,
+                            },
+                            Insts::While { cond, .. } => Insts::While {
+                                cond,
+                                offset_to_end,
+                            },
+                            Insts::If { ref cond, .. } => Insts::If {
+                                cond: cond.clone(),
+                                offset_to_next: offset_to_end,
+                            },
+                            Insts::ElIf { ref cond, .. } => Insts::ElIf {
+                                cond: cond.clone(),
+                                offset_to_next: offset_to_end,
+                            },
+                            Insts::Else { .. } => Insts::Else { offset_to_end },
+                            other => {
+                                die!("Semantic error: cannot End {:?}", other);
+                            }
+                        };
+
+                        insts.push(Insts::End);
+                    }
+                    lex::Insts::Input => {
+                        i += 1;
+                        insts.push(Insts::Input {
+                            prompt: if let Item::Str(prompt) = &tks[i].item {
+                                i += 1;
+                                Some(prompt.clone())
+                            } else {
+                                None
+                            },
+                        });
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                    }
+                    lex::Insts::Roll => {
+                        i += 1;
+                        let orig_i = i;
+                        while i < tks.len() && tks[i].item != lex::Item::Key(lex::Keywords::Dice) {
+                            i += 1;
+                        }
+                        if tks[i].item != lex::Item::Key(lex::Keywords::Dice) {
+                            die_cont!("Dice expected", tks[i].loc, lexed);
+                        }
+                        let count = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                            die_cont!("Failed to parse expr", tk.loc, lexed);
+                        });
+                        i += 1;
+
+                        let orig_i = i;
+                        while i < tks.len() && tks[i].item != lex::Item::Key(lex::Keywords::Face) {
+                            i += 1;
+                        }
+                        if tks[i].item != lex::Item::Key(lex::Keywords::Face) {
+                            die_cont!("Face expected", tks[i].loc, lexed);
+                        }
+                        let face = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
+                            die_cont!("Failed to parse expr", tk.loc, lexed);
+                        });
+                        i += 1;
+
+                        insts.push(Insts::Roll { count, face });
+                    }
+                    lex::Insts::Halt => {
+                        i += 1;
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        insts.push(Insts::Halt)
+                    }
+                    lex::Insts::Break => {
+                        i += 1;
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        insts.push(Insts::Break)
+                    }
+                    lex::Insts::EnableWait => {
+                        i += 1;
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        insts.push(Insts::EnableWait)
+                    }
+                    lex::Insts::DisableWait => {
+                        i += 1;
+                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        insts.push(Insts::DisableWait)
                     }
                 }
-
-                // register the sub to the name table
-                let fn_name = stmt.into_inner().as_str().to_owned();
-                if subs.insert(fn_name.clone(), insts.len()).is_some() {
-                    die!(
-                        "Semantic error: function name \"{}\" is conflicting",
-                        fn_name
-                    );
-                }
-
-                let inst_obj = Inst::Sub {
-                    name: fn_name,
-                    offset_to_end: 0,
-                };
-                waits_end_stack.push(WaitsEnd {
-                    kind: inst_obj.clone(),
-                    index: insts.len(),
-                });
-                insts.push(inst_obj);
             }
-            Rule::Call => insts.push(Inst::Call {
-                name: stmt.into_inner().as_str().to_owned(),
-            }),
-            Rule::While => {
-                let inst_obj = Inst::While {
-                    cond: CompExpr::parse_stmt(stmt.into_inner().next().unwrap()),
-                    offset_to_end: 0,
-                };
-                waits_end_stack.push(WaitsEnd {
-                    kind: inst_obj.clone(),
-                    index: insts.len(),
-                });
-                insts.push(inst_obj);
-            }
-            Rule::Let => {
-                let mut it = stmt.into_inner();
-                let name = it.next().unwrap().as_str().to_owned();
-                if name.starts_with("_") {
-                    die!("Semantic error: Identifier starts with _ is reserved");
-                }
-                let init = Expr::parse_stmt(it.next().unwrap());
-                let is_mut = it.next().is_some();
-
-                insts.push(Inst::Let { name, init, is_mut });
-            }
-            Rule::Modify => {
-                let mut it = stmt.into_inner();
-                let name = it.next().unwrap().as_str().to_owned();
-                if name.starts_with("_") {
-                    die!("Semantic error: Identifier starts with _ is reserved and should not be modified");
-                }
-                let expr_stmt = it.next().unwrap();
-                insts.push(Inst::Modify {
-                    name,
-                    expr: Expr::parse_stmt(expr_stmt),
-                });
-            }
-            Rule::If => {
-                let inst_obj = Inst::If {
-                    cond: CompExpr::parse_stmt(stmt.into_inner().next().unwrap()),
-                    offset_to_next: 0,
-                };
-                waits_end_stack.push(WaitsEnd {
-                    kind: inst_obj.clone(),
-                    index: insts.len(),
-                });
-                insts.push(inst_obj);
-            }
-            Rule::ElIf => {
-                let prev = waits_end_stack.pop().unwrap_or_else(|| {
-                    die!("Semantic error: a stray ElIf detected.");
-                });
-
-                let offset_to_next = insts.len() - prev.index;
-                insts[prev.index] = match prev.kind {
-                    Inst::If { cond, .. } => Inst::If {
-                        cond: cond.clone(),
-                        offset_to_next,
-                    },
-                    Inst::ElIf { cond, .. } => Inst::ElIf {
-                        cond: cond.clone(),
-                        offset_to_next,
-                    },
-                    _ => {
-                        die!("Semantic error: cannot find corresponding Element for ElIf");
-                    }
-                };
-
-                let inst_obj = Inst::ElIf {
-                    cond: CompExpr::parse_stmt(stmt.into_inner().next().unwrap()),
-                    offset_to_next: 0,
-                };
-                waits_end_stack.push(WaitsEnd {
-                    kind: inst_obj.clone(),
-                    index: insts.len(),
-                });
-                insts.push(inst_obj);
-            }
-            Rule::Else => {
-                let prev = waits_end_stack.pop().unwrap_or_else(|| {
-                    die!("Semantic error: a stray Else detected.");
-                });
-                let offset_to_next = insts.len() - prev.index;
-                insts[prev.index] = match prev.kind {
-                    Inst::If { cond, .. } => Inst::If {
-                        cond: cond.clone(),
-                        offset_to_next,
-                    },
-                    Inst::ElIf { cond, .. } => Inst::ElIf {
-                        cond: cond.clone(),
-                        offset_to_next,
-                    },
-                    _ => {
-                        die!("Semantic error: cannot find corresponding Element for Else");
-                    }
-                };
-                let inst_obj = Inst::Else { offset_to_end: 0 };
-                waits_end_stack.push(WaitsEnd {
-                    kind: inst_obj.clone(),
-                    index: insts.len(),
-                });
-                insts.push(inst_obj);
-            }
-            Rule::End => {
-                let start = waits_end_stack.pop().unwrap_or_else(|| {
-                    die!("Semantic error: a stray End detected.");
-                });
-                let offset_to_end = insts.len() - start.index;
-                insts[start.index] = match start.kind {
-                    Inst::Sub { name, .. } => Inst::Sub {
-                        name,
-                        offset_to_end,
-                    },
-                    Inst::While { cond, .. } => Inst::While {
-                        cond,
-                        offset_to_end,
-                    },
-                    Inst::If { ref cond, .. } => Inst::If {
-                        cond: cond.clone(),
-                        offset_to_next: offset_to_end,
-                    },
-                    Inst::ElIf { ref cond, .. } => Inst::ElIf {
-                        cond: cond.clone(),
-                        offset_to_next: offset_to_end,
-                    },
-                    Inst::Else { .. } => Inst::Else { offset_to_end },
-                    other => {
-                        die!("Semantic error: cannot End {:?}", other);
-                    }
-                };
-
-                insts.push(Inst::End);
-            }
-            Rule::Input => insts.push(Inst::Input {
-                prompt: stmt
-                    .into_inner()
-                    .next()
-                    .and_then(|i| Some(i.as_str().to_owned())),
-            }),
-            Rule::Roll => {
-                let mut it = stmt.into_inner();
-                let count = it.next().unwrap();
-                let face = it.next().unwrap();
-                insts.push(Inst::Roll {
-                    count: Expr::parse_stmt(count),
-                    face: Expr::parse_stmt(face),
-                });
-            }
-            Rule::Halt => insts.push(Inst::Halt),
-            Rule::EOI => break,
-            Rule::Comment => {}
-            Rule::Break => insts.push(Inst::Break),
-            Rule::EnableWait => insts.push(Inst::EnableWait),
-            Rule::DisableWait => insts.push(Inst::DisableWait),
-            other => {
-                die!("Semantic error: unexpected rule : {:?}", other);
+            _ => {
+                die_cont!("Line must begin with inst", tks[i].loc, lexed);
             }
         }
     }
-    Some(Program { insts, subs })
+    Program { insts, subs }
 }

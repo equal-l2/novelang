@@ -17,13 +17,12 @@ fn main() {
         std::process::exit(1);
     });
 
-    eprintln!("Info: loading the file");
-    let parsed = parse::parse(&s);
-    eprintln!("Info: load completed");
+    eprintln!("Info: Lexing");
+    let lexed = lex::lex(s).unwrap();
+    eprintln!("Lexed:\n{}", lexed);
+    eprintln!("Info: Parsing");
+    let parsed = parse::parse(lexed);
+    eprintln!("Info: Load completed");
 
-    if let Some(i) = parsed {
-        run::run(i);
-    } else {
-        std::process::exit(1);
-    }
+    run::run(parsed);
 }

@@ -1,7 +1,6 @@
 use std::io::Write;
 
-use crate::exprs::Eval;
-use crate::parse::Inst;
+use crate::parse::Insts;
 use crate::parse::PrintArgs;
 use crate::parse::Program;
 
@@ -37,13 +36,13 @@ enum ScopeKind {
     Sub,
 }
 
-pub struct ScopeStack {
+pub struct Runtime {
     stack: Vec<Scope>,
     globals: VarTable,
     internals: VarTable,
 }
 
-impl ScopeStack {
+impl Runtime {
     fn new() -> Self {
         let internals = {
             let mut vt = VarTable::new();
@@ -51,7 +50,7 @@ impl ScopeStack {
                 "_result".to_owned(),
                 Variable {
                     is_mutable: true,
-                    value: 0,
+                    value: Typed::Num(0),
                 },
             );
             vt
@@ -74,12 +73,19 @@ impl ScopeStack {
         }
     }
 
-    fn modify_var(&mut self, name: &str, val: VarIntType) {
+    fn modify_var(&mut self, name: &str, val: Typed) {
         let var = self.get_var_mut(name).unwrap_or_else(|| {
             die!("Runtime error: variable was not found");
         });
         if var.is_mutable {
-            var.value = val;
+            match (&var.value, &val) {
+                (Typed::Num(_), Typed::Num(_)) | (Typed::Bool(_), Typed::Bool(_)) => {
+                    var.value = val
+                }
+                _ => {
+                    die!("Runtime error: Type differs");
+                }
+            }
         } else {
             die!("Runtime error: variable {} is immutable", name);
         }
@@ -121,29 +127,124 @@ impl ScopeStack {
             .find(|v| v.is_some())
             .flatten()
     }
+
+    fn eval(&self, expr: &crate::exprs::Expr) -> Result<Typed, EvalError> {
+        use crate::exprs::{RPNode, RPOps};
+        use crate::lex::{AriOps, RelOps};
+        let list: Vec<_> = expr
+            .content
+            .iter()
+            .map(|n| {
+                if let RPNode::Ident(name) = n {
+                    if let Some(v) = self.get_var(&name) {
+                        Ok(match v.value {
+                            Typed::Num(n) => RPNode::Num(n),
+                            Typed::Bool(b) => RPNode::Bool(b),
+                        })
+                    } else {
+                        Err(EvalError::VariableNotFound)
+                    }
+                } else {
+                    Ok(n.clone())
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        let mut stack = vec![];
+        for n in list {
+            if let RPNode::Ops(op) = n {
+                let lhs = stack.pop();
+                let rhs = stack.pop();
+                match (lhs, rhs) {
+                    (Some(RPNode::Num(lhs)), Some(RPNode::Num(rhs))) => stack.push(match op {
+                        RPOps::Ari(op) => RPNode::Num(match op {
+                            AriOps::Add => lhs.checked_add(rhs).ok_or(EvalError::OverFlow)?,
+                            AriOps::Sub => lhs.checked_sub(rhs).ok_or(EvalError::OverFlow)?,
+                            AriOps::Mul => lhs.checked_mul(rhs).ok_or(EvalError::OverFlow)?,
+                            AriOps::Div => lhs.checked_div(rhs).ok_or(EvalError::ZeroDivision)?,
+                            AriOps::Mod => lhs.checked_rem(rhs).ok_or(EvalError::OverFlow)?,
+                        }),
+                        RPOps::Rel(op) => RPNode::Bool(match op {
+                            RelOps::LessThan => lhs < rhs,
+                            RelOps::GreaterThan => lhs > rhs,
+                            RelOps::Equal => lhs == rhs,
+                            RelOps::NotEqual => lhs != rhs,
+                            RelOps::LessEqual => lhs <= rhs,
+                            RelOps::GreaterEqual => lhs >= rhs,
+                        }),
+                    }),
+                    _ => {
+                        return Err(EvalError::CorruptedExpr);
+                    }
+                }
+            }
+        }
+        if stack.len() != 1 {
+            return Err(EvalError::CorruptedExpr);
+        } else {
+            match stack.last().unwrap() {
+                RPNode::Num(num) => Ok(Typed::Num(*num)),
+                RPNode::Bool(b) => Ok(Typed::Bool(*b)),
+                _ => Err(EvalError::CorruptedExpr),
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+enum EvalError {
+    VariableNotFound,
+    CorruptedExpr,
+    OverFlow,
+    ZeroDivision,
+}
+
+#[derive(Debug, Clone)]
+enum Typed {
+    Num(VarIntType),
+    Bool(bool),
+}
+
+impl Typed {
+    fn unwrap_bool(&self) -> bool {
+        if let Typed::Bool(b) = self {
+            *b
+        } else {
+            die!("Runtime error: Bool expected, got Num");
+        }
+    }
+
+    fn unwrap_num(&self) -> VarIntType {
+        if let Typed::Num(n) = self {
+            *n
+        } else {
+            die!("Runtime error: Num expected, got Bool");
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Variable {
     is_mutable: bool,
-    pub value: VarIntType,
+    value: Typed,
 }
 
-fn exec_print(idx: usize, call_stack: &ScopeStack, wait: bool, args: &Vec<PrintArgs>) {
+fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &Vec<PrintArgs>) {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
     write!(lock, "{:04} :", idx).unwrap();
     for arg in args {
         match arg {
-            PrintArgs::String(i) => write!(lock, " {}", i),
-            PrintArgs::Expr(i) => write!(
-                lock,
-                " {}",
-                i.eval(&call_stack).unwrap_or_else(|e| {
-                    die!("Runtime error: cannot eval expr: {}", e);
-                })
-            ),
+            PrintArgs::Str(i) => write!(lock, " {}", i),
+            PrintArgs::Expr(i) => {
+                match runtime.eval(i).unwrap_or_else(|e| {
+                    // FIXME
+                    die!("Runtime error: cannot eval expr: {:?}", e);
+                }) {
+                    Typed::Num(n) => write!(lock, " {}", n),
+                    Typed::Bool(b) => write!(lock, " {}", b),
+                }
+            }
         }
         .unwrap();
     }
@@ -184,7 +285,7 @@ fn get_int_input(prompt: Option<&str>) -> VarIntType {
 
 pub fn run(prog: Program) {
     let mut wait = false;
-    let mut call_stack = ScopeStack::new();
+    let mut runtime = Runtime::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
     let mut if_eval = false;
@@ -192,21 +293,21 @@ pub fn run(prog: Program) {
 
     while i < prog.insts.len() {
         match &prog.insts[i] {
-            Inst::Print { args } => {
-                exec_print(i, &call_stack, wait, args);
+            Insts::Print { args } => {
+                exec_print(i, &runtime, wait, args);
             }
-            Inst::Sub { offset_to_end, .. } => {
+            Insts::Sub { offset_to_end, .. } => {
                 i += offset_to_end;
             }
-            Inst::Call { name } => {
+            Insts::Call { name } => {
                 if let Some(idx) = prog.subs.get(name) {
-                    call_stack.push(ScopeKind::Sub, i + 1);
+                    runtime.push(ScopeKind::Sub, i + 1);
                     i = *idx;
                 } else {
                     die!("Runtime error: function \"{}\" was not found", name);
                 }
             }
-            Inst::While {
+            Insts::While {
                 cond,
                 offset_to_end,
             } => {
@@ -214,70 +315,83 @@ pub fn run(prog: Program) {
                     breaking = false;
                     i += offset_to_end;
                 } else {
-                    match cond.eval(&call_stack) {
-                        Ok(true) => call_stack.push(ScopeKind::Loop, i),
-                        Ok(false) => i += offset_to_end,
-                        Err(e) => {
-                            die!("Runtime error: CondExpr cannot be evaled: {}", e);
-                        }
+                    match runtime
+                        .eval(cond)
+                        .unwrap_or_else(|e| {
+                            // FIXME
+                            die!("Runtime error: CondExpr cannot be evaled: {:?}", e);
+                        })
+                        .unwrap_bool()
+                    {
+                        true => runtime.push(ScopeKind::Loop, i),
+                        false => i += offset_to_end,
                     }
                 }
             }
-            Inst::Let { name, init, is_mut } => {
+            Insts::Let { name, init, is_mut } => {
                 let init_var = Variable {
                     is_mutable: *is_mut,
-                    value: init.eval(&call_stack).unwrap_or_else(|e| {
-                        die!("Runtime error: cannot eval the init value: {}", e);
+                    value: runtime.eval(init).unwrap_or_else(|e| {
+                        die!("Runtime error: cannot eval the init value: {:?}", e);
                     }),
                 };
-                call_stack.decl_var(name, init_var);
+                runtime.decl_var(name, init_var);
             }
-            Inst::Modify { name, expr } => {
-                let to_value = expr.eval(&call_stack).unwrap_or_else(|e| {
-                    die!("Runtime error: cannot eval the value: {}", e);
+            Insts::Modify { name, expr } => {
+                let to_value = runtime.eval(expr).unwrap_or_else(|e| {
+                    // FIXME
+                    die!("Runtime error: cannot eval the value: {:?}", e);
                 });
-                call_stack.modify_var(name, to_value);
+                runtime.modify_var(name, to_value);
             }
-            Inst::If {
+            Insts::If {
                 cond,
                 offset_to_next,
             } => {
                 // use a scope, but don't use a return address
                 // push a frame always to unify End behavior
-                call_stack.push(ScopeKind::Branch, 0);
-                match cond.eval(&call_stack) {
-                    Ok(true) => {
+                runtime.push(ScopeKind::Branch, 0);
+                match runtime
+                    .eval(cond)
+                    .unwrap_or_else(|e| {
+                        // FIXME
+                        die!("Runtime error: CondExpr cannot be evaled: {:?}", e);
+                    })
+                    .unwrap_bool()
+                {
+                    true => {
                         // go to body
                         // no-op
                     }
-                    Ok(false) => {
+                    false => {
                         i += offset_to_next;
                         if_eval = true;
                         continue;
                     }
-                    Err(e) => {
-                        die!("Runtime error: CondExpr cannot be evaled: {}", e);
-                    }
                 }
             }
-            Inst::ElIf {
+            Insts::ElIf {
                 cond,
                 offset_to_next,
                 ..
             } => {
                 if if_eval {
-                    match cond.eval(&call_stack) {
-                        Ok(true) => {
+                    match runtime
+                        .eval(cond)
+                        .unwrap_or_else(|e| {
+                            // FIXME
+                            die!("Runtime error: CondExpr cannot be evaled: {:?}", e);
+                        })
+                        .unwrap_bool()
+                    {
+                        true => {
                             // don't push a frame
                             // since If pushed one already
                             if_eval = false;
                         }
-                        Ok(false) => {
+                        false => {
                             i += offset_to_next;
                             continue;
-                        }
-                        Err(e) => {
-                            die!("Runtime error: CondExpr cannot be evaled: {}", e);
                         }
                     }
                 } else {
@@ -285,7 +399,7 @@ pub fn run(prog: Program) {
                     continue;
                 }
             }
-            Inst::Else { offset_to_end, .. } => {
+            Insts::Else { offset_to_end, .. } => {
                 if if_eval {
                     // don't push a frame
                     // since If pushed one already
@@ -295,9 +409,9 @@ pub fn run(prog: Program) {
                     continue;
                 }
             }
-            Inst::End => {
+            Insts::End => {
                 if_eval = false;
-                let top = call_stack.pop().map(|s| s.ret_idx);
+                let top = runtime.pop().map(|s| s.ret_idx);
                 match top {
                     Some(0) => {
                         // return address unspecified
@@ -313,16 +427,16 @@ pub fn run(prog: Program) {
                     }
                 }
             }
-            Inst::Input { prompt } => {
-                call_stack.modify_var("_result", get_int_input(prompt.as_deref()));
+            Insts::Input { prompt } => {
+                runtime.modify_var("_result", Typed::Num(get_int_input(prompt.as_deref())));
             }
-            Inst::Roll { count, face } => {
-                let count = count.eval(&call_stack).unwrap_or_else(|e| {
-                    die!("Runtime error: cannot eval expr: {}", e);
-                });
-                let face = face.eval(&call_stack).unwrap_or_else(|e| {
-                    die!("Runtime error: cannot eval expr: {}", e);
-                });
+            Insts::Roll { count, face } => {
+                let count = runtime.eval(count).unwrap_or_else(|e| {
+                    die!("Runtime error: cannot eval expr: {:?}", e);
+                }).unwrap_num();
+                let face = runtime.eval(face).unwrap_or_else(|e| {
+                    die!("Runtime error: cannot eval expr: {:?}", e);
+                }).unwrap_num();
 
                 if count <= 0 {
                     die!("Runtime error: Count for Roll must be a positive integer");
@@ -331,14 +445,14 @@ pub fn run(prog: Program) {
                 if face <= 0 {
                     die!("Runtime error: Face for Roll must be a positive integer");
                 }
-                call_stack.modify_var("_result", roll_dice(count, face));
+                runtime.modify_var("_result", Typed::Num(roll_dice(count, face)));
             }
-            Inst::Halt => {
+            Insts::Halt => {
                 return;
             }
-            Inst::Break => {
+            Insts::Break => {
                 i = loop {
-                    if let Some(scope) = call_stack.pop() {
+                    if let Some(scope) = runtime.pop() {
                         match scope.kind {
                             ScopeKind::Loop => {
                                 breaking = true;
@@ -355,10 +469,10 @@ pub fn run(prog: Program) {
                 };
                 continue;
             }
-            Inst::EnableWait => {
+            Insts::EnableWait => {
                 wait = true;
             }
-            Inst::DisableWait => {
+            Insts::DisableWait => {
                 wait = false;
             }
             #[allow(unreachable_patterns)]

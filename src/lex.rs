@@ -27,15 +27,7 @@ where
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Reserved {
-    // keywords
-    AsMut,
-    Be,
-    To,
-    Dice,
-    With,
-    Face,
-    // insts
+pub enum Insts {
     Print,
     Sub,
     Call,
@@ -54,16 +46,59 @@ enum Reserved {
     DisableWait,
 }
 
-impl ToItem for Reserved {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Keywords {
+    AsMut,
+    Be,
+    To,
+    Dice,
+    With,
+    Face,
+}
+
+impl ToItem for Keywords {
     const DISCRIMINANTS: &'static [Self] = &[
-        // keywords
         Self::AsMut,
         Self::Be,
         Self::To,
         Self::Dice,
         Self::With,
         Self::Face,
-        // insts
+    ];
+
+    fn as_str(&self) -> &str {
+        match self {
+            Self::AsMut => "asmut",
+            Self::Be => "be",
+            Self::To => "to",
+            Self::Dice => "dice",
+            Self::With => "with",
+            Self::Face => "face",
+        }
+    }
+
+    fn check(s: &[char]) -> Option<Self> {
+        'outer: for res in Self::DISCRIMINANTS {
+            let res_chars: Vec<_> = res.as_str().chars().collect();
+            if res_chars.len() <= s.len() {
+                for i in 0..res_chars.len() {
+                    if res_chars[i].to_lowercase().ne(s[i].to_lowercase()) {
+                        continue 'outer;
+                    }
+                }
+                // For Reserved we need this check to separate Ident
+                // (example: "be" is Reserved but "bed" is Ident)
+                if res_chars.len() == s.len() || is_sep(s[res_chars.len()]) {
+                    return Some(*res);
+                }
+            }
+        }
+        None
+    }
+}
+
+impl ToItem for Insts {
+    const DISCRIMINANTS: &'static [Self] = &[
         Self::Print,
         Self::Sub,
         Self::Call,
@@ -84,14 +119,6 @@ impl ToItem for Reserved {
 
     fn as_str(&self) -> &str {
         match self {
-            // keywords
-            Self::AsMut => "asmut",
-            Self::Be => "be",
-            Self::To => "to",
-            Self::Dice => "dice",
-            Self::With => "with",
-            Self::Face => "face",
-            // insts
             Self::Print => "print",
             Self::Sub => "sub",
             Self::Call => "call",
@@ -131,8 +158,8 @@ impl ToItem for Reserved {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum AriOps {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AriOps {
     Add, // +
     Sub, // -
     Mul, // *
@@ -159,8 +186,8 @@ impl ToItem for AriOps {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum RelOps {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelOps {
     Equal,        // ==
     NotEqual,     // !=
     LessEqual,    // <=
@@ -191,9 +218,10 @@ impl ToItem for RelOps {
 }
 
 type NumType = i64;
-#[derive(Debug, Clone)]
-enum Item {
-    Res(Reserved),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Item {
+    Key(Keywords),
+    Inst(Insts),
     Ari(AriOps),
     Rel(RelOps),
     Num(NumType),
@@ -209,17 +237,17 @@ pub struct Location {
     pub col: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub loc: Location,
-    item: Item,
+    pub item: Item,
 }
 
-impl std::fmt::Debug for Token {
+impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Token {{ {:?} ({},{}) }}",
+            "{{ {:?} ({},{}) }}",
             self.item, self.loc.row, self.loc.col
         )
     }
@@ -231,9 +259,37 @@ pub struct Lexed {
     pub tokens: Vec<Token>,
 }
 
+impl Lexed {
+    pub fn generate_src_loc(&self, loc: &Location) -> String {
+        use std::fmt::Write;
+        let mut s = String::new();
+        let row = loc.row;
+        let col = loc.col - 1;
+        writeln!(s, "{:>4} | \t{}", row, self.lines[row-1]);
+        writeln!(s, "       {:>1$}", "^", col);
+        s
+    }
+}
+
+impl std::fmt::Display for Lexed {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut i = 0;
+        for idx in 0..self.lines.len() {
+            writeln!(f, "{:4>} | {}", idx + 1, self.lines[idx])?;
+            while i < self.tokens.len() && self.tokens[i].loc.row == idx + 1 {
+                write!(f, "{:?} ", self.tokens[i].item)?;
+                i += 1;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Error {
     UnterminatedStr,
+    UnexpectedChar(char),
 }
 
 const RESERVED_CHARS: &'static [char] =
@@ -251,7 +307,6 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
     let mut tks = Vec::new();
     let lines: Vec<_> = s.lines().map(String::from).collect();
     for (idx, l) in lines.iter().enumerate() {
-        eprintln!("line {}", idx);
         let v: Vec<_> = l.chars().collect();
         let mut i = 0;
         while i < v.len() {
@@ -261,8 +316,7 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
             };
             if v[i] == '#' {
                 break;
-            }
-            if v[i].is_whitespace() {
+            } else if v[i].is_whitespace() {
                 i += 1;
             } else if v[i] == ';' {
                 tks.push(Token {
@@ -294,10 +348,16 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                     item: Item::Str(s),
                 });
                 i += 1;
-            } else if let Some(res) = Reserved::check(&v[i..v.len()]) {
+            } else if let Some(res) = Keywords::check(&v[i..v.len()]) {
                 tks.push(Token {
                     loc,
-                    item: Item::Res(res),
+                    item: Item::Key(res),
+                });
+                i += res.len();
+            } else if let Some(res) = Insts::check(&v[i..v.len()]) {
+                tks.push(Token {
+                    loc,
+                    item: Item::Inst(res),
                 });
                 i += res.len();
             } else if let Some(res) = AriOps::check(&v[i..v.len()]) {
@@ -322,7 +382,7 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                     loc,
                     item: Item::Num(s.parse().unwrap()),
                 });
-            } else {
+            } else if is_ident_char(v[i]) {
                 let mut s = String::new();
                 while i < v.len() && is_ident_char(v[i]) {
                     s.push(v[i]);
@@ -332,6 +392,14 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                     loc,
                     item: Item::Ident(s),
                 });
+            } else {
+                match v[i] {
+                    '=' | '!' => return Err(Error::UnexpectedChar(v[i])),
+                    _ => {
+                        eprintln!("Unknown character \"{}\"", v[i]);
+                        i += 1;
+                    }
+                }
             }
         }
     }
