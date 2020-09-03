@@ -142,18 +142,29 @@ impl Runtime {
                             Typed::Bool(b) => RPNode::Bool(b),
                         })
                     } else {
-                        Err(EvalError::VariableNotFound)
+                        Err(EvalError::VariableNotFound(name.clone()))
                     }
                 } else {
                     Ok(n.clone())
                 }
             })
             .collect::<Result<_, _>>()?;
+        match list.len() {
+            0 => return Err(EvalError::CorruptedExpr(expr.clone())),
+            1 => {
+                return match list.last().unwrap() {
+                    RPNode::Num(num) => Ok(Typed::Num(*num)),
+                    RPNode::Bool(b) => Ok(Typed::Bool(*b)),
+                    _ => Err(EvalError::CorruptedExpr(expr.clone())),
+                }
+            }
+            _ => {}
+        };
         let mut stack = vec![];
         for n in list {
             if let RPNode::Ops(op) = n {
-                let lhs = stack.pop();
                 let rhs = stack.pop();
+                let lhs = stack.pop();
                 match (lhs, rhs) {
                     (Some(RPNode::Num(lhs)), Some(RPNode::Num(rhs))) => stack.push(match op {
                         RPOps::Ari(op) => RPNode::Num(match op {
@@ -173,18 +184,20 @@ impl Runtime {
                         }),
                     }),
                     _ => {
-                        return Err(EvalError::CorruptedExpr);
+                        return Err(EvalError::CorruptedExpr(expr.clone()));
                     }
                 }
+            } else {
+                stack.push(n);
             }
         }
         if stack.len() != 1 {
-            return Err(EvalError::CorruptedExpr);
+            return Err(EvalError::CorruptedExpr(expr.clone()));
         } else {
             match stack.last().unwrap() {
                 RPNode::Num(num) => Ok(Typed::Num(*num)),
                 RPNode::Bool(b) => Ok(Typed::Bool(*b)),
-                _ => Err(EvalError::CorruptedExpr),
+                _ => Err(EvalError::CorruptedExpr(expr.clone())),
             }
         }
     }
@@ -192,10 +205,23 @@ impl Runtime {
 
 #[derive(Debug)]
 enum EvalError {
-    VariableNotFound,
-    CorruptedExpr,
+    VariableNotFound(String),
+    CorruptedExpr(crate::exprs::Expr),
     OverFlow,
     ZeroDivision,
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Failed to eval because ")?;
+        match self {
+            Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
+            Self::CorruptedExpr(e) => write!(f, "expr {:?} is corrupted", e),
+            Self::OverFlow => write!(f, "of overflow"),
+            Self::ZeroDivision => write!(f, "of zero division"),
+        }?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -239,7 +265,7 @@ fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &Vec<PrintArgs>) 
             PrintArgs::Expr(i) => {
                 match runtime.eval(i).unwrap_or_else(|e| {
                     // FIXME
-                    die!("Runtime error: cannot eval expr: {:?}", e);
+                    die!("Runtime error: Failed to eval arg of Print: {:?}", e);
                 }) {
                     Typed::Num(n) => write!(lock, " {}", n),
                     Typed::Bool(b) => write!(lock, " {}", b),
@@ -319,7 +345,7 @@ pub fn run(prog: Program) {
                         .eval(cond)
                         .unwrap_or_else(|e| {
                             // FIXME
-                            die!("Runtime error: CondExpr cannot be evaled: {:?}", e);
+                            die!("Runtime error: failed to eval condition of While : {}", e);
                         })
                         .unwrap_bool()
                     {
@@ -332,7 +358,7 @@ pub fn run(prog: Program) {
                 let init_var = Variable {
                     is_mutable: *is_mut,
                     value: runtime.eval(init).unwrap_or_else(|e| {
-                        die!("Runtime error: cannot eval the init value: {:?}", e);
+                        die!("Runtime error: Failed to eval init value of Let: {}", e);
                     }),
                 };
                 runtime.decl_var(name, init_var);
@@ -340,7 +366,7 @@ pub fn run(prog: Program) {
             Insts::Modify { name, expr } => {
                 let to_value = runtime.eval(expr).unwrap_or_else(|e| {
                     // FIXME
-                    die!("Runtime error: cannot eval the value: {:?}", e);
+                    die!("Runtime error: Failed to eval value of Modify: {}", e);
                 });
                 runtime.modify_var(name, to_value);
             }
@@ -355,7 +381,7 @@ pub fn run(prog: Program) {
                     .eval(cond)
                     .unwrap_or_else(|e| {
                         // FIXME
-                        die!("Runtime error: CondExpr cannot be evaled: {:?}", e);
+                        die!("Runtime error: Failed to eval condition of If: {}", e);
                     })
                     .unwrap_bool()
                 {
@@ -380,7 +406,7 @@ pub fn run(prog: Program) {
                         .eval(cond)
                         .unwrap_or_else(|e| {
                             // FIXME
-                            die!("Runtime error: CondExpr cannot be evaled: {:?}", e);
+                            die!("Runtime error: Failed to eval condition of Elif: {}", e);
                         })
                         .unwrap_bool()
                     {
@@ -431,12 +457,18 @@ pub fn run(prog: Program) {
                 runtime.modify_var("_result", Typed::Num(get_int_input(prompt.as_deref())));
             }
             Insts::Roll { count, face } => {
-                let count = runtime.eval(count).unwrap_or_else(|e| {
-                    die!("Runtime error: cannot eval expr: {:?}", e);
-                }).unwrap_num();
-                let face = runtime.eval(face).unwrap_or_else(|e| {
-                    die!("Runtime error: cannot eval expr: {:?}", e);
-                }).unwrap_num();
+                let count = runtime
+                    .eval(count)
+                    .unwrap_or_else(|e| {
+                        die!("Runtime error: Failed to eval count of Roll: {}", e);
+                    })
+                    .unwrap_num();
+                let face = runtime
+                    .eval(face)
+                    .unwrap_or_else(|e| {
+                        die!("Runtime error: Failed to eval face of Roll: {}", e);
+                    })
+                    .unwrap_num();
 
                 if count <= 0 {
                     die!("Runtime error: Count for Roll must be a positive integer");

@@ -1,4 +1,5 @@
-use crate::exprs::Expr;
+use crate::exprs::{self, Expr};
+use crate::lex;
 
 #[derive(Debug, Clone)]
 pub enum PrintArgs {
@@ -76,57 +77,87 @@ macro_rules! die {
 }
 
 macro_rules! die_cont {
-    ($msg: expr, $loc: expr, $lex: ident) => {
-        die!("Error: {}\n{}", $msg, $lex.generate_loc_info(&$loc));
+    ($msg: expr, $i: expr, $lexed: ident) => {
+        die!(
+            "Error: {}\n{}",
+            $msg,
+            $lexed.generate_loc_info(&$lexed.tokens[$i].loc)
+        );
     };
 }
 
 macro_rules! expects {
-    ($msg: expr, $item: path, $i: ident, $lex: ident) => {
-        if $lex.tokens.len() <= $i || $lex.tokens[$i].item != $item {
-            die_cont!($msg, $lex.tokens[$i].loc, $lex);
+    ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
+        if $lexed.tokens.len() <= $i || !matches!(&$lexed.tokens[$i].item, $($pat)|+) {
+            die_cont!($msg, $i, $lexed);
         }
         $i += 1;
     };
 }
 
+macro_rules! parse_expr {
+    ($($pat: pat)|+, $i: ident, $tks: ident, $lexed: ident) => {
+        {
+            let mut j = $i;
+            while j < $tks.len()
+                && !matches!(
+                    $tks[j].item,
+                    $($pat)|+
+                )
+            {
+                j += 1;
+            }
+            let expr = Expr::from_tokens(&$tks[$i..j]).unwrap_or_else(|e| {
+                use exprs::Error;
+                match e {
+                    Error::EmptyExpr => {
+                        die_cont!("Expr is empty", $i, $lexed);
+                    }
+                    Error::InvalidToken(tk) => {
+                        die!("Error: {}\n{}", "Failed to parse expr because of this token", $lexed.generate_loc_info(&tk.loc));
+                    }
+                }
+            });
+            $i = j;
+            expr
+        }
+    }
+}
+
 pub fn parse(lexed: crate::lex::Lexed) -> Program {
-    use crate::lex::{self, Item};
+    use lex::{Item, Keywords};
     let mut insts = vec![Insts::Ill];
     let mut waits_end_stack: Vec<WaitsEnd> = vec![]; // stmts waiting for End
     let mut subs = std::collections::HashMap::new(); // subroutines defined
     let mut i = 0;
     let tks = &lexed.tokens;
     while i < tks.len() {
-        match dbg!(&tks[i].item) {
+        match &tks[i].item {
             Item::Inst(inst) => {
                 match inst {
                     lex::Insts::Print => {
                         i += 1;
                         let mut args = Vec::new();
-                        while i < tks.len() && tks[i].item != Item::Semi {
-                            args.push(match &tks[i].item {
-                                Item::Str(s) => PrintArgs::Str(s.clone()),
-                                _ => {
-                                    let orig_i = i;
-                                    while i < tks.len()
-                                        && matches!(
-                                            tks[i].item,
-                                            Item::Ident(_) | Item::Num(_) | Item::Ari(_) | Item::Rel(_)
-                                        )
-                                    {
-                                        i += 1;
-                                    }
-                                    PrintArgs::Expr(
-                                        Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                                            die_cont!("Failed to parse expr", tk.loc, lexed);
-                                        }),
-                                    )
+                        while i < tks.len() {
+                            match &tks[i].item {
+                                Item::Semi => break,
+                                Item::Comma => {
+                                    i += 1;
                                 }
-                            });
-                            i += 1;
+                                Item::Str(s) => {
+                                    args.push(PrintArgs::Str(s.clone()));
+                                    i += 1;
+                                }
+                                _ => args.push(PrintArgs::Expr(parse_expr!(
+                                    Item::Comma | Item::Semi,
+                                    i,
+                                    tks,
+                                    lexed
+                                ))),
+                            }
                         }
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         insts.push(Insts::Print { args })
                     }
                     lex::Insts::Sub => {
@@ -142,7 +173,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         match &tks[i].item {
                             Item::Ident(name) => {
                                 i += 1;
-                                expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                                expects!("Semicolon expected", Item::Semi, i, lexed);
                                 if subs.insert(name.clone(), insts.len()).is_some() {
                                     die!(
                                         "Semantic error: subroutine name \"{}\" is conflicting",
@@ -169,7 +200,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         match &tks[i].item {
                             Item::Ident(name) => {
                                 i += 1;
-                                expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                                expects!("Semicolon expected", Item::Semi, i, lexed);
                                 insts.push(Insts::Call { name: name.clone() });
                             }
                             _ => {
@@ -179,20 +210,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                     lex::Insts::While => {
                         i += 1;
-                        let orig_i = i;
-                        while i < tks.len() && tks[i].item != lex::Item::Semi {
-                            i += 1;
-                        }
-                        if tks[i].item != lex::Item::Semi {
-                            die_cont!("Semicolon expected", tks[i].loc, lexed);
-                        }
                         let inst_obj = Insts::While {
-                            cond: Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                                die_cont!("Failed to parse expr", tk.loc, lexed);
-                            }),
+                            cond: parse_expr!(Item::Semi, i, tks, lexed),
                             offset_to_end: 0,
                         };
-                        i += 1;
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         waits_end_stack.push(WaitsEnd {
                             kind: inst_obj.clone(),
                             index: insts.len(),
@@ -207,40 +229,31 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 if name.starts_with("_") {
                                     die!("Semantic error: Identifier starts with _ is reserved");
                                 }
+                                expects!("\"Be\" expected", Item::Key(Keywords::Be), i, lexed);
 
-                                {
-                                    let be = lex::Item::Key(lex::Keywords::Be);
-                                    expects!("Be expected", be, i, lexed);
-                                }
+                                let init = parse_expr!(
+                                    Item::Semi | Item::Key(Keywords::AsMut),
+                                    i,
+                                    tks,
+                                    lexed
+                                );
 
-                                let orig_i = i;
-                                while i < tks.len()
-                                    && !matches!(
-                                        tks[i].item,
-                                        lex::Item::Semi | lex::Item::Key(lex::Keywords::AsMut)
-                                    )
-                                {
-                                    i += 1;
-                                }
-                                if !matches!(
-                                    tks[i].item,
-                                    lex::Item::Semi | lex::Item::Key(lex::Keywords::AsMut)
-                                ) {
-                                    die_cont!("AsMut or Semicolon expected", tks[i].loc, lexed);
-                                }
-                                let init =
-                                    Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                                        die_cont!("Failed to parse expr", tk.loc, lexed);
-                                    });
+                                expects!(
+                                    "\"AsMut\" or semicolon expected",
+                                    Item::Semi | Item::Key(Keywords::AsMut),
+                                    i,
+                                    lexed
+                                );
+
                                 let is_mut = {
-                                    if tks[i].item == lex::Item::Key(lex::Keywords::AsMut) {
-                                        i += 1;
+                                    if tks[i - 1].item == Item::Key(Keywords::AsMut) {
+                                        expects!("Semicolon expected", Item::Semi, i, lexed);
                                         true
                                     } else {
                                         false
                                     }
                                 };
-                                expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+
                                 insts.push(Insts::Let {
                                     name: name.clone(),
                                     init,
@@ -261,22 +274,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                     die!("Semantic error: Identifier starts with _ is reserved and cannot be modified");
                                 }
 
-                                let orig_i = i;
-                                while i < tks.len()
-                                    && tks[i].item != lex::Item::Key(lex::Keywords::To)
-                                {
-                                    i += 1;
-                                }
+                                expects!("To expected", Item::Key(Keywords::To), i, lexed);
 
-                                if tks[i].item != lex::Item::Key(lex::Keywords::To) {
-                                    die_cont!("To expected", tks[i].loc, lexed);
-                                }
-                                i += 1;
+                                let expr = parse_expr!(Item::Semi, i, tks, lexed);
+                                expects!("Semicolon expected", Item::Semi, i, lexed);
 
-                                let expr =
-                                    Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                                        die_cont!("Failed to parse expr", tk.loc, lexed);
-                                    });
                                 insts.push(Insts::Modify {
                                     name: name.clone(),
                                     expr,
@@ -289,17 +291,10 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                     lex::Insts::If => {
                         i += 1;
-                        let orig_i = i;
-                        while i < tks.len() && tks[i].item != lex::Item::Semi {
-                            i += 1;
-                        }
-                        if tks[i].item != lex::Item::Semi {
-                            die_cont!("Semicolon expected", tks[i].loc, lexed);
-                        }
-                        let cond = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                            die_cont!("Failed to parse expr", tk.loc, lexed);
-                        });
-                        i += 1;
+
+                        let cond = parse_expr!(Item::Semi, i, tks, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
+
                         let inst_obj = Insts::If {
                             cond,
                             offset_to_next: 0,
@@ -331,17 +326,9 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         };
 
                         i += 1;
-                        let orig_i = i;
-                        while i < tks.len() && tks[i].item != lex::Item::Semi {
-                            i += 1;
-                        }
-                        if tks[i].item != lex::Item::Semi {
-                            die_cont!("Semicolon expected", tks[i].loc, lexed);
-                        }
-                        let cond = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                            die_cont!("Failed to parse expr", tk.loc, lexed);
-                        });
-                        i += 1;
+
+                        let cond = parse_expr!(Item::Semi, i, tks, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
 
                         let inst_obj = Insts::ElIf {
                             cond,
@@ -354,6 +341,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         insts.push(inst_obj);
                     }
                     lex::Insts::Else => {
+                        i += 1;
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         let prev = waits_end_stack.pop().unwrap_or_else(|| {
                             die!("Semantic error: a stray Else detected.");
                         });
@@ -380,7 +369,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                     lex::Insts::End => {
                         i += 1;
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         let start = waits_end_stack.pop().unwrap_or_else(|| {
                             die!("Semantic error: a stray End detected.");
                         });
@@ -420,60 +409,43 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 None
                             },
                         });
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                     }
                     lex::Insts::Roll => {
                         i += 1;
-                        let orig_i = i;
-                        while i < tks.len() && tks[i].item != lex::Item::Key(lex::Keywords::Dice) {
-                            i += 1;
-                        }
-                        if tks[i].item != lex::Item::Key(lex::Keywords::Dice) {
-                            die_cont!("Dice expected", tks[i].loc, lexed);
-                        }
-                        let count = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                            die_cont!("Failed to parse expr", tk.loc, lexed);
-                        });
-                        i += 1;
 
-                        let orig_i = i;
-                        while i < tks.len() && tks[i].item != lex::Item::Key(lex::Keywords::Face) {
-                            i += 1;
-                        }
-                        if tks[i].item != lex::Item::Key(lex::Keywords::Face) {
-                            die_cont!("Face expected", tks[i].loc, lexed);
-                        }
-                        let face = Expr::from_tokens(&tks[orig_i..i]).unwrap_or_else(|tk| {
-                            die_cont!("Failed to parse expr", tk.loc, lexed);
-                        });
-                        i += 1;
+                        let count = parse_expr!(Item::Key(Keywords::Dice), i, tks, lexed);
+                        expects!("\"Dice\" expected", Item::Key(Keywords::Dice), i, lexed);
+
+                        let face = parse_expr!(Item::Key(Keywords::Face), i, tks, lexed);
+                        expects!("\"Face\" expected", Item::Key(Keywords::Face), i, lexed);
 
                         insts.push(Insts::Roll { count, face });
                     }
                     lex::Insts::Halt => {
                         i += 1;
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         insts.push(Insts::Halt)
                     }
                     lex::Insts::Break => {
                         i += 1;
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         insts.push(Insts::Break)
                     }
                     lex::Insts::EnableWait => {
                         i += 1;
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         insts.push(Insts::EnableWait)
                     }
                     lex::Insts::DisableWait => {
                         i += 1;
-                        expects!("Semicolon expected", lex::Item::Semi, i, lexed);
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         insts.push(Insts::DisableWait)
                     }
                 }
             }
             _ => {
-                die_cont!("Line must begin with inst", tks[i].loc, lexed);
+                die_cont!("Line must begin with inst", i, lexed);
             }
         }
     }

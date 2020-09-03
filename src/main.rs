@@ -20,7 +20,7 @@ fn main() {
     eprintln!("Info: Lexing");
     let lexed = match lex::lex(s) {
         Ok(i) => {
-            eprintln!("Lexed:\n{}", i);
+            //eprintln!("Lexed:\n{}", i);
             i
         }
         Err(e) => {

@@ -63,12 +63,20 @@ pub struct Expr {
     pub content: Vec<RPNode>,
 }
 
+pub enum Error {
+    InvalidToken(lex::Token),
+    EmptyExpr,
+}
+
 impl Expr {
-    pub fn from_tokens(tks: &[lex::Token]) -> Result<Self, lex::Token> {
-        for t in tks {
-            eprint!("{} ", t);
+    pub fn from_tokens(tks: &[lex::Token]) -> Result<Self, Error> {
+        if tks.is_empty() {
+            return Err(Error::EmptyExpr);
         }
-        eprintln!();
+        //for t in tks {
+        //    eprint!("{} ", t);
+        //}
+        //eprintln!();
         let nodes: Vec<_> = tks
             .into_iter()
             .map(|t| match &t.item {
@@ -78,7 +86,7 @@ impl Expr {
                 lex::Item::Rel(op) => Ok(RPNode::Ops(RPOps::Rel(*op))),
                 _ => {
                     eprintln!("Stranger: {}", t);
-                    Err(t.clone())
+                    Err(Error::InvalidToken(t.clone()))
                 }
             })
             .collect::<Result<_, _>>()?;

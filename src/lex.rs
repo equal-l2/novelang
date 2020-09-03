@@ -270,8 +270,8 @@ impl std::fmt::Display for LocInfo {
         let row = self.loc.row;
         let col = self.loc.col;
         writeln!(f, "     |")?;
-        writeln!(f, "{:<4} |{}", row, self.line)?;
-        writeln!(f, "     |{:>1$}", "^", col)?;
+        writeln!(f, "{:<4} | {}", row, self.line)?;
+        writeln!(f, "     | {:>1$}", "^", col)?;
         writeln!(f, "     |")?;
         Ok(())
     }
