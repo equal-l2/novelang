@@ -77,7 +77,7 @@ macro_rules! die {
 
 macro_rules! die_cont {
     ($msg: expr, $loc: expr, $lex: ident) => {
-        die!("Error: {}\n{}", $msg, $lex.generate_src_loc(&$loc));
+        die!("Error: {}\n{}", $msg, $lex.generate_loc_info(&$loc));
     };
 }
 

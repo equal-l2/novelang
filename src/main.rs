@@ -18,8 +18,17 @@ fn main() {
     });
 
     eprintln!("Info: Lexing");
-    let lexed = lex::lex(s).unwrap();
-    eprintln!("Lexed:\n{}", lexed);
+    let lexed = match lex::lex(s) {
+        Ok(i) => {
+            eprintln!("Lexed:\n{}", i);
+            i
+        }
+        Err(e) => {
+            eprintln!("Syntax Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     eprintln!("Info: Parsing");
     let parsed = parse::parse(lexed);
     eprintln!("Info: Load completed");

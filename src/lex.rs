@@ -259,15 +259,33 @@ pub struct Lexed {
     pub tokens: Vec<Token>,
 }
 
+#[derive(Debug, Clone)]
+pub struct LocInfo {
+    line: String,
+    loc: Location,
+}
+
+impl std::fmt::Display for LocInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let row = self.loc.row;
+        let col = self.loc.col;
+        writeln!(f, "     |")?;
+        writeln!(f, "{:<4} |{}", row, self.line)?;
+        writeln!(f, "     |{:>1$}", "^", col)?;
+        writeln!(f, "     |")?;
+        Ok(())
+    }
+}
+
 impl Lexed {
-    pub fn generate_src_loc(&self, loc: &Location) -> String {
-        use std::fmt::Write;
-        let mut s = String::new();
-        let row = loc.row;
-        let col = loc.col - 1;
-        writeln!(s, "{:>4} | \t{}", row, self.lines[row-1]);
-        writeln!(s, "       {:>1$}", "^", col);
-        s
+    pub fn generate_loc_info(&self, loc: &Location) -> LocInfo {
+        LocInfo {
+            line: self.lines[loc.row - 1].clone(),
+            loc: loc.clone(),
+        }
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &Token> {
+        self.tokens.iter()
     }
 }
 
@@ -275,7 +293,7 @@ impl std::fmt::Display for Lexed {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut i = 0;
         for idx in 0..self.lines.len() {
-            writeln!(f, "{:4>} | {}", idx + 1, self.lines[idx])?;
+            writeln!(f, "{:4>} |{}", idx + 1, self.lines[idx])?;
             while i < self.tokens.len() && self.tokens[i].loc.row == idx + 1 {
                 write!(f, "{:?} ", self.tokens[i].item)?;
                 i += 1;
@@ -287,9 +305,29 @@ impl std::fmt::Display for Lexed {
 }
 
 #[derive(Debug, Clone)]
-pub enum Error {
+pub struct Error {
+    loc_info: LocInfo,
+    kind: ErrorKind,
+}
+
+impl std::error::Error for Error {}
+
+#[derive(Debug, Clone)]
+enum ErrorKind {
     UnterminatedStr,
     UnexpectedChar(char),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.kind {
+            ErrorKind::UnterminatedStr => write!(f, "String is not terminated")?,
+            ErrorKind::UnexpectedChar(c) => write!(f, "Unexpected character '{}'", c)?,
+        };
+        let l = &self.loc_info;
+        writeln!(f, " ({}:{})\n{}", l.loc.row, l.loc.col, l)?;
+        Ok(())
+    }
 }
 
 const RESERVED_CHARS: &'static [char] =
@@ -341,7 +379,14 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                     i += 1;
                 }
                 if v[i] != '"' {
-                    return Err(Error::UnterminatedStr);
+                    let loc_info = LocInfo {
+                        line: l.clone(),
+                        loc,
+                    };
+                    return Err(Error {
+                        loc_info,
+                        kind: ErrorKind::UnterminatedStr,
+                    });
                 }
                 tks.push(Token {
                     loc,
@@ -393,13 +438,15 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                     item: Item::Ident(s),
                 });
             } else {
-                match v[i] {
-                    '=' | '!' => return Err(Error::UnexpectedChar(v[i])),
-                    _ => {
-                        eprintln!("Unknown character \"{}\"", v[i]);
-                        i += 1;
-                    }
-                }
+                eprintln!("{:?}", tks);
+                let loc_info = LocInfo {
+                    line: l.clone(),
+                    loc,
+                };
+                return Err(Error {
+                    loc_info,
+                    kind: ErrorKind::UnexpectedChar(v[i]),
+                });
             }
         }
     }
