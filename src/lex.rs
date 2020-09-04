@@ -7,23 +7,23 @@ where
     fn as_str(&self) -> &str;
 
     fn check(s: &[char]) -> Option<Self> {
-        'outer: for res in Self::DISCRIMINANTS {
-            let res_chars: Vec<_> = res.as_str().chars().collect();
-            if res_chars.len() <= s.len() {
-                for i in 0..res_chars.len() {
-                    if res_chars[i].to_lowercase().ne(s[i].to_lowercase()) {
-                        continue 'outer;
-                    }
-                }
-                return Some(*res);
-            }
-        }
-        None
+        Self::DISCRIMINANTS
+            .iter()
+            .find(|&&i| is_item(&i.as_str().chars().collect::<Vec<_>>(), s))
+            .copied()
     }
 
     fn len(&self) -> usize {
         self.as_str().len()
     }
+}
+
+fn is_item(item_chars: &[char], src_chars: &[char]) -> bool {
+    item_chars.len() <= src_chars.len()
+        && item_chars
+            .iter()
+            .zip(src_chars)
+            .all(|(i, s)| i.to_lowercase().eq(s.to_lowercase()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -337,8 +337,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-const RESERVED_CHARS: &[char] =
-    &['+', '-', '*', '/', '%', '"', '<', '>', '!', '=', ';', ','];
+const RESERVED_CHARS: &[char] = &['+', '-', '*', '/', '%', '"', '<', '>', '!', '=', ';', ','];
 
 fn is_ident_char(c: char) -> bool {
     !c.is_whitespace() && !RESERVED_CHARS.contains(&c)
@@ -408,16 +407,23 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                             Item::Str(s)
                         }
                         _ => {
-                            if let Some(res) = Keywords::check(&v[i..v.len()]) {
+                            let vs = &v[i..];
+                            if is_item(&"dices".chars().collect::<Vec<_>>(), vs) {
+                                i += 5;
+                                Item::Key(Keywords::Dice)
+                            } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs) {
+                                i += 5;
+                                Item::Key(Keywords::Face)
+                            } else if let Some(res) = Keywords::check(vs) {
                                 i += res.len();
                                 Item::Key(res)
-                            } else if let Some(res) = Insts::check(&v[i..v.len()]) {
+                            } else if let Some(res) = Insts::check(vs) {
                                 i += res.len();
                                 Item::Inst(res)
-                            } else if let Some(res) = AriOps::check(&v[i..v.len()]) {
+                            } else if let Some(res) = AriOps::check(vs) {
                                 i += res.len();
                                 Item::Ops(Ops::Ari(res))
-                            } else if let Some(res) = RelOps::check(&v[i..v.len()]) {
+                            } else if let Some(res) = RelOps::check(vs) {
                                 i += res.len();
                                 Item::Ops(Ops::Rel(res))
                             } else if v[i].is_numeric() {

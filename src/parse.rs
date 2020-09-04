@@ -420,9 +420,12 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         let count = parse_expr!(Item::Key(Keywords::Dice), i, tks, lexed);
                         expects!("\"Dice\" expected", Item::Key(Keywords::Dice), i, lexed);
 
+                        expects!("\"With\" expected", Item::Key(Keywords::With), i, lexed);
+
                         let face = parse_expr!(Item::Key(Keywords::Face), i, tks, lexed);
                         expects!("\"Face\" expected", Item::Key(Keywords::Face), i, lexed);
 
+                        expects!("Semicolon expected", Item::Semi, i, lexed);
                         insts.push(Insts::Roll { count, face });
                     }
                     lex::Insts::Halt => {
