@@ -129,8 +129,8 @@ impl Runtime {
     }
 
     fn eval(&self, expr: &crate::exprs::Expr) -> Result<Typed, EvalError> {
-        use crate::exprs::{RPNode, RPOps};
-        use crate::lex::{AriOps, RelOps};
+        use crate::exprs::RPNode;
+        use crate::lex::{Ops, AriOps, RelOps};
         let list: Vec<_> = expr
             .content
             .iter()
@@ -167,14 +167,14 @@ impl Runtime {
                 let lhs = stack.pop();
                 match (lhs, rhs) {
                     (Some(RPNode::Num(lhs)), Some(RPNode::Num(rhs))) => stack.push(match op {
-                        RPOps::Ari(op) => RPNode::Num(match op {
+                        Ops::Ari(op) => RPNode::Num(match op {
                             AriOps::Add => lhs.checked_add(rhs).ok_or(EvalError::OverFlow)?,
                             AriOps::Sub => lhs.checked_sub(rhs).ok_or(EvalError::OverFlow)?,
                             AriOps::Mul => lhs.checked_mul(rhs).ok_or(EvalError::OverFlow)?,
                             AriOps::Div => lhs.checked_div(rhs).ok_or(EvalError::ZeroDivision)?,
                             AriOps::Mod => lhs.checked_rem(rhs).ok_or(EvalError::OverFlow)?,
                         }),
-                        RPOps::Rel(op) => RPNode::Bool(match op {
+                        Ops::Rel(op) => RPNode::Bool(match op {
                             RelOps::LessThan => lhs < rhs,
                             RelOps::GreaterThan => lhs > rhs,
                             RelOps::Equal => lhs == rhs,

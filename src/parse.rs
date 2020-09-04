@@ -116,6 +116,9 @@ macro_rules! parse_expr {
                     Error::InvalidToken(tk) => {
                         die!("Error: {}\n{}", "Failed to parse expr because of this token", $lexed.generate_loc_info(&tk.loc));
                     }
+                    Error::NoPairParen(tk) => {
+                        die!("Error: {}\n{}", "This paren doesn't have its pair", $lexed.generate_loc_info(&tk.loc));
+                    }
                 }
             });
             $i = j;

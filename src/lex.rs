@@ -217,18 +217,25 @@ impl ToItem for RelOps {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ops {
+    Ari(AriOps),
+    Rel(RelOps),
+}
+
 type NumType = i64;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
     Key(Keywords),
     Inst(Insts),
-    Ari(AriOps),
-    Rel(RelOps),
+    Ops(Ops),
     Num(NumType),
     Ident(String),
     Str(String),
     Semi,
     Comma,
+    LParen,
+    RParen,
 }
 
 #[derive(Debug, Clone)]
@@ -348,104 +355,97 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
         let v: Vec<_> = l.chars().collect();
         let mut i = 0;
         while i < v.len() {
-            let loc = Location {
-                row: idx + 1,
-                col: i + 1,
-            };
-            if v[i] == '#' {
-                break;
-            } else if v[i].is_whitespace() {
+            if v[i].is_whitespace() {
                 i += 1;
-            } else if v[i] == ';' {
-                tks.push(Token {
-                    loc,
-                    item: Item::Semi,
-                });
-                i += 1;
-            } else if v[i] == ',' {
-                tks.push(Token {
-                    loc,
-                    item: Item::Comma,
-                });
-                i += 1;
-            } else if v[i] == '"' {
-                i += 1;
-                let mut s = String::new();
-                while i < v.len() {
-                    if v[i] == '"' {
-                        break;
-                    }
-                    s.push(v[i]);
-                    i += 1;
-                }
-                if v[i] != '"' {
-                    let loc_info = LocInfo {
-                        line: l.clone(),
-                        loc,
-                    };
-                    return Err(Error {
-                        loc_info,
-                        kind: ErrorKind::UnterminatedStr,
-                    });
-                }
-                tks.push(Token {
-                    loc,
-                    item: Item::Str(s),
-                });
-                i += 1;
-            } else if let Some(res) = Keywords::check(&v[i..v.len()]) {
-                tks.push(Token {
-                    loc,
-                    item: Item::Key(res),
-                });
-                i += res.len();
-            } else if let Some(res) = Insts::check(&v[i..v.len()]) {
-                tks.push(Token {
-                    loc,
-                    item: Item::Inst(res),
-                });
-                i += res.len();
-            } else if let Some(res) = AriOps::check(&v[i..v.len()]) {
-                tks.push(Token {
-                    loc,
-                    item: Item::Ari(res),
-                });
-                i += res.len();
-            } else if let Some(res) = RelOps::check(&v[i..v.len()]) {
-                tks.push(Token {
-                    loc,
-                    item: Item::Rel(res),
-                });
-                i += res.len();
-            } else if v[i].is_numeric() {
-                let mut s = String::new();
-                while i < v.len() && v[i].is_numeric() {
-                    s.push(v[i]);
-                    i += 1;
-                }
-                tks.push(Token {
-                    loc,
-                    item: Item::Num(s.parse().unwrap()),
-                });
-            } else if is_ident_char(v[i]) {
-                let mut s = String::new();
-                while i < v.len() && is_ident_char(v[i]) {
-                    s.push(v[i]);
-                    i += 1;
-                }
-                tks.push(Token {
-                    loc,
-                    item: Item::Ident(s),
-                });
             } else {
-                eprintln!("{:?}", tks);
-                let loc_info = LocInfo {
-                    line: l.clone(),
-                    loc,
+                let loc = Location {
+                    row: idx + 1,
+                    col: i + 1,
                 };
-                return Err(Error {
-                    loc_info,
-                    kind: ErrorKind::UnexpectedChar(v[i]),
+                tks.push(Token {
+                    loc: loc.clone(),
+                    item: match v[i] {
+                        '#' => {
+                            break;
+                        }
+                        ';' => {
+                            i += 1;
+                            Item::Semi
+                        }
+                        ',' => {
+                            i += 1;
+                            Item::Comma
+                        }
+                        '(' => {
+                            i += 1;
+                            Item::LParen
+                        }
+                        ')' => {
+                            i += 1;
+                            Item::RParen
+                        }
+                        '"' => {
+                            i += 1;
+                            let mut s = String::new();
+                            while i < v.len() {
+                                if v[i] == '"' {
+                                    break;
+                                }
+                                s.push(v[i]);
+                                i += 1;
+                            }
+                            if v[i] != '"' {
+                                let loc_info = LocInfo {
+                                    line: l.clone(),
+                                    loc,
+                                };
+                                return Err(Error {
+                                    loc_info,
+                                    kind: ErrorKind::UnterminatedStr,
+                                });
+                            }
+                            i += 1;
+                            Item::Str(s)
+                        }
+                        _ => {
+                            if let Some(res) = Keywords::check(&v[i..v.len()]) {
+                                i += res.len();
+                                Item::Key(res)
+                            } else if let Some(res) = Insts::check(&v[i..v.len()]) {
+                                i += res.len();
+                                Item::Inst(res)
+                            } else if let Some(res) = AriOps::check(&v[i..v.len()]) {
+                                i += res.len();
+                                Item::Ops(Ops::Ari(res))
+                            } else if let Some(res) = RelOps::check(&v[i..v.len()]) {
+                                i += res.len();
+                                Item::Ops(Ops::Rel(res))
+                            } else if v[i].is_numeric() {
+                                let mut s = String::new();
+                                while i < v.len() && v[i].is_numeric() {
+                                    s.push(v[i]);
+                                    i += 1;
+                                }
+                                Item::Num(s.parse().unwrap())
+                            } else if is_ident_char(v[i]) {
+                                let mut s = String::new();
+                                while i < v.len() && is_ident_char(v[i]) {
+                                    s.push(v[i]);
+                                    i += 1;
+                                }
+                                Item::Ident(s)
+                            } else {
+                                eprintln!("{:?}", tks);
+                                return Err(Error {
+                                    loc_info: LocInfo {
+                                        line: l.clone(),
+                                        loc,
+                                    },
+                                    kind: ErrorKind::UnexpectedChar(v[i]),
+                                });
+                            }
+                        }
+                    },
                 });
             }
         }
