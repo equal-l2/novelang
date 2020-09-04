@@ -98,10 +98,12 @@ impl Expr {
                         }
                         buf.push(i);
                     } else {
-                        Err(Error::NoPairParen(token.clone()))?
+                        return Err(Error::NoPairParen(token.clone()));
                     }
                 },
-                _ => Err(Error::InvalidToken(token.clone()))?,
+                _ => {
+                    return Err(Error::InvalidToken(token.clone()));
+                }
             }
         }
 
@@ -113,7 +115,9 @@ impl Expr {
                     Item::Ident(s) => RPNode::Ident(s.clone()),
                     Item::Num(n) => RPNode::Num(*n),
                     Item::Ops(op) => RPNode::Ops(*op),
-                    Item::LParen => Err(Error::NoPairParen(tk.clone()))?,
+                    Item::LParen => {
+                        return Err(Error::NoPairParen(tk.clone()));
+                    }
                     _ => unreachable!(tk),
                 })
             })

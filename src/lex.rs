@@ -337,7 +337,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-const RESERVED_CHARS: &'static [char] =
+const RESERVED_CHARS: &[char] =
     &['+', '-', '*', '/', '%', '"', '<', '>', '!', '=', ';', ','];
 
 fn is_ident_char(c: char) -> bool {

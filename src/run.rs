@@ -99,14 +99,14 @@ impl Runtime {
         self.stack.push(Scope::new(kind, ret_idx))
     }
 
-    fn vars_iter<'a>(&'a self) -> impl Iterator<Item = &'a VarTable> {
+    fn vars_iter(&self) -> impl Iterator<Item = &VarTable> {
         use std::iter::once;
         once(&self.internals)
             .chain(self.stack.iter().map(|f| &f.vars).rev())
             .chain(once(&self.globals))
     }
 
-    fn vars_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut VarTable> {
+    fn vars_iter_mut(&mut self) -> impl Iterator<Item = &mut VarTable> {
         use std::iter::once;
         once(&mut self.internals)
             .chain(self.stack.iter_mut().map(|f| &mut f.vars).rev())
@@ -192,7 +192,7 @@ impl Runtime {
             }
         }
         if stack.len() != 1 {
-            return Err(EvalError::CorruptedExpr(expr.clone()));
+            Err(EvalError::CorruptedExpr(expr.clone()))
         } else {
             match stack.last().unwrap() {
                 RPNode::Num(num) => Ok(Typed::Num(*num)),
@@ -254,7 +254,7 @@ pub struct Variable {
     value: Typed,
 }
 
-fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &Vec<PrintArgs>) {
+fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[PrintArgs]) {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
@@ -274,7 +274,7 @@ fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &Vec<PrintArgs>) 
         }
         .unwrap();
     }
-    write!(lock, "\n").unwrap();
+    writeln!(lock).unwrap();
     let _ = lock.flush();
 
     if wait {
@@ -520,7 +520,7 @@ fn read_line_from_stdin() -> String {
     use std::io::BufRead;
     let stdin = std::io::stdin();
     let mut it = stdin.lock().lines();
-    it.next().unwrap_or(Ok("".to_owned())).unwrap()
+    it.next().unwrap_or_else(|| Ok("".to_owned())).unwrap()
 }
 
 fn roll_dice(count: VarIntType, face: VarIntType) -> VarIntType {

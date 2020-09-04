@@ -229,7 +229,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         match &tks[i].item {
                             Item::Ident(name) => {
                                 i += 1;
-                                if name.starts_with("_") {
+                                if name.starts_with('_') {
                                     die!("Semantic error: Identifier starts with _ is reserved");
                                 }
                                 expects!("\"Be\" expected", Item::Key(Keywords::Be), i, lexed);
@@ -273,7 +273,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         match &tks[i].item {
                             Item::Ident(name) => {
                                 i += 1;
-                                if name.starts_with("_") {
+                                if name.starts_with('_') {
                                     die!("Semantic error: Identifier starts with _ is reserved and cannot be modified");
                                 }
 
