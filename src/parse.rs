@@ -166,9 +166,9 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     lex::Insts::Sub => {
                         i += 1;
                         // check if the Sub is nested (which is not allowed)
-                        if let Some(i) = waits_end_stack.last() {
-                            if let Insts::Sub { .. } = i.kind {
-                                die!("Semantic error: you cannot nest Sub.");
+                        if let Some(top) = waits_end_stack.last() {
+                            if let Insts::Sub { .. } = top.kind {
+                                die_cont!("Nested Sub is not allowed", i, lexed);
                             }
                         }
 
@@ -178,9 +178,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 i += 1;
                                 expects!("Semicolon expected", Item::Semi, i, lexed);
                                 if subs.insert(name.clone(), insts.len()).is_some() {
-                                    die!(
-                                        "Semantic error: subroutine name \"{}\" is conflicting",
-                                        name
+                                    die_cont!(
+                                        "Conflicting subroutine name", i, lexed
                                     );
                                 }
                                 let inst_obj = Insts::Sub {
@@ -194,7 +193,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 insts.push(inst_obj);
                             }
                             _ => {
-                                die!("Semantic error: subroutine name not found");
+                                die_cont!("Expected subroutine name", i, lexed);
                             }
                         }
                     }
@@ -207,7 +206,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 insts.push(Insts::Call { name: name.clone() });
                             }
                             _ => {
-                                die!("Semantic error: subroutine name not found");
+                                die_cont!("Expected subroutine name", i, lexed);
                             }
                         }
                     }
@@ -230,7 +229,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             Item::Ident(name) => {
                                 i += 1;
                                 if name.starts_with('_') {
-                                    die!("Semantic error: Identifier starts with _ is reserved");
+                                    die_cont!("Identifier starts with _ is reserved", i, lexed);
                                 }
                                 expects!("\"Be\" expected", Item::Key(Keywords::Be), i, lexed);
 
@@ -264,7 +263,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 });
                             }
                             _ => {
-                                die!("Semantic error: ident expected");
+                                die_cont!("Ident expected", i, lexed);
                             }
                         }
                     }
@@ -274,7 +273,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             Item::Ident(name) => {
                                 i += 1;
                                 if name.starts_with('_') {
-                                    die!("Semantic error: Identifier starts with _ is reserved and cannot be modified");
+                                    die_cont!("Identifier starts with _ is reserved and cannot be modified", i, lexed);
                                 }
 
                                 expects!("To expected", Item::Key(Keywords::To), i, lexed);
@@ -288,7 +287,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 });
                             }
                             _ => {
-                                die!("Semantic error: ident expected");
+                                die_cont!("Ident expected", i, lexed);
                             }
                         }
                     }
@@ -310,7 +309,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                     lex::Insts::ElIf => {
                         let prev = waits_end_stack.pop().unwrap_or_else(|| {
-                            die!("Semantic error: a stray ElIf detected.");
+                            die_cont!("A stray ElIf detected.", i, lexed);
                         });
 
                         let offset_to_next = insts.len() - prev.index;
@@ -324,7 +323,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 offset_to_next,
                             },
                             _ => {
-                                die!("Semantic error: cannot find corresponding Element for ElIf");
+                                die_cont!("Cannot find corresponding Element for ElIf", i, lexed);
                             }
                         };
 
@@ -347,7 +346,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         i += 1;
                         expects!("Semicolon expected", Item::Semi, i, lexed);
                         let prev = waits_end_stack.pop().unwrap_or_else(|| {
-                            die!("Semantic error: a stray Else detected.");
+                            die_cont!("A stray Else detected.", i, lexed);
                         });
                         let offset_to_next = insts.len() - prev.index;
                         insts[prev.index] = match prev.kind {
@@ -360,7 +359,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 offset_to_next,
                             },
                             _ => {
-                                die!("Semantic error: cannot find corresponding Element for Else");
+                                die_cont!("Cannot find corresponding Element for Else", i, lexed);
                             }
                         };
                         let inst_obj = Insts::Else { offset_to_end: 0 };
@@ -374,7 +373,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         i += 1;
                         expects!("Semicolon expected", Item::Semi, i, lexed);
                         let start = waits_end_stack.pop().unwrap_or_else(|| {
-                            die!("Semantic error: a stray End detected.");
+                            die_cont!("A stray End detected.", i, lexed);
                         });
                         let offset_to_end = insts.len() - start.index;
                         insts[start.index] = match start.kind {
@@ -395,8 +394,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 offset_to_next: offset_to_end,
                             },
                             Insts::Else { .. } => Insts::Else { offset_to_end },
-                            other => {
-                                die!("Semantic error: cannot End {:?}", other);
+                            _ => {
+                                die_cont!("Cannot find corresponding Element for End", i, lexed);
                             }
                         };
 

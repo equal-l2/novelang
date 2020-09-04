@@ -1,8 +1,10 @@
 use std::io::Write;
 
+use crate::lex;
 use crate::parse::Insts;
 use crate::parse::PrintArgs;
 use crate::parse::Program;
+use crate::types::IntType;
 
 macro_rules! die {
     ($( $x:expr ),*) => {
@@ -11,8 +13,7 @@ macro_rules! die {
     }
 }
 
-pub type VarTable = std::collections::HashMap<String, Variable>;
-pub type VarIntType = i64;
+type VarTable = std::collections::HashMap<String, Variable>;
 
 struct Scope {
     kind: ScopeKind,
@@ -130,65 +131,103 @@ impl Runtime {
 
     fn eval(&self, expr: &crate::exprs::Expr) -> Result<Typed, EvalError> {
         use crate::exprs::RPNode;
-        use crate::lex::{Ops, AriOps, RelOps};
-        let list: Vec<_> = expr
-            .content
-            .iter()
-            .map(|n| {
-                if let RPNode::Ident(name) = n {
-                    if let Some(v) = self.get_var(&name) {
-                        Ok(match v.value {
-                            Typed::Num(n) => RPNode::Num(n),
-                            Typed::Bool(b) => RPNode::Bool(b),
-                        })
-                    } else {
-                        Err(EvalError::VariableNotFound(name.clone()))
-                    }
-                } else {
-                    Ok(n.clone())
-                }
-            })
-            .collect::<Result<_, _>>()?;
+        use crate::lex::{AriOps, Ops, RelOps};
+        let resolve_ident = |name: &str| {
+            if let Some(v) = self.get_var(name) {
+                Ok(v.value.clone())
+            } else {
+                Err(EvalError::VariableNotFound(name.to_owned()))
+            }
+        };
+        let list = &expr.content;
         match list.len() {
             0 => return Err(EvalError::CorruptedExpr(expr.clone())),
             1 => {
                 return match list.last().unwrap() {
                     RPNode::Num(num) => Ok(Typed::Num(*num)),
                     RPNode::Bool(b) => Ok(Typed::Bool(*b)),
+                    RPNode::Ident(name) => resolve_ident(name),
                     _ => Err(EvalError::CorruptedExpr(expr.clone())),
                 }
             }
             _ => {}
         };
+
         let mut stack = vec![];
+        let wrap = |v| {
+            if let RPNode::Ident(name) = v {
+                resolve_ident(&name).map(|v| match v {
+                    Typed::Num(n) => RPNode::Num(n),
+                    Typed::Bool(b) => RPNode::Bool(b),
+                })
+            } else {
+                Ok(v)
+            }
+        };
+        let typeerror = |lhs_t: &str, op: &lex::Ops, rhs_t: &str| {
+            Err(EvalError::TypeError(format!(
+                "Operator \"{}\" cannot be applied to {}-{}",
+                op.as_str(),
+                lhs_t,
+                rhs_t,
+            )))
+        };
         for n in list {
             if let RPNode::Ops(op) = n {
-                let rhs = stack.pop();
-                let lhs = stack.pop();
+                let rhs = stack.pop().map(wrap).transpose()?;
+                let lhs = stack.pop().map(wrap).transpose()?;
                 match (lhs, rhs) {
-                    (Some(RPNode::Num(lhs)), Some(RPNode::Num(rhs))) => stack.push(match op {
-                        Ops::Ari(op) => RPNode::Num(match op {
-                            AriOps::Add => lhs.checked_add(rhs).ok_or(EvalError::OverFlow)?,
-                            AriOps::Sub => lhs.checked_sub(rhs).ok_or(EvalError::OverFlow)?,
-                            AriOps::Mul => lhs.checked_mul(rhs).ok_or(EvalError::OverFlow)?,
-                            AriOps::Div => lhs.checked_div(rhs).ok_or(EvalError::ZeroDivision)?,
-                            AriOps::Mod => lhs.checked_rem(rhs).ok_or(EvalError::OverFlow)?,
-                        }),
-                        Ops::Rel(op) => RPNode::Bool(match op {
-                            RelOps::LessThan => lhs < rhs,
-                            RelOps::GreaterThan => lhs > rhs,
-                            RelOps::Equal => lhs == rhs,
-                            RelOps::NotEqual => lhs != rhs,
-                            RelOps::LessEqual => lhs <= rhs,
-                            RelOps::GreaterEqual => lhs >= rhs,
-                        }),
-                    }),
+                    (Some(lhs), Some(rhs)) => {
+                        let lhs_type = lhs.typename();
+                        let rhs_type = rhs.typename();
+                        match (&lhs, &rhs) {
+                            (RPNode::Num(lhs), RPNode::Num(rhs)) => stack.push(match op {
+                                Ops::Ari(op) => RPNode::Num(match op {
+                                    AriOps::Add => {
+                                        lhs.checked_add(*rhs).ok_or(EvalError::OverFlow)?
+                                    }
+                                    AriOps::Sub => {
+                                        lhs.checked_sub(*rhs).ok_or(EvalError::OverFlow)?
+                                    }
+                                    AriOps::Mul => {
+                                        lhs.checked_mul(*rhs).ok_or(EvalError::OverFlow)?
+                                    }
+                                    AriOps::Div => {
+                                        lhs.checked_div(*rhs).ok_or(EvalError::ZeroDivision)?
+                                    }
+                                    AriOps::Mod => {
+                                        lhs.checked_rem(*rhs).ok_or(EvalError::OverFlow)?
+                                    }
+                                }),
+                                Ops::Rel(op) => RPNode::Bool(match op {
+                                    RelOps::LessThan => lhs < rhs,
+                                    RelOps::GreaterThan => lhs > rhs,
+                                    RelOps::Equal => lhs == rhs,
+                                    RelOps::NotEqual => lhs != rhs,
+                                    RelOps::LessEqual => lhs <= rhs,
+                                    RelOps::GreaterEqual => lhs >= rhs,
+                                }),
+                            }),
+                            (RPNode::Bool(lhs), RPNode::Bool(rhs)) => stack.push(match op {
+                                Ops::Rel(op) => RPNode::Bool(match op {
+                                    RelOps::LessThan => lhs < rhs,
+                                    RelOps::GreaterThan => lhs > rhs,
+                                    RelOps::Equal => lhs == rhs,
+                                    RelOps::NotEqual => lhs != rhs,
+                                    RelOps::LessEqual => lhs <= rhs,
+                                    RelOps::GreaterEqual => lhs >= rhs,
+                                }),
+                                _ => return typeerror(lhs_type, op, rhs_type),
+                            }),
+                            _ => return typeerror(lhs_type, op, rhs_type),
+                        }
+                    }
                     _ => {
                         return Err(EvalError::CorruptedExpr(expr.clone()));
                     }
                 }
             } else {
-                stack.push(n);
+                stack.push(n.clone());
             }
         }
         if stack.len() != 1 {
@@ -209,6 +248,7 @@ enum EvalError {
     CorruptedExpr(crate::exprs::Expr),
     OverFlow,
     ZeroDivision,
+    TypeError(String),
 }
 
 impl std::fmt::Display for EvalError {
@@ -219,6 +259,7 @@ impl std::fmt::Display for EvalError {
             Self::CorruptedExpr(e) => write!(f, "expr {:?} is corrupted", e),
             Self::OverFlow => write!(f, "of overflow"),
             Self::ZeroDivision => write!(f, "of zero division"),
+            Self::TypeError(s) => write!(f, "of type error : {}", s),
         }?;
         Ok(())
     }
@@ -226,7 +267,7 @@ impl std::fmt::Display for EvalError {
 
 #[derive(Debug, Clone)]
 enum Typed {
-    Num(VarIntType),
+    Num(IntType),
     Bool(bool),
 }
 
@@ -239,7 +280,7 @@ impl Typed {
         }
     }
 
-    fn unwrap_num(&self) -> VarIntType {
+    fn unwrap_num(&self) -> IntType {
         if let Typed::Num(n) = self {
             *n
         } else {
@@ -295,7 +336,7 @@ fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[PrintArgs]) {
     }
 }
 
-fn get_int_input(prompt: Option<&str>) -> VarIntType {
+fn get_int_input(prompt: Option<&str>) -> IntType {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
     loop {
@@ -523,7 +564,7 @@ fn read_line_from_stdin() -> String {
     it.next().unwrap_or_else(|| Ok("".to_owned())).unwrap()
 }
 
-fn roll_dice(count: VarIntType, face: VarIntType) -> VarIntType {
+fn roll_dice(count: IntType, face: IntType) -> IntType {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let mut sum = 0;

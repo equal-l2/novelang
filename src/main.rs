@@ -2,6 +2,7 @@ mod exprs;
 mod lex;
 mod parse;
 mod run;
+mod types;
 
 use structopt::StructOpt;
 
@@ -31,6 +32,7 @@ fn main() {
 
     eprintln!("Info: Parsing");
     let parsed = parse::parse(lexed);
+    eprintln!("{:?}", parsed.insts);
     eprintln!("Info: Load completed");
 
     run::run(parsed);

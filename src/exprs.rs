@@ -1,13 +1,13 @@
-use crate::lex::{AriOps, Item, Ops, Token};
-use crate::run::VarIntType;
+use crate::lex::{self, AriOps, Item, Ops, Token};
+use crate::types::IntType;
 
-enum OpOrd {
-    Mul(AriOps),
-    Add(AriOps),
+enum OpOrd<'a> {
+    Mul(&'a AriOps),
+    Add(&'a AriOps),
 }
 
-impl From<AriOps> for OpOrd {
-    fn from(op: AriOps) -> Self {
+impl<'a> From<&'a AriOps> for OpOrd<'a> {
+    fn from(op: &'a AriOps) -> Self {
         match op {
             AriOps::Add => Self::Add(op),
             AriOps::Sub => Self::Add(op),
@@ -28,7 +28,7 @@ impl PartialOrd for Ops {
         } else {
             Some(match (self, other) {
                 (Self::Ari(this), Self::Ari(that)) => {
-                    match (OpOrd::from(*this), OpOrd::from(*that)) {
+                    match (OpOrd::from(this), OpOrd::from(that)) {
                         (OpOrd::Add(_), OpOrd::Add(_)) => Ordering::Equal,
                         (OpOrd::Add(_), OpOrd::Mul(_)) => Ordering::Greater,
                         (OpOrd::Mul(_), OpOrd::Add(_)) => Ordering::Less,
@@ -45,10 +45,21 @@ impl PartialOrd for Ops {
 
 #[derive(Debug, Clone)]
 pub enum RPNode {
-    Ident(String),
-    Num(VarIntType),
     Bool(bool),
+    Ident(String),
+    Num(IntType),
     Ops(Ops),
+}
+
+impl RPNode {
+    pub fn typename(&self) -> &str {
+        match self {
+            Self::Bool(_) => "Bool",
+            Self::Ident(_) => "Ident",
+            Self::Num(_) => "Num",
+            Self::Ops(_) => "Ops",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,7 +86,10 @@ impl Expr {
         let mut buf = vec![];
         for token in tks {
             match &token.item {
-                Item::Ident(_) | Item::Num(_) => buf.push(token),
+                Item::Ident(_)
+                | Item::Num(_)
+                | Item::Key(lex::Keywords::True)
+                | Item::Key(lex::Keywords::False) => buf.push(token),
                 Item::LParen => stack.push(token),
                 Item::Ops(incoming) => {
                     loop {
@@ -114,10 +128,12 @@ impl Expr {
                 Ok(match &tk.item {
                     Item::Ident(s) => RPNode::Ident(s.clone()),
                     Item::Num(n) => RPNode::Num(*n),
-                    Item::Ops(op) => RPNode::Ops(*op),
+                    Item::Ops(op) => RPNode::Ops(op.clone()),
                     Item::LParen => {
                         return Err(Error::NoPairParen(tk.clone()));
                     }
+                    Item::Key(lex::Keywords::True) => RPNode::Bool(true),
+                    Item::Key(lex::Keywords::False) => RPNode::Bool(false),
                     _ => unreachable!(tk),
                 })
             })

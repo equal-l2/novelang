@@ -1,6 +1,6 @@
 trait ToItem
 where
-    Self: Sized + Copy + 'static,
+    Self: Sized + Clone + 'static,
 {
     const DISCRIMINANTS: &'static [Self];
 
@@ -9,8 +9,8 @@ where
     fn check(s: &[char]) -> Option<Self> {
         Self::DISCRIMINANTS
             .iter()
-            .find(|&&i| is_item(&i.as_str().chars().collect::<Vec<_>>(), s))
-            .copied()
+            .find(|i| is_item(&i.as_str().chars().collect::<Vec<_>>(), s))
+            .cloned()
     }
 
     fn len(&self) -> usize {
@@ -26,7 +26,7 @@ fn is_item(item_chars: &[char], src_chars: &[char]) -> bool {
             .all(|(i, s)| i.to_lowercase().eq(s.to_lowercase()))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Insts {
     Print,
     Sub,
@@ -46,7 +46,7 @@ pub enum Insts {
     DisableWait,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Keywords {
     AsMut,
     Be,
@@ -54,6 +54,8 @@ pub enum Keywords {
     Dice,
     With,
     Face,
+    True,
+    False,
 }
 
 impl ToItem for Keywords {
@@ -64,6 +66,8 @@ impl ToItem for Keywords {
         Self::Dice,
         Self::With,
         Self::Face,
+        Self::True,
+        Self::False,
     ];
 
     fn as_str(&self) -> &str {
@@ -74,26 +78,26 @@ impl ToItem for Keywords {
             Self::Dice => "dice",
             Self::With => "with",
             Self::Face => "face",
+            Self::True => "true",
+            Self::False => "false",
         }
     }
 
     fn check(s: &[char]) -> Option<Self> {
-        'outer: for res in Self::DISCRIMINANTS {
-            let res_chars: Vec<_> = res.as_str().chars().collect();
-            if res_chars.len() <= s.len() {
-                for i in 0..res_chars.len() {
-                    if res_chars[i].to_lowercase().ne(s[i].to_lowercase()) {
-                        continue 'outer;
+        Self::DISCRIMINANTS
+            .iter()
+            .find(|i| {
+                let i_chars: Vec<_> = i.as_str().chars().collect();
+                if is_item(&i_chars, s) {
+                    // For Reserved we need this check to separate Ident
+                    // (example: "be" is Reserved but "bed" is Ident)
+                    if i_chars.len() == s.len() || is_sep(s[i_chars.len()]) {
+                        return true;
                     }
                 }
-                // For Reserved we need this check to separate Ident
-                // (example: "be" is Reserved but "bed" is Ident)
-                if res_chars.len() == s.len() || is_sep(s[res_chars.len()]) {
-                    return Some(*res);
-                }
-            }
-        }
-        None
+                return false;
+            })
+            .cloned()
     }
 }
 
@@ -139,26 +143,24 @@ impl ToItem for Insts {
     }
 
     fn check(s: &[char]) -> Option<Self> {
-        'outer: for res in Self::DISCRIMINANTS {
-            let res_chars: Vec<_> = res.as_str().chars().collect();
-            if res_chars.len() <= s.len() {
-                for i in 0..res_chars.len() {
-                    if res_chars[i].to_lowercase().ne(s[i].to_lowercase()) {
-                        continue 'outer;
+        Self::DISCRIMINANTS
+            .iter()
+            .find(|i| {
+                let i_chars: Vec<_> = i.as_str().chars().collect();
+                if is_item(&i_chars, s) {
+                    // For Reserved we need this check to separate Ident
+                    // (example: "be" is Reserved but "bed" is Ident)
+                    if i_chars.len() == s.len() || is_sep(s[i_chars.len()]) {
+                        return true;
                     }
                 }
-                // For Reserved we need this check to separate Ident
-                // (example: "be" is Reserved but "bed" is Ident)
-                if res_chars.len() == s.len() || is_sep(s[res_chars.len()]) {
-                    return Some(*res);
-                }
-            }
-        }
-        None
+                return false;
+            })
+            .cloned()
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AriOps {
     Add, // +
     Sub, // -
@@ -186,7 +188,7 @@ impl ToItem for AriOps {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelOps {
     Equal,        // ==
     NotEqual,     // !=
@@ -217,19 +219,27 @@ impl ToItem for RelOps {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ops {
     Ari(AriOps),
     Rel(RelOps),
 }
 
-type NumType = i64;
+impl Ops {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Ari(i) => i.as_str(),
+            Self::Rel(i) => i.as_str(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
     Key(Keywords),
     Inst(Insts),
     Ops(Ops),
-    Num(NumType),
+    Num(crate::types::IntType),
     Ident(String),
     Str(String),
     Semi,
@@ -290,9 +300,6 @@ impl Lexed {
             line: self.lines[loc.row - 1].clone(),
             loc: loc.clone(),
         }
-    }
-    pub fn iter(&self) -> impl Iterator<Item = &Token> {
-        self.tokens.iter()
     }
 }
 
@@ -408,10 +415,14 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         }
                         _ => {
                             let vs = &v[i..];
-                            if is_item(&"dices".chars().collect::<Vec<_>>(), vs) {
+                            let confirm_item = |len| len == vs.len() || is_sep(vs[len]);
+                            if is_item(&"dices".chars().collect::<Vec<_>>(), vs) && confirm_item(5)
+                            {
                                 i += 5;
                                 Item::Key(Keywords::Dice)
-                            } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs) {
+                            } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs)
+                                && confirm_item(5)
+                            {
                                 i += 5;
                                 Item::Key(Keywords::Face)
                             } else if let Some(res) = Keywords::check(vs) {
