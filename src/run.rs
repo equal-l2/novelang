@@ -6,6 +6,7 @@ use crate::parse::PrintArgs;
 use crate::parse::Program;
 use crate::types::IntType;
 
+/// prints expr and exit
 macro_rules! die {
     ($( $x:expr ),*) => {
         eprintln!($($x,)*);
@@ -15,6 +16,7 @@ macro_rules! die {
 
 type VarTable = std::collections::HashMap<String, Variable>;
 
+/// Represents a scope
 struct Scope {
     kind: ScopeKind,
     ret_idx: usize,
@@ -37,6 +39,7 @@ enum ScopeKind {
     Sub,
 }
 
+/// Represents the store for runtime state
 pub struct Runtime {
     stack: Vec<Scope>,
     globals: VarTable,
@@ -45,6 +48,10 @@ pub struct Runtime {
 
 impl Runtime {
     fn new() -> Self {
+        // internal variables
+        // (has special properties)
+        // - "_result": read-only variable for storing result of Input and Roll
+
         let internals = {
             let mut vt = VarTable::new();
             vt.insert(
@@ -56,6 +63,7 @@ impl Runtime {
             );
             vt
         };
+
         Self {
             stack: vec![],
             globals: VarTable::new(),
@@ -63,6 +71,8 @@ impl Runtime {
         }
     }
 
+    /// Declare a variable
+    /// Aborts when the variable is already declared in the scope
     fn decl_var(&mut self, name: &str, val: Variable) {
         let var_table = if self.stack.is_empty() {
             &mut self.globals
@@ -74,6 +84,8 @@ impl Runtime {
         }
     }
 
+    /// Modify a variable
+    /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
     fn modify_var(&mut self, name: &str, val: Typed) {
         let var = self.get_var_mut(name).unwrap_or_else(|| {
             die!("Runtime error: variable was not found");
@@ -92,10 +104,12 @@ impl Runtime {
         }
     }
 
+    /// Pop the current scope
     fn pop(&mut self) -> Option<Scope> {
         self.stack.pop()
     }
 
+    /// Push a new scope
     fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
         self.stack.push(Scope::new(kind, ret_idx))
     }
@@ -262,6 +276,7 @@ impl std::fmt::Display for EvalError {
     }
 }
 
+/// Represents the typed content of a variable
 #[derive(Debug, Clone)]
 enum Typed {
     Num(IntType),
