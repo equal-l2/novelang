@@ -1,7 +1,7 @@
 mod exprs;
 mod lex;
 mod parse;
-mod run;
+mod runtime;
 mod types;
 
 use structopt::StructOpt;
@@ -46,5 +46,5 @@ fn main() {
     eprintln!("{:?}", parsed.insts);
     eprintln!("Info: Load completed");
 
-    run::run(parsed);
+    runtime::run(parsed);
 }

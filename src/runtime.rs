@@ -1,3 +1,6 @@
+mod typed;
+mod variable;
+
 use std::io::Write;
 
 use crate::lex;
@@ -5,6 +8,9 @@ use crate::parse::Insts;
 use crate::parse::PrintArgs;
 use crate::parse::Program;
 use crate::types::IntType;
+
+use variable::*;
+use typed::Typed;
 
 /// prints expr and exit
 macro_rules! die {
@@ -56,10 +62,7 @@ impl Runtime {
             let mut vt = VarTable::new();
             vt.insert(
                 "_result".to_owned(),
-                Variable {
-                    is_mutable: true,
-                    value: Typed::Num(0),
-                },
+                Variable::new_mut(Typed::Num(0)),
             );
             vt
         };
@@ -87,20 +90,20 @@ impl Runtime {
     /// Modify a variable
     /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
     fn modify_var(&mut self, name: &str, val: Typed) {
+        // no check for internals as already done in the parse phase.
+
         let var = self.get_var_mut(name).unwrap_or_else(|| {
             die!("Runtime error: variable was not found");
         });
-        if var.is_mutable {
-            match (&var.value, &val) {
-                (Typed::Num(_), Typed::Num(_)) | (Typed::Bool(_), Typed::Bool(_)) => {
-                    var.value = val
-                }
-                _ => {
-                    die!("Runtime error: Type differs");
-                }
+
+        match var.modify(val) {
+            Ok(_) => {}
+            Err(ModifyError::TypeDiffers) => {
+                die!("Runtime error: Type differs");
             }
-        } else {
-            die!("Runtime error: variable {} is immutable", name);
+            Err(ModifyError::Immutable) => {
+                die!("Runtime error: variable {} is immutable", name);
+            }
         }
     }
 
@@ -130,10 +133,10 @@ impl Runtime {
 
     // get the highest variable in the stack with the specified name
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
-        self.vars_iter()           // Iterator<Item = &mut VarTable>
-            .map(|t| t.get(name))  // Iterator<Item = Option<&Variable>>
+        self.vars_iter() // Iterator<Item = &mut VarTable>
+            .map(|t| t.get(name)) // Iterator<Item = Option<&Variable>>
             .find(|v| v.is_some()) // Option<Option<&Variable>>
-            .flatten()             // Option<&Variable>
+            .flatten() // Option<&Variable>
     }
 
     fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
@@ -148,7 +151,7 @@ impl Runtime {
         use crate::lex::{AriOps, Ops, RelOps};
         let resolve_ident = |name: &str| {
             if let Some(v) = self.get_var(name) {
-                Ok(v.value.clone())
+                Ok(v.get().clone())
             } else {
                 Err(EvalError::VariableNotFound(name.to_owned()))
             }
@@ -188,10 +191,8 @@ impl Runtime {
                         let rhs_type = rhs.typename();
                         let typeerror = |op: &str| {
                             Err(EvalError::TypeError(format!(
-                                        "Operator \"{}\" cannot be applied to {}-{}",
-                                        op,
-                                        lhs_type,
-                                        rhs_type,
+                                "Operator \"{}\" cannot be applied to {}-{}",
+                                op, lhs_type, rhs_type,
                             )))
                         };
                         match (&lhs, &rhs) {
@@ -276,37 +277,6 @@ impl std::fmt::Display for EvalError {
     }
 }
 
-/// Represents the typed content of a variable
-#[derive(Debug, Clone)]
-enum Typed {
-    Num(IntType),
-    Bool(bool),
-}
-
-impl Typed {
-    fn unwrap_bool(&self) -> bool {
-        if let Typed::Bool(b) = self {
-            *b
-        } else {
-            die!("Runtime error: Bool expected, got Num");
-        }
-    }
-
-    fn unwrap_num(&self) -> IntType {
-        if let Typed::Num(n) = self {
-            *n
-        } else {
-            die!("Runtime error: Num expected, got Bool");
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Variable {
-    is_mutable: bool,
-    value: Typed,
-}
-
 fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[PrintArgs]) {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
@@ -362,6 +332,24 @@ fn get_int_input(prompt: Option<&str>) -> IntType {
     }
 }
 
+fn unwrap_bool(val: Typed) -> bool {
+    match val {
+        Typed::Bool(b) => b,
+        _ => {
+            die!("Runtime error: Bool expected, got Num");
+        }
+    }
+}
+
+fn unwrap_num(val: Typed) -> IntType {
+    match val {
+        Typed::Num(n) => n,
+        _ => {
+            die!("Runtime error: Num expected, got Bool");
+        }
+    }
+}
+
 pub fn run(prog: Program) {
     let mut wait = false;
     let mut runtime = Runtime::new();
@@ -394,29 +382,29 @@ pub fn run(prog: Program) {
                     breaking = false;
                     i += offset_to_end;
                 } else {
-                    match runtime
-                        .eval(cond)
-                        .unwrap_or_else(|e| {
-                            // FIXME
-                            die!("Runtime error: failed to eval condition of While : {}", e);
-                        })
-                        .unwrap_bool()
-                    {
+                    let val = runtime.eval(cond).unwrap_or_else(|e| {
+                        // FIXME
+                        die!("Runtime error: failed to eval condition of While : {}", e);
+                    });
+
+                    match unwrap_bool(val) {
                         true => runtime.push(ScopeKind::Loop, i),
                         false => i += offset_to_end,
                     }
                 }
             }
             Insts::Let { name, init, is_mut } => {
-                let init_var = Variable {
-                    is_mutable: *is_mut,
-                    value: runtime.eval(init).unwrap_or_else(|e| {
+                // there is no check for internals, as the check is done in the parse phase.
+                let init_val = runtime.eval(init).unwrap_or_else(|e| {
                         die!("Runtime error: Failed to eval init value of Let: {}", e);
-                    }),
-                };
-                runtime.decl_var(name, init_var);
+                    });
+                runtime.decl_var(name, match is_mut {
+                    true => Variable::new_mut(init_val),
+                    false => Variable::new(init_val),
+                });
             }
             Insts::Modify { name, expr } => {
+                // there is no check for internals, as the check is done in the parse phase.
                 let to_value = runtime.eval(expr).unwrap_or_else(|e| {
                     // FIXME
                     die!("Runtime error: Failed to eval value of Modify: {}", e);
@@ -430,14 +418,11 @@ pub fn run(prog: Program) {
                 // use a scope, but don't use a return address
                 // push a frame always to unify End behavior
                 runtime.push(ScopeKind::Branch, 0);
-                match runtime
-                    .eval(cond)
-                    .unwrap_or_else(|e| {
-                        // FIXME
-                        die!("Runtime error: Failed to eval condition of If: {}", e);
-                    })
-                    .unwrap_bool()
-                {
+                let val = runtime.eval(cond).unwrap_or_else(|e| {
+                    // FIXME
+                    die!("Runtime error: Failed to eval condition of If: {}", e);
+                });
+                match unwrap_bool(val) {
                     true => {
                         // go to body
                         // no-op
@@ -455,14 +440,11 @@ pub fn run(prog: Program) {
                 ..
             } => {
                 if if_eval {
-                    match runtime
-                        .eval(cond)
-                        .unwrap_or_else(|e| {
-                            // FIXME
-                            die!("Runtime error: Failed to eval condition of Elif: {}", e);
-                        })
-                        .unwrap_bool()
-                    {
+                    let val = runtime.eval(cond).unwrap_or_else(|e| {
+                        // FIXME
+                        die!("Runtime error: Failed to eval condition of Elif: {}", e);
+                    });
+                    match unwrap_bool(val) {
                         true => {
                             // don't push a frame
                             // since If pushed the one already
@@ -510,18 +492,12 @@ pub fn run(prog: Program) {
                 runtime.modify_var("_result", Typed::Num(get_int_input(prompt.as_deref())));
             }
             Insts::Roll { count, face } => {
-                let count = runtime
-                    .eval(count)
-                    .unwrap_or_else(|e| {
-                        die!("Runtime error: Failed to eval count of Roll: {}", e);
-                    })
-                    .unwrap_num();
-                let face = runtime
-                    .eval(face)
-                    .unwrap_or_else(|e| {
-                        die!("Runtime error: Failed to eval face of Roll: {}", e);
-                    })
-                    .unwrap_num();
+                let count = unwrap_num(runtime.eval(count).unwrap_or_else(|e| {
+                    die!("Runtime error: Failed to eval count of Roll: {}", e);
+                }));
+                let face = unwrap_num(runtime.eval(face).unwrap_or_else(|e| {
+                    die!("Runtime error: Failed to eval face of Roll: {}", e);
+                }));
 
                 if count <= 0 {
                     die!("Runtime error: Count for Roll must be a positive integer");
