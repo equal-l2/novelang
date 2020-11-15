@@ -1,4 +1,4 @@
-use crate::lex::{self, AriOps, Item, Ops, Token};
+use crate::lex::{self, AriOps, Items, Ops, Token};
 use crate::types::IntType;
 
 enum OpOrd<'a> {
@@ -86,16 +86,16 @@ impl Expr {
         let mut buf = vec![];
         for token in tks {
             match &token.item {
-                Item::Ident(_)
-                | Item::Num(_)
-                | Item::Key(lex::Keywords::True)
-                | Item::Key(lex::Keywords::False) => buf.push(token),
-                Item::LParen => stack.push(token),
-                Item::Ops(incoming) => {
+                Items::Ident(_)
+                | Items::Num(_)
+                | Items::Key(lex::Keywords::True)
+                | Items::Key(lex::Keywords::False) => buf.push(token),
+                Items::LParen => stack.push(token),
+                Items::Ops(incoming) => {
                     loop {
                         match stack.last() {
                             Some(Token {
-                                item: Item::Ops(op),
+                                item: Items::Ops(op),
                                 ..
                             }) if incoming > op => {
                                 buf.push(stack.pop().unwrap());
@@ -105,9 +105,9 @@ impl Expr {
                     }
                     stack.push(token);
                 }
-                Item::RParen => loop {
+                Items::RParen => loop {
                     if let Some(i) = stack.pop() {
-                        if i.item == Item::LParen {
+                        if i.item == Items::LParen {
                             break;
                         }
                         buf.push(i);
@@ -126,14 +126,14 @@ impl Expr {
             .chain(stack.into_iter().rev())
             .map(|tk| {
                 Ok(match &tk.item {
-                    Item::Ident(s) => RPNode::Ident(s.clone()),
-                    Item::Num(n) => RPNode::Num(*n),
-                    Item::Ops(op) => RPNode::Ops(op.clone()),
-                    Item::LParen => {
+                    Items::Ident(s) => RPNode::Ident(s.clone()),
+                    Items::Num(n) => RPNode::Num(*n),
+                    Items::Ops(op) => RPNode::Ops(op.clone()),
+                    Items::LParen => {
                         return Err(Error::NoPairParen(tk.clone()));
                     }
-                    Item::Key(lex::Keywords::True) => RPNode::Bool(true),
-                    Item::Key(lex::Keywords::False) => RPNode::Bool(false),
+                    Items::Key(lex::Keywords::True) => RPNode::Bool(true),
+                    Items::Key(lex::Keywords::False) => RPNode::Bool(false),
                     _ => unreachable!(tk),
                 })
             })

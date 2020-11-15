@@ -116,10 +116,10 @@ impl Runtime {
 
     // get the highest variable in the stack with the specified name
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
-        self.vars_iter()
-            .map(|t| t.get(name))
-            .find(|v| v.is_some())
-            .flatten()
+        self.vars_iter()           // Iterator<Item = &mut VarTable>
+            .map(|t| t.get(name))  // Iterator<Item = Option<&Variable>>
+            .find(|v| v.is_some()) // Option<Option<&Variable>>
+            .flatten()             // Option<&Variable>
     }
 
     fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
@@ -141,13 +141,13 @@ impl Runtime {
         };
         let list = &expr.content;
         match list.len() {
-            0 => return Err(EvalError::CorruptedExpr(expr.clone())),
+            0 => return Err(EvalError::InvalidExpr(expr.clone())),
             1 => {
                 return match list.last().unwrap() {
                     RPNode::Num(num) => Ok(Typed::Num(*num)),
                     RPNode::Bool(b) => Ok(Typed::Bool(*b)),
                     RPNode::Ident(name) => resolve_ident(name),
-                    _ => Err(EvalError::CorruptedExpr(expr.clone())),
+                    _ => Err(EvalError::InvalidExpr(expr.clone())),
                 }
             }
             _ => {}
@@ -164,14 +164,6 @@ impl Runtime {
                 Ok(v)
             }
         };
-        let typeerror = |lhs_t: &str, op: &lex::Ops, rhs_t: &str| {
-            Err(EvalError::TypeError(format!(
-                "Operator \"{}\" cannot be applied to {}-{}",
-                op.as_str(),
-                lhs_t,
-                rhs_t,
-            )))
-        };
         for n in list {
             if let RPNode::Ops(op) = n {
                 let rhs = stack.pop().map(wrap).transpose()?;
@@ -180,6 +172,14 @@ impl Runtime {
                     (Some(lhs), Some(rhs)) => {
                         let lhs_type = lhs.typename();
                         let rhs_type = rhs.typename();
+                        let typeerror = |op: &str| {
+                            Err(EvalError::TypeError(format!(
+                                        "Operator \"{}\" cannot be applied to {}-{}",
+                                        op,
+                                        lhs_type,
+                                        rhs_type,
+                            )))
+                        };
                         match (&lhs, &rhs) {
                             (RPNode::Num(lhs), RPNode::Num(rhs)) => stack.push(match op {
                                 Ops::Ari(op) => RPNode::Num(match op {
@@ -210,20 +210,17 @@ impl Runtime {
                             }),
                             (RPNode::Bool(lhs), RPNode::Bool(rhs)) => stack.push(match op {
                                 Ops::Rel(op) => RPNode::Bool(match op {
-                                    RelOps::LessThan => lhs < rhs,
-                                    RelOps::GreaterThan => lhs > rhs,
                                     RelOps::Equal => lhs == rhs,
                                     RelOps::NotEqual => lhs != rhs,
-                                    RelOps::LessEqual => lhs <= rhs,
-                                    RelOps::GreaterEqual => lhs >= rhs,
+                                    _ => return typeerror(lex::Item::as_str(op)),
                                 }),
-                                _ => return typeerror(lhs_type, op, rhs_type),
+                                _ => return typeerror(op.as_str()),
                             }),
-                            _ => return typeerror(lhs_type, op, rhs_type),
+                            _ => return typeerror(op.as_str()),
                         }
                     }
                     _ => {
-                        return Err(EvalError::CorruptedExpr(expr.clone()));
+                        return Err(EvalError::InvalidExpr(expr.clone()));
                     }
                 }
             } else {
@@ -231,12 +228,12 @@ impl Runtime {
             }
         }
         if stack.len() != 1 {
-            Err(EvalError::CorruptedExpr(expr.clone()))
+            Err(EvalError::InvalidExpr(expr.clone()))
         } else {
             match stack.last().unwrap() {
                 RPNode::Num(num) => Ok(Typed::Num(*num)),
                 RPNode::Bool(b) => Ok(Typed::Bool(*b)),
-                _ => Err(EvalError::CorruptedExpr(expr.clone())),
+                _ => Err(EvalError::InvalidExpr(expr.clone())),
             }
         }
     }
@@ -245,7 +242,7 @@ impl Runtime {
 #[derive(Debug)]
 enum EvalError {
     VariableNotFound(String),
-    CorruptedExpr(crate::exprs::Expr),
+    InvalidExpr(crate::exprs::Expr),
     OverFlow,
     ZeroDivision,
     TypeError(String),
@@ -256,7 +253,7 @@ impl std::fmt::Display for EvalError {
         write!(f, "Failed to eval because ")?;
         match self {
             Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
-            Self::CorruptedExpr(e) => write!(f, "expr {:?} is corrupted", e),
+            Self::InvalidExpr(e) => write!(f, "expr {:?} is invalid", e),
             Self::OverFlow => write!(f, "of overflow"),
             Self::ZeroDivision => write!(f, "of zero division"),
             Self::TypeError(s) => write!(f, "of type error : {}", s),
@@ -453,7 +450,7 @@ pub fn run(prog: Program) {
                     {
                         true => {
                             // don't push a frame
-                            // since If pushed one already
+                            // since If pushed the one already
                             if_eval = false;
                         }
                         false => {
@@ -469,7 +466,7 @@ pub fn run(prog: Program) {
             Insts::Else { offset_to_end, .. } => {
                 if if_eval {
                     // don't push a frame
-                    // since If pushed one already
+                    // since If pushed the one already
                     if_eval = false;
                 } else {
                     i += offset_to_end;
@@ -490,7 +487,7 @@ pub fn run(prog: Program) {
                         continue;
                     }
                     _ => {
-                        die!("Runtime error: index to return was not set");
+                        die!("Runtime error: scope stack is empty");
                     }
                 }
             }
@@ -534,10 +531,12 @@ pub fn run(prog: Program) {
                             ScopeKind::Sub => {
                                 break scope.ret_idx;
                             }
-                            _ => {}
+                            ScopeKind::Branch => {
+                                // break outer scope
+                            }
                         }
                     } else {
-                        die!("Scope stack is empty");
+                        die!("Runtime error: scope stack is empty");
                     }
                 };
                 continue;

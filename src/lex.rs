@@ -1,4 +1,4 @@
-trait ToItem
+pub trait Item
 where
     Self: Sized + Clone + 'static,
 {
@@ -58,7 +58,7 @@ pub enum Keywords {
     False,
 }
 
-impl ToItem for Keywords {
+impl Item for Keywords {
     const DISCRIMINANTS: &'static [Self] = &[
         Self::AsMut,
         Self::Be,
@@ -101,7 +101,7 @@ impl ToItem for Keywords {
     }
 }
 
-impl ToItem for Insts {
+impl Item for Insts {
     const DISCRIMINANTS: &'static [Self] = &[
         Self::Print,
         Self::Sub,
@@ -169,7 +169,7 @@ pub enum AriOps {
     Mod, // %
 }
 
-impl ToItem for AriOps {
+impl Item for AriOps {
     const DISCRIMINANTS: &'static [Self] = &[
         Self::Add, // +
         Self::Sub, // -
@@ -198,7 +198,7 @@ pub enum RelOps {
     GreaterThan,  // >
 }
 
-impl ToItem for RelOps {
+impl Item for RelOps {
     const DISCRIMINANTS: &'static [Self] = &[
         Self::Equal,        // ==
         Self::NotEqual,     // !=
@@ -235,7 +235,7 @@ impl Ops {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Item {
+pub enum Items {
     Key(Keywords),
     Inst(Insts),
     Ops(Ops),
@@ -257,7 +257,7 @@ pub struct Location {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub loc: Location,
-    pub item: Item,
+    pub item: Items,
 }
 
 impl std::fmt::Display for Token {
@@ -376,19 +376,19 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         }
                         ';' => {
                             i += 1;
-                            Item::Semi
+                            Items::Semi
                         }
                         ',' => {
                             i += 1;
-                            Item::Comma
+                            Items::Comma
                         }
                         '(' => {
                             i += 1;
-                            Item::LParen
+                            Items::LParen
                         }
                         ')' => {
                             i += 1;
-                            Item::RParen
+                            Items::RParen
                         }
                         '"' => {
                             i += 1;
@@ -411,7 +411,7 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                                 });
                             }
                             i += 1;
-                            Item::Str(s)
+                            Items::Str(s)
                         }
                         _ => {
                             let vs = &v[i..];
@@ -419,38 +419,38 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                             if is_item(&"dices".chars().collect::<Vec<_>>(), vs) && confirm_item(5)
                             {
                                 i += 5;
-                                Item::Key(Keywords::Dice)
+                                Items::Key(Keywords::Dice)
                             } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs)
                                 && confirm_item(5)
                             {
                                 i += 5;
-                                Item::Key(Keywords::Face)
+                                Items::Key(Keywords::Face)
                             } else if let Some(res) = Keywords::check(vs) {
                                 i += res.len();
-                                Item::Key(res)
+                                Items::Key(res)
                             } else if let Some(res) = Insts::check(vs) {
                                 i += res.len();
-                                Item::Inst(res)
+                                Items::Inst(res)
                             } else if let Some(res) = AriOps::check(vs) {
                                 i += res.len();
-                                Item::Ops(Ops::Ari(res))
+                                Items::Ops(Ops::Ari(res))
                             } else if let Some(res) = RelOps::check(vs) {
                                 i += res.len();
-                                Item::Ops(Ops::Rel(res))
+                                Items::Ops(Ops::Rel(res))
                             } else if v[i].is_numeric() {
                                 let mut s = String::new();
                                 while i < v.len() && v[i].is_numeric() {
                                     s.push(v[i]);
                                     i += 1;
                                 }
-                                Item::Num(s.parse().unwrap())
+                                Items::Num(s.parse().unwrap())
                             } else if is_ident_char(v[i]) {
                                 let mut s = String::new();
                                 while i < v.len() && is_ident_char(v[i]) {
                                     s.push(v[i]);
                                     i += 1;
                                 }
-                                Item::Ident(s)
+                                Items::Ident(s)
                             } else {
                                 eprintln!("{:?}", tks);
                                 return Err(Error {

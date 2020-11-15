@@ -13,10 +13,21 @@ struct Opt {
 
 fn main() {
     let opt = Opt::from_args();
-    let s = std::fs::read_to_string(opt.filename).unwrap_or_else(|e| {
-        eprintln!("File error: file could not be read : {}", e);
-        std::process::exit(1);
-    });
+    let s = if opt.filename == "-" {
+        use std::io::Read;
+        let mut s = String::new();
+        std::io::stdin().read_to_string(&mut s).unwrap_or_else(|e| {
+            eprintln!("Read error: failed to read stdin : {}", e);
+            std::process::exit(1);
+        });
+        s
+    } else {
+        let name = &opt.filename;
+        std::fs::read_to_string(name).unwrap_or_else(|e| {
+            eprintln!("Read error: failed to read file \"{}\" : {}", name, e);
+            std::process::exit(1);
+        })
+    };
 
     eprintln!("Info: Lexing");
     let lexed = match lex::lex(s) {
