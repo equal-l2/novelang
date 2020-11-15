@@ -95,7 +95,7 @@ impl Item for Keywords {
                         return true;
                     }
                 }
-                return false;
+                false
             })
             .cloned()
     }
@@ -154,7 +154,7 @@ impl Item for Insts {
                         return true;
                     }
                 }
-                return false;
+                false
             })
             .cloned()
     }
@@ -261,7 +261,7 @@ pub struct Token {
 }
 
 impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{{ {:?} ({},{}) }}",
@@ -283,7 +283,7 @@ pub struct LocInfo {
 }
 
 impl std::fmt::Display for LocInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let row = self.loc.row;
         let col = self.loc.col;
         writeln!(f, "     |")?;
@@ -304,7 +304,7 @@ impl Lexed {
 }
 
 impl std::fmt::Display for Lexed {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut i = 0;
         for idx in 0..self.lines.len() {
             writeln!(f, "{:4>} |{}", idx + 1, self.lines[idx])?;
@@ -333,7 +333,7 @@ enum ErrorKind {
 }
 
 impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
             ErrorKind::UnterminatedStr => write!(f, "String is not terminated")?,
             ErrorKind::UnexpectedChar(c) => write!(f, "Unexpected character '{}'", c)?,

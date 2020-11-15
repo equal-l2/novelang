@@ -9,11 +9,8 @@ enum OpOrd<'a> {
 impl<'a> From<&'a AriOps> for OpOrd<'a> {
     fn from(op: &'a AriOps) -> Self {
         match op {
-            AriOps::Add => Self::Add(op),
-            AriOps::Sub => Self::Add(op),
-            AriOps::Mul => Self::Mul(op),
-            AriOps::Div => Self::Mul(op),
-            AriOps::Mod => Self::Mul(op),
+            AriOps::Add | AriOps::Sub => Self::Add(op),
+            AriOps::Mul | AriOps::Div | AriOps::Mod => Self::Mul(op),
         }
     }
 }
@@ -22,17 +19,18 @@ impl<'a> From<&'a AriOps> for OpOrd<'a> {
 // The lesser precedes.
 use std::cmp::Ordering;
 impl PartialOrd for Ops {
-    fn partial_cmp(&self, other: &Ops) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self == other {
             Some(Ordering::Equal)
         } else {
             Some(match (self, other) {
                 (Self::Ari(this), Self::Ari(that)) => {
                     match (OpOrd::from(this), OpOrd::from(that)) {
-                        (OpOrd::Add(_), OpOrd::Add(_)) => Ordering::Equal,
+                        (OpOrd::Add(_), OpOrd::Add(_)) | (OpOrd::Mul(_), OpOrd::Mul(_)) => {
+                            Ordering::Equal
+                        }
                         (OpOrd::Add(_), OpOrd::Mul(_)) => Ordering::Greater,
                         (OpOrd::Mul(_), OpOrd::Add(_)) => Ordering::Less,
-                        (OpOrd::Mul(_), OpOrd::Mul(_)) => Ordering::Equal,
                     }
                 }
                 (Self::Ari(_), Self::Rel(_)) => Ordering::Less,
@@ -52,7 +50,7 @@ pub enum RPNode {
 }
 
 impl RPNode {
-    pub fn typename(&self) -> &str {
+    pub const fn typename(&self) -> &str {
         match self {
             Self::Bool(_) => "Bool",
             Self::Ident(_) => "Ident",
@@ -138,6 +136,6 @@ impl Expr {
                 })
             })
             .collect::<Result<_, _>>()?;
-        Ok(Expr { content })
+        Ok(Self { content })
     }
 }

@@ -1,16 +1,14 @@
 mod typed;
 mod variable;
 
-use std::io::Write;
-
 use crate::lex;
 use crate::parse::Insts;
 use crate::parse::PrintArgs;
 use crate::parse::Program;
 use crate::types::IntType;
 
-use variable::*;
 use typed::Typed;
+use variable::{ModifyError, Variable};
 
 /// prints expr and exit
 macro_rules! die {
@@ -60,10 +58,7 @@ impl Runtime {
 
         let internals = {
             let mut vt = VarTable::new();
-            vt.insert(
-                "_result".to_owned(),
-                Variable::new_mut(Typed::Num(0)),
-            );
+            vt.insert("_result".to_owned(), Variable::new_mut(Typed::Num(0)));
             vt
         };
 
@@ -135,14 +130,14 @@ impl Runtime {
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
         self.vars_iter() // Iterator<Item = &mut VarTable>
             .map(|t| t.get(name)) // Iterator<Item = Option<&Variable>>
-            .find(|v| v.is_some()) // Option<Option<&Variable>>
+            .find(Option::is_some) // Option<Option<&Variable>>
             .flatten() // Option<&Variable>
     }
 
     fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
         self.vars_iter_mut()
             .map(|t| t.get_mut(name))
-            .find(|v| v.is_some())
+            .find(Option::is_some)
             .flatten()
     }
 
@@ -242,14 +237,16 @@ impl Runtime {
                 stack.push(n.clone());
             }
         }
-        if stack.len() != 1 {
-            Err(EvalError::InvalidExpr(expr.clone()))
-        } else {
+
+        // check if expression is sound
+        if stack.len() == 1 {
             match stack.last().unwrap() {
                 RPNode::Num(num) => Ok(Typed::Num(*num)),
                 RPNode::Bool(b) => Ok(Typed::Bool(*b)),
                 _ => Err(EvalError::InvalidExpr(expr.clone())),
             }
+        } else {
+            Err(EvalError::InvalidExpr(expr.clone()))
         }
     }
 }
@@ -264,7 +261,7 @@ enum EvalError {
 }
 
 impl std::fmt::Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Failed to eval because ")?;
         match self {
             Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
@@ -278,6 +275,7 @@ impl std::fmt::Display for EvalError {
 }
 
 fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[PrintArgs]) {
+    use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
@@ -319,6 +317,7 @@ fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[PrintArgs]) {
 }
 
 fn get_int_input(prompt: Option<&str>) -> IntType {
+    use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
     loop {
@@ -333,20 +332,18 @@ fn get_int_input(prompt: Option<&str>) -> IntType {
 }
 
 fn unwrap_bool(val: Typed) -> bool {
-    match val {
-        Typed::Bool(b) => b,
-        _ => {
-            die!("Runtime error: Bool expected, got Num");
-        }
+    if let Typed::Bool(b) = val {
+        b
+    } else {
+        die!("Runtime error: Bool expected, got Num");
     }
 }
 
 fn unwrap_num(val: Typed) -> IntType {
-    match val {
-        Typed::Num(n) => n,
-        _ => {
-            die!("Runtime error: Num expected, got Bool");
-        }
+    if let Typed::Num(n) = val {
+        n
+    } else {
+        die!("Runtime error: Num expected, got Bool");
     }
 }
 
@@ -387,21 +384,26 @@ pub fn run(prog: Program) {
                         die!("Runtime error: failed to eval condition of While : {}", e);
                     });
 
-                    match unwrap_bool(val) {
-                        true => runtime.push(ScopeKind::Loop, i),
-                        false => i += offset_to_end,
+                    if unwrap_bool(val) {
+                        runtime.push(ScopeKind::Loop, i);
+                    } else {
+                        i += offset_to_end;
                     }
                 }
             }
             Insts::Let { name, init, is_mut } => {
                 // there is no check for internals, as the check is done in the parse phase.
                 let init_val = runtime.eval(init).unwrap_or_else(|e| {
-                        die!("Runtime error: Failed to eval init value of Let: {}", e);
-                    });
-                runtime.decl_var(name, match is_mut {
-                    true => Variable::new_mut(init_val),
-                    false => Variable::new(init_val),
+                    die!("Runtime error: Failed to eval init value of Let: {}", e);
                 });
+                runtime.decl_var(
+                    name,
+                    if *is_mut {
+                        Variable::new_mut(init_val)
+                    } else {
+                        Variable::new(init_val)
+                    },
+                );
             }
             Insts::Modify { name, expr } => {
                 // there is no check for internals, as the check is done in the parse phase.
@@ -422,16 +424,13 @@ pub fn run(prog: Program) {
                     // FIXME
                     die!("Runtime error: Failed to eval condition of If: {}", e);
                 });
-                match unwrap_bool(val) {
-                    true => {
-                        // go to body
-                        // no-op
-                    }
-                    false => {
-                        i += offset_to_next;
-                        if_eval = true;
-                        continue;
-                    }
+                if unwrap_bool(val) {
+                    // go to body
+                    // no-op
+                } else {
+                    i += offset_to_next;
+                    if_eval = true;
+                    continue;
                 }
             }
             Insts::ElIf {
@@ -444,16 +443,13 @@ pub fn run(prog: Program) {
                         // FIXME
                         die!("Runtime error: Failed to eval condition of Elif: {}", e);
                     });
-                    match unwrap_bool(val) {
-                        true => {
-                            // don't push a frame
-                            // since If pushed the one already
-                            if_eval = false;
-                        }
-                        false => {
-                            i += offset_to_next;
-                            continue;
-                        }
+                    if unwrap_bool(val) {
+                        // don't push a frame
+                        // since If pushed the one already
+                        if_eval = false;
+                    } else {
+                        i += offset_to_next;
+                        continue;
                     }
                 } else {
                     i += offset_to_next;

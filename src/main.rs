@@ -1,3 +1,14 @@
+#![warn(future_incompatible)]
+#![warn(rust_2018_compatibility)]
+#![warn(rust_2018_idioms)]
+#![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::fallible_impl_from)]
+#![allow(clippy::future_not_send)]
+#![allow(clippy::match_wildcard_for_single_variants)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::similar_names)]
+
 mod exprs;
 mod lex;
 mod parse;

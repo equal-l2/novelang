@@ -13,16 +13,16 @@ pub enum ModifyError {
 }
 
 impl Variable {
-    pub fn new(value: Typed) -> Self {
+    pub const fn new(value: Typed) -> Self {
         Self {
             is_mutable: false,
-            value
+            value,
         }
     }
-    pub fn new_mut(value: Typed) -> Self {
+    pub const fn new_mut(value: Typed) -> Self {
         Self {
             is_mutable: true,
-            value
+            value,
         }
     }
     pub fn modify(&mut self, to: Typed) -> Result<Typed, ModifyError> {
@@ -38,8 +38,7 @@ impl Variable {
         }
     }
 
-    pub fn get(&self) -> &Typed {
-        return &self.value;
+    pub const fn get(&self) -> &Typed {
+        &self.value
     }
 }
-
