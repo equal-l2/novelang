@@ -86,9 +86,23 @@ macro_rules! die_cont {
     };
 }
 
+// expects!("message here", Items::one | Items::another_option, index, ident_array);
 macro_rules! expects {
     ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
-        if $lexed.tokens.len() <= $i || !matches!(&$lexed.tokens[$i].item, $($pat)|+) {
+        if $lexed.tokens.len() <= $i {
+            // tokens are exhausted
+            let old_loc = &$lexed.tokens.last().unwrap().loc;
+            die!(
+                "Error: {}\n{}",
+                $msg,
+                $lexed.generate_loc_info(
+                    &lex::Location {
+                        row: old_loc.row,
+                        col: old_loc.col+1
+                    }
+                )
+            );
+        } else if !matches!(&$lexed.tokens[$i].item, $($pat)|+) {
             die_cont!($msg, $i, $lexed);
         }
         $i += 1;
