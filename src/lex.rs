@@ -419,36 +419,36 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         '"' => {
                             i += 1;
                             let mut s = String::new();
-                            while i < v.len() {
+                            loop {
+                                if i >= v.len() {
+                                    return Err(Error {
+                                        loc_info: LocInfo {
+                                            line: l.clone(),
+                                            loc,
+                                        },
+                                        kind: ErrorKind::UnterminatedStr,
+                                    });
+                                }
                                 if v[i] == '"' {
-                                    break;
+                                    i += 1;
+                                    break Items::Str(s);
                                 }
                                 s.push(v[i]);
                                 i += 1;
                             }
-                            if v[i] != '"' {
-                                let loc_info = LocInfo {
-                                    line: l.clone(),
-                                    loc,
-                                };
-                                return Err(Error {
-                                    loc_info,
-                                    kind: ErrorKind::UnterminatedStr,
-                                });
-                            }
-                            i += 1;
-                            Items::Str(s)
                         }
                         _ => {
                             let vs = &v[i..];
                             let confirm_item = |len| len == vs.len() || is_sep(vs[len]);
                             if is_item(&"dices".chars().collect::<Vec<_>>(), vs) && confirm_item(5)
                             {
+                                // convert "dices" to "dice"
                                 i += 5;
                                 Items::Key(Keywords::Dice)
                             } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs)
                                 && confirm_item(5)
                             {
+                                // convert "faces" to "face"
                                 i += 5;
                                 Items::Key(Keywords::Face)
                             } else if let Some(res) = Keywords::check(vs) {

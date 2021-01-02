@@ -86,7 +86,7 @@ macro_rules! die_cont {
     };
 }
 
-// expects!("message here", Items::one | Items::another_option, index, ident_array);
+// expects!("message here", SomeItem | AnotherItem, i, lexed);
 macro_rules! expects {
     ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
         if $lexed.tokens.len() <= $i {
@@ -109,14 +109,16 @@ macro_rules! expects {
     };
 }
 
+// parse tokens into expression
+// parse_expr!(EndItemOfExpr | AnotherEndOfExpr, i, tks, lexed)
 macro_rules! parse_expr {
-    ($($pat: pat)|+, $i: ident, $tks: ident, $lexed: ident) => {
+    ($($end_pat: pat)|+, $i: ident, $tks: ident, $lexed: ident) => {
         {
             let mut j = $i;
             while j < $tks.len()
                 && !matches!(
                     $tks[j].item,
-                    $($pat)|+
+                    $($end_pat)|+
                 )
             {
                 j += 1;

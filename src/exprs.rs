@@ -1,5 +1,7 @@
 use crate::lex::{self, AriOps, Items, Ops, Token};
-use crate::types::IntType;
+
+mod rp_node;
+pub use rp_node::RPNode as RPNode;
 
 enum OpOrd<'a> {
     Mul(&'a AriOps),
@@ -42,25 +44,6 @@ impl PartialOrd for Ops {
 }
 
 #[derive(Debug, Clone)]
-pub enum RPNode {
-    Bool(bool),
-    Ident(String),
-    Num(IntType),
-    Ops(Ops),
-}
-
-impl RPNode {
-    pub const fn typename(&self) -> &str {
-        match self {
-            Self::Bool(_) => "Bool",
-            Self::Ident(_) => "Ident",
-            Self::Num(_) => "Num",
-            Self::Ops(_) => "Ops",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Expr {
     pub content: Vec<RPNode>,
 }
@@ -79,6 +62,7 @@ impl Expr {
 
         //println!("{:?}", tks.iter().map(|t| &t.item).collect::<Vec<_>>());
 
+        // shunting-yard algorithm
         // http://www.gg.e-mansion.com/~kkatoh/program/novel2/novel208.html
         let mut stack = vec![];
         let mut buf = vec![];
