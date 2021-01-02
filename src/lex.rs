@@ -225,11 +225,22 @@ pub enum Ops {
     Rel(RelOps),
 }
 
-impl Ops {
-    pub fn as_str(&self) -> &str {
+impl Item for Ops {
+    const DISCRIMINANTS: &'static [Self] = &[];
+    fn as_str(&self) -> &str {
         match self {
             Self::Ari(i) => i.as_str(),
             Self::Rel(i) => i.as_str(),
+        }
+    }
+
+    fn check(s: &[char]) -> Option<Self> {
+        if let Some(i) = AriOps::check(s) {
+            Some(Self::Ari(i))
+        } else if let Some(i) = RelOps::check(s) {
+            Some(Self::Rel(i))
+        } else {
+            None
         }
     }
 }
@@ -239,13 +250,28 @@ pub enum Items {
     Key(Keywords),
     Inst(Insts),
     Ops(Ops),
-    Num(crate::types::IntType),
+    Num(crate::types::IntType, usize),
     Ident(String),
     Str(String),
     Semi,
     Comma,
     LParen,
     RParen,
+}
+
+impl Items {
+    pub fn len(&self) -> usize {
+        use Items::*;
+        match self {
+            Key(i) => i.len(),
+            Inst(i) => i.len(),
+            Ops(i) => i.len(),
+            Num(_, l) => *l,
+            Ident(i) => i.len(),
+            Str(i) => i.len(), //NOTE: is this right? (+2 may be required)
+            Semi | Comma | LParen | RParen => 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -431,19 +457,16 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                             } else if let Some(res) = Insts::check(vs) {
                                 i += res.len();
                                 Items::Inst(res)
-                            } else if let Some(res) = AriOps::check(vs) {
+                            } else if let Some(res) = Ops::check(vs) {
                                 i += res.len();
-                                Items::Ops(Ops::Ari(res))
-                            } else if let Some(res) = RelOps::check(vs) {
-                                i += res.len();
-                                Items::Ops(Ops::Rel(res))
+                                Items::Ops(res)
                             } else if v[i].is_numeric() {
                                 let mut s = String::new();
                                 while i < v.len() && v[i].is_numeric() {
                                     s.push(v[i]);
                                     i += 1;
                                 }
-                                Items::Num(s.parse().unwrap())
+                                Items::Num(s.parse().unwrap(), s.len())
                             } else if is_ident_char(v[i]) {
                                 let mut s = String::new();
                                 while i < v.len() && is_ident_char(v[i]) {

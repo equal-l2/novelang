@@ -85,7 +85,7 @@ impl Expr {
         for token in tks {
             match &token.item {
                 Items::Ident(_)
-                | Items::Num(_)
+                | Items::Num(_, _)
                 | Items::Key(lex::Keywords::True)
                 | Items::Key(lex::Keywords::False) => buf.push(token),
                 Items::LParen => stack.push(token),
@@ -125,7 +125,7 @@ impl Expr {
             .map(|tk| {
                 Ok(match &tk.item {
                     Items::Ident(s) => RPNode::Ident(s.clone()),
-                    Items::Num(n) => RPNode::Num(*n),
+                    Items::Num(n, _) => RPNode::Num(*n),
                     Items::Ops(op) => RPNode::Ops(op.clone()),
                     Items::LParen => {
                         return Err(Error::NoPairParen(tk.clone()));

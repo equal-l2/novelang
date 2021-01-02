@@ -7,6 +7,7 @@ use crate::parse::PrintArgs;
 use crate::parse::Program;
 use crate::types::IntType;
 
+use lex::Item;
 use typed::Typed;
 use variable::{ModifyError, Variable};
 
