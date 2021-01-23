@@ -54,12 +54,13 @@ pub struct Runtime {
 impl Runtime {
     fn new() -> Self {
         // internal variables
-        // (has special properties)
-        // - "_result": read-only variable for storing result of Input and Roll
+        // - "_result": stores result of Input and Roll
+        // - "_wait": flag if wait is enabled
 
         let internals = {
             let mut vt = VarTable::new();
             vt.insert("_result".to_owned(), Variable::new_mut(Typed::Num(0)));
+            vt.insert("_wait".to_owned(), Variable::new_mut(Typed::Bool(false)));
             vt
         };
 
@@ -332,24 +333,23 @@ fn get_int_input(prompt: Option<&str>) -> IntType {
     }
 }
 
-fn unwrap_bool(val: Typed) -> bool {
+fn unwrap_bool(val: &Typed) -> bool {
     if let Typed::Bool(b) = val {
-        b
+        *b
     } else {
         die!("Runtime error: Bool expected, got Num");
     }
 }
 
-fn unwrap_num(val: Typed) -> IntType {
+fn unwrap_num(val: &Typed) -> IntType {
     if let Typed::Num(n) = val {
-        n
+        *n
     } else {
         die!("Runtime error: Num expected, got Bool");
     }
 }
 
 pub fn run(prog: Program) {
-    let mut wait = false;
     let mut runtime = Runtime::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
@@ -359,7 +359,12 @@ pub fn run(prog: Program) {
     while i < prog.insts.len() {
         match &prog.insts[i] {
             Insts::Print { args } => {
-                exec_print(i, &runtime, wait, args);
+                exec_print(
+                    i,
+                    &runtime,
+                    unwrap_bool(runtime.get_var("_wait").unwrap().get()),
+                    args,
+                );
             }
             Insts::Sub { offset_to_end, .. } => {
                 i += offset_to_end;
@@ -385,7 +390,7 @@ pub fn run(prog: Program) {
                         die!("Runtime error: failed to eval condition of While : {}", e);
                     });
 
-                    if unwrap_bool(val) {
+                    if unwrap_bool(&val) {
                         runtime.push(ScopeKind::Loop, i);
                     } else {
                         i += offset_to_end;
@@ -425,7 +430,7 @@ pub fn run(prog: Program) {
                     // FIXME
                     die!("Runtime error: Failed to eval condition of If: {}", e);
                 });
-                if unwrap_bool(val) {
+                if unwrap_bool(&val) {
                     // go to body
                     // no-op
                 } else {
@@ -444,7 +449,7 @@ pub fn run(prog: Program) {
                         // FIXME
                         die!("Runtime error: Failed to eval condition of Elif: {}", e);
                     });
-                    if unwrap_bool(val) {
+                    if unwrap_bool(&val) {
                         // don't push a frame
                         // since If pushed the one already
                         if_eval = false;
@@ -489,10 +494,10 @@ pub fn run(prog: Program) {
                 runtime.modify_var("_result", Typed::Num(get_int_input(prompt.as_deref())));
             }
             Insts::Roll { count, face } => {
-                let count = unwrap_num(runtime.eval(count).unwrap_or_else(|e| {
+                let count = unwrap_num(&runtime.eval(count).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval count of Roll: {}", e);
                 }));
-                let face = unwrap_num(runtime.eval(face).unwrap_or_else(|e| {
+                let face = unwrap_num(&runtime.eval(face).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval face of Roll: {}", e);
                 }));
 
@@ -528,12 +533,6 @@ pub fn run(prog: Program) {
                     }
                 };
                 continue;
-            }
-            Insts::EnableWait => {
-                wait = true;
-            }
-            Insts::DisableWait => {
-                wait = false;
             }
             #[allow(unreachable_patterns)]
             other => {

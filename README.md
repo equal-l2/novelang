@@ -1,35 +1,50 @@
 # novelint
 
+> "<code><b>Let</b> there <b>be</b> light;</code>" That's, uh... God. I was quoting God.
+
 ## Syntax
 
-### Instructions
-- `print {String|Expr}[,{String|Expr}]*;` : print `String` or/and `Expr`
-- `call Ident;` : call a subroutine named `Ident`
-- `sub Ident;` : declare a subroutine named `Ident`
-- `while CompExpr;` : loop while `CompExpr` is satisfied
+```
+<program> ::= {<line>}
+<line>    ::= {<inst>} [<comment>] NL
+<comment> ::= "#" { CHAR }
+<inst>    ::= <print> | <sub> | <call> | <while> | <let>
+            | <modify> | <input> | <if> | <elif> | <else>
+            | <end> | <roll> | <halt> | <break>
+<print>   ::= "print" <print-args> ";"
+<sub>     ::= "sub" IDENT ";"
+<call>    ::= "call" IDENT ";"
+<while>   ::= "while" <expr> ";"
+<let>     ::= "let" IDENT "be" <expr> ["asmut"] ";"
+<modify>  ::= "modify" IDENT "to" <expr> ";"
+<input>   ::= "input" [<string>] ";"
+<if>      ::= "if" <expr> ";"
+<elif>    ::= "elif" <expr> ";"
+<else>    ::= "else" ";"
+<end>     ::= "end" ";"
+<roll>    ::= "roll" <expr> ("dice"|"dices") "with" <expr> ("face"|"faces") ";"
+<halt>    ::= "halt" ";"
+<break>   ::= "break" ";"
+```
+
+## Instructions
+- `print {String|Expr}[,{String|Expr}]*;` : print `String` or/and `Expr`.
+- `sub Ident;` : declare a subroutine named `Ident`.
+- `call Ident;` : call a subroutine named `Ident`.
+- `while CompExpr;` : loop while `CompExpr` is satisfied.
+- `let Ident be InitExpr [asmut];` : declare an ident named `Ident` using the value of `InitExpr`.
+- `modify Ident to Expr;` : modify the value of an ident named `Ident` to the value of `InitExpr`.
+- `input [prompt];` : get an input to `_result`.
+- `if expr / elif expr / else`
 - `end;` : ends anything started (e.g. `sub` and `while`)
+- `roll Expr1 dices with Expr2 faces;`
+- `halt` : halt execution.
+- `break`
 
 ## TODO
-- ~Implement call stack~
-    - ~Add `call`~
-    - ~Add `while` (implement using call stack?)~
-    - Add `break`
-    - Add `for`
-- Add arithmetic and comparison
-    - ~Add comparison operators~
-    - ~Add arithmetic operators~
-    - Add compound conditions
-        - Add `&&`
-        - Add `||`
-- ~Add conditionals~
-    - ~Add `if`~
-    - ~Add `else`~
-    - ~Add `elif`~
-- Add variable
-    - ~Add `let`
-    - ~Add `modify` (modify the value of variable)~
-    - Add `freeze`? (make the variable immutable)
-    - Add lateinit variable?
-    - Add `String` variable type
-- ~Implement return values~
-    - ~Add `NextInto`? (get return value of next line)~ (Superseded by variable `_result`)  
+- Add `for`
+- Add array type
+- Add compound conditions
+    - Add `&&`
+    - Add `||`
+- Add `String` variable type

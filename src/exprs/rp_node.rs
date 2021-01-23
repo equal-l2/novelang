@@ -1,5 +1,5 @@
-use crate::types::IntType;
 use crate::lex::Ops;
+use crate::types::IntType;
 
 #[derive(Debug, Clone)]
 pub enum RPNode {
@@ -19,4 +19,3 @@ impl RPNode {
         }
     }
 }
-

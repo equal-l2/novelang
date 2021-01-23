@@ -42,8 +42,6 @@ pub enum Insts {
     Roll,
     Halt,
     Break,
-    EnableWait,
-    DisableWait,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,8 +115,6 @@ impl Item for Insts {
         Self::Roll,
         Self::Halt,
         Self::Break,
-        Self::EnableWait,
-        Self::DisableWait,
     ];
 
     fn as_str(&self) -> &str {
@@ -137,8 +133,6 @@ impl Item for Insts {
             Self::Roll => "roll",
             Self::Halt => "halt",
             Self::Break => "break",
-            Self::EnableWait => "enablewait",
-            Self::DisableWait => "disablewait",
         }
     }
 

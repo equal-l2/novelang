@@ -13,7 +13,7 @@ sub 関数テスト2;
 print "これは関数内から関数を呼び出すテストだ。";
 end;
 
-enablewait;
+modify _wait to true;
 print "これはゲームの始まりだ。";
 print "いまのところ、君はただ続く文を読むことしかできない。";
 print "ただし関数を呼ぶことができるはずだ。";

@@ -1,7 +1,7 @@
 use crate::lex::{self, AriOps, Items, Ops, Token};
 
 mod rp_node;
-pub use rp_node::RPNode as RPNode;
+pub use rp_node::RPNode;
 
 enum OpOrd<'a> {
     Mul(&'a AriOps),

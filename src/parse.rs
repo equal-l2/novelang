@@ -54,8 +54,6 @@ pub enum Insts {
     Halt,
     Ill,
     Break,
-    EnableWait,
-    DisableWait,
 }
 
 #[derive(Debug, Clone)]
@@ -271,13 +269,6 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
-                        if name.starts_with('_') {
-                            die_cont!(
-                                "Identifier starts with _ is reserved and cannot be modified",
-                                i,
-                                lexed
-                            );
-                        }
 
                         expects!("To expected", Items::Key(Keywords::To), i, lexed);
 
@@ -437,16 +428,6 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     i += 1;
                     expects!("Semicolon expected", Items::Semi, i, lexed);
                     insts.push(Insts::Break)
-                }
-                lex::Insts::EnableWait => {
-                    i += 1;
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    insts.push(Insts::EnableWait)
-                }
-                lex::Insts::DisableWait => {
-                    i += 1;
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    insts.push(Insts::DisableWait)
                 }
             }
         } else {
