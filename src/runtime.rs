@@ -556,7 +556,7 @@ fn roll_dice(count: IntType, face: IntType) -> IntType {
     let mut sum = 0;
 
     for _ in 0..count {
-        sum += rng.gen_range(1, face + 1);
+        sum += rng.gen_range(1..=face);
     }
 
     sum
