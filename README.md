@@ -5,26 +5,26 @@
 ## Syntax
 
 ```
-<program> ::= {<line>}
-<line>    ::= {<inst>} [<comment>] NL
-<comment> ::= "#" { CHAR }
-<inst>    ::= <print> | <sub> | <call> | <while> | <let>
-            | <modify> | <input> | <if> | <elif> | <else>
-            | <end> | <roll> | <halt> | <break>
-<print>   ::= "print" <print-args> ";"
-<sub>     ::= "sub" IDENT ";"
-<call>    ::= "call" IDENT ";"
-<while>   ::= "while" <expr> ";"
-<let>     ::= "let" IDENT "be" <expr> ["asmut"] ";"
-<modify>  ::= "modify" IDENT "to" <expr> ";"
-<input>   ::= "input" [<string>] ";"
-<if>      ::= "if" <expr> ";"
-<elif>    ::= "elif" <expr> ";"
-<else>    ::= "else" ";"
-<end>     ::= "end" ";"
-<roll>    ::= "roll" <expr> ("dice"|"dices") "with" <expr> ("face"|"faces") ";"
-<halt>    ::= "halt" ";"
-<break>   ::= "break" ";"
+<program>    ::= {<line>}
+<line>       ::= {<inst>} ["#" { CHAR }] NL
+<inst>       ::= <print> | <sub> | <call> | <while> | <let>
+               | <modify> | <input> | <if> | <elif> | <else>
+               | <end> | <roll> | <halt> | <break>
+<print>      ::= "print" <print-args> ";"
+<print-args> ::= (<expr> | <string>) {"," (<expr> | <string>)}
+<sub>        ::= "sub" IDENT ";"
+<call>       ::= "call" IDENT ";"
+<while>      ::= "while" <expr> ";"
+<let>        ::= "let" IDENT "be" <expr> ["asmut"] ";"
+<modify>     ::= "modify" IDENT "to" <expr> ";"
+<input>      ::= "input" [<string>] ";"
+<if>         ::= "if" <expr> ";"
+<elif>       ::= "elif" <expr> ";"
+<else>       ::= "else" ";"
+<end>        ::= "end" ";"
+<roll>       ::= "roll" <expr> ("dice"|"dices") "with" <expr> ("face"|"faces") ";"
+<halt>       ::= "halt" ";"
+<break>      ::= "break" ";"
 ```
 
 ## Instructions
