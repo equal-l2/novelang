@@ -1,14 +1,12 @@
-mod typed;
 mod variable;
 
-use crate::lex;
 use crate::parse::Insts;
 use crate::parse::PrintArgs;
 use crate::parse::Program;
 use crate::types::IntType;
 
-use lex::Item;
-use typed::Typed;
+use crate::exprs;
+use crate::types::Typed;
 use variable::{ModifyError, Variable};
 
 /// prints expr and exit
@@ -49,6 +47,12 @@ pub struct Runtime {
     stack: Vec<Scope>,
     globals: VarTable,
     internals: VarTable,
+}
+
+impl crate::exprs::VarsMap for Runtime {
+    fn get(&self, name: &str) -> Option<&Typed> {
+        self.get_var(name).map(Variable::get)
+    }
 }
 
 impl Runtime {
@@ -143,136 +147,8 @@ impl Runtime {
             .flatten()
     }
 
-    fn eval(&self, expr: &crate::exprs::Expr) -> Result<Typed, EvalError> {
-        use crate::exprs::RPNode;
-        use crate::lex::{AriOps, Ops, RelOps};
-        let resolve_ident = |name: &str| {
-            if let Some(v) = self.get_var(name) {
-                Ok(v.get().clone())
-            } else {
-                Err(EvalError::VariableNotFound(name.to_owned()))
-            }
-        };
-        let list = &expr.content;
-        match list.len() {
-            0 => return Err(EvalError::InvalidExpr(expr.clone())),
-            1 => {
-                return match list.last().unwrap() {
-                    RPNode::Num(num) => Ok(Typed::Num(*num)),
-                    RPNode::Bool(b) => Ok(Typed::Bool(*b)),
-                    RPNode::Ident(name) => resolve_ident(name),
-                    _ => Err(EvalError::InvalidExpr(expr.clone())),
-                }
-            }
-            _ => {}
-        };
-
-        let mut stack = vec![];
-        let wrap = |v| {
-            if let RPNode::Ident(name) = v {
-                resolve_ident(&name).map(|v| match v {
-                    Typed::Num(n) => RPNode::Num(n),
-                    Typed::Bool(b) => RPNode::Bool(b),
-                })
-            } else {
-                Ok(v)
-            }
-        };
-        for n in list {
-            if let RPNode::Ops(op) = n {
-                let rhs = stack.pop().map(wrap).transpose()?;
-                let lhs = stack.pop().map(wrap).transpose()?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => {
-                        let lhs_type = lhs.typename();
-                        let rhs_type = rhs.typename();
-                        let typeerror = |op: &str| {
-                            Err(EvalError::TypeError(format!(
-                                "Operator \"{}\" cannot be applied to {}-{}",
-                                op, lhs_type, rhs_type,
-                            )))
-                        };
-                        match (&lhs, &rhs) {
-                            (RPNode::Num(lhs), RPNode::Num(rhs)) => stack.push(match op {
-                                Ops::Ari(op) => RPNode::Num(match op {
-                                    AriOps::Add => {
-                                        lhs.checked_add(*rhs).ok_or(EvalError::OverFlow)?
-                                    }
-                                    AriOps::Sub => {
-                                        lhs.checked_sub(*rhs).ok_or(EvalError::OverFlow)?
-                                    }
-                                    AriOps::Mul => {
-                                        lhs.checked_mul(*rhs).ok_or(EvalError::OverFlow)?
-                                    }
-                                    AriOps::Div => {
-                                        lhs.checked_div(*rhs).ok_or(EvalError::ZeroDivision)?
-                                    }
-                                    AriOps::Mod => {
-                                        lhs.checked_rem(*rhs).ok_or(EvalError::OverFlow)?
-                                    }
-                                }),
-                                Ops::Rel(op) => RPNode::Bool(match op {
-                                    RelOps::LessThan => lhs < rhs,
-                                    RelOps::GreaterThan => lhs > rhs,
-                                    RelOps::Equal => lhs == rhs,
-                                    RelOps::NotEqual => lhs != rhs,
-                                    RelOps::LessEqual => lhs <= rhs,
-                                    RelOps::GreaterEqual => lhs >= rhs,
-                                }),
-                            }),
-                            (RPNode::Bool(lhs), RPNode::Bool(rhs)) => stack.push(match op {
-                                Ops::Rel(op) => RPNode::Bool(match op {
-                                    RelOps::Equal => lhs == rhs,
-                                    RelOps::NotEqual => lhs != rhs,
-                                    _ => return typeerror(lex::Item::as_str(op)),
-                                }),
-                                _ => return typeerror(op.as_str()),
-                            }),
-                            _ => return typeerror(op.as_str()),
-                        }
-                    }
-                    _ => {
-                        return Err(EvalError::InvalidExpr(expr.clone()));
-                    }
-                }
-            } else {
-                stack.push(n.clone());
-            }
-        }
-
-        // check if expression is sound
-        if stack.len() == 1 {
-            match stack.last().unwrap() {
-                RPNode::Num(num) => Ok(Typed::Num(*num)),
-                RPNode::Bool(b) => Ok(Typed::Bool(*b)),
-                _ => Err(EvalError::InvalidExpr(expr.clone())),
-            }
-        } else {
-            Err(EvalError::InvalidExpr(expr.clone()))
-        }
-    }
-}
-
-#[derive(Debug)]
-enum EvalError {
-    VariableNotFound(String),
-    InvalidExpr(crate::exprs::Expr),
-    OverFlow,
-    ZeroDivision,
-    TypeError(String),
-}
-
-impl std::fmt::Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to eval because ")?;
-        match self {
-            Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
-            Self::InvalidExpr(e) => write!(f, "expr {:?} is invalid", e),
-            Self::OverFlow => write!(f, "of overflow"),
-            Self::ZeroDivision => write!(f, "of zero division"),
-            Self::TypeError(s) => write!(f, "of type error : {}", s),
-        }?;
-        Ok(())
+    fn eval(&self, expr: &exprs::Expr) -> Result<Typed, exprs::EvalError> {
+        expr.eval_on(self)
     }
 }
 

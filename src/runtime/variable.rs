@@ -1,4 +1,4 @@
-use crate::runtime::typed::Typed;
+use crate::types::Typed;
 
 #[derive(Debug, Clone)]
 pub struct Variable {
