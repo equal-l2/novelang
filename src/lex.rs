@@ -280,6 +280,16 @@ pub struct Token {
     pub item: Items,
 }
 
+impl Token {
+    pub fn next_col_loc(&self) -> Location {
+        let loc = &self.loc;
+        Location {
+            row: loc.row,
+            col: loc.col + self.item.len(),
+        }
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

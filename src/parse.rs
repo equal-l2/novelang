@@ -89,16 +89,11 @@ macro_rules! expects {
     ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
         if $lexed.tokens.len() <= $i {
             // tokens are exhausted
-            let old_loc = &$lexed.tokens.last().unwrap().loc;
+            let last_token = &$lexed.tokens.last().unwrap();
             die!(
                 "Error: {}\n{}",
                 $msg,
-                $lexed.generate_loc_info(
-                    &lex::Location {
-                        row: old_loc.row,
-                        col: old_loc.col+1
-                    }
-                )
+                $lexed.generate_loc_info(&last_token.next_col_loc())
             );
         } else if !matches!(&$lexed.tokens[$i].item, $($pat)|+) {
             die_cont!($msg, $i, $lexed);
