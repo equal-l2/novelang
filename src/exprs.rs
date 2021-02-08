@@ -19,7 +19,7 @@ impl<'a> From<&'a AriOps> for OpOrd<'a> {
 }
 
 // Order by precedence
-// The lesser precedes.
+// The greater precedes.
 use std::cmp::Ordering;
 impl PartialOrd for Ops {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -32,12 +32,12 @@ impl PartialOrd for Ops {
                         (OpOrd::Add(_), OpOrd::Add(_)) | (OpOrd::Mul(_), OpOrd::Mul(_)) => {
                             Ordering::Equal
                         }
-                        (OpOrd::Add(_), OpOrd::Mul(_)) => Ordering::Greater,
-                        (OpOrd::Mul(_), OpOrd::Add(_)) => Ordering::Less,
+                        (OpOrd::Add(_), OpOrd::Mul(_)) => Ordering::Less, // "+" < "*"
+                        (OpOrd::Mul(_), OpOrd::Add(_)) => Ordering::Greater, // "*" > "+"
                     }
                 }
-                (Self::Ari(_), Self::Rel(_)) => Ordering::Less,
-                (Self::Rel(_), Self::Ari(_)) => Ordering::Greater,
+                (Self::Ari(_), Self::Rel(_)) => Ordering::Greater, // "+" > "<="
+                (Self::Rel(_), Self::Ari(_)) => Ordering::Less,
                 (Self::Rel(_), Self::Rel(_)) => Ordering::Equal,
             })
         }
@@ -88,33 +88,36 @@ impl Expr {
             return Err(Error::EmptyExpr);
         }
 
-        //println!("{:?}", tks.iter().map(|t| &t.item).collect::<Vec<_>>());
+        //eprintln!(
+        //    "Expr from: {:?}",
+        //    tks.iter().map(|tk| &tk.item).collect::<Vec<_>>()
+        //);
 
         // shunting-yard algorithm
-        // http://www.gg.e-mansion.com/~kkatoh/program/novel2/novel208.html
-        let mut stack = vec![];
-        let mut buf = vec![];
+        // https://en.wikipedia.org/w/index.php?title=Shunting-yard_algorithm&oldid=1002380861
+        let mut stack: Vec<&Token> = vec![];
+        let mut buf: Vec<&Token> = vec![];
         for token in tks {
             match &token.item {
                 Items::Ident(_)
                 | Items::Num(_, _)
                 | Items::Key(lex::Keywords::True)
                 | Items::Key(lex::Keywords::False) => buf.push(token),
-                Items::LParen => stack.push(token),
                 Items::Ops(incoming) => {
                     loop {
                         match stack.last() {
-                            Some(Token {
-                                item: Items::Ops(op),
-                                ..
-                            }) if incoming > op => {
-                                buf.push(stack.pop().unwrap());
-                            }
-                            _ => break,
+                            Some(Token { item, .. }) => match item {
+                                Items::Ops(op) if incoming <= op => {
+                                    buf.push(stack.pop().unwrap());
+                                }
+                                _ => break,
+                            },
+                            None => break,
                         }
                     }
                     stack.push(token);
                 }
+                Items::LParen => stack.push(token),
                 Items::RParen => loop {
                     if let Some(i) = stack.pop() {
                         if i.item == Items::LParen {
@@ -148,6 +151,9 @@ impl Expr {
                 })
             })
             .collect::<Result<_, _>>()?;
+
+        //eprintln!("Expr to: {:?}", content);
+
         Ok(Self { content })
     }
 
