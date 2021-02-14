@@ -2,15 +2,9 @@ use crate::exprs::{self, Expr};
 use crate::lex;
 
 #[derive(Debug, Clone)]
-pub enum PrintArgs {
-    Str(String),
-    Expr(Expr),
-}
-
-#[derive(Debug, Clone)]
 pub enum Insts {
     Print {
-        args: Vec<PrintArgs>,
+        args: Vec<Expr>,
     },
     Sub {
         name: String,
@@ -117,16 +111,27 @@ macro_rules! parse_expr {
                 j += 1;
             }
             let expr = Expr::from_tokens(&$tks[$i..j]).unwrap_or_else(|e| {
-                use exprs::Error;
+                use exprs::ParseError;
                 match e {
-                    Error::EmptyExpr => {
+                    ParseError::EmptyExpr => {
                         die_cont!("Expr is empty", $i, $lexed);
                     }
-                    Error::InvalidToken(tk) => {
+                    ParseError::InvalidToken(tk) => {
                         die!("Error: {}\n{}", "Failed to parse expr because of this token", $lexed.generate_loc_info(&tk.loc));
                     }
-                    Error::NoPairParen(tk) => {
+                    ParseError::NoPairParen(tk) => {
                         die!("Error: {}\n{}", "This paren doesn't have its pair", $lexed.generate_loc_info(&tk.loc));
+                    }
+                    ParseError::InvalidExpr(opt) => match opt {
+                        Some(tk) => {
+                            die!("Error: {}\n{}", "Something is wrong in this expression because of this token", $lexed.generate_loc_info(&tk.loc));
+                        }
+                        None => {
+                            die_cont!("Something is wrong in this expression", $i, $lexed);
+                        }
+                    }
+                    ParseError::NodeExhausted => {
+                        die_cont!("Expression abruptly ended", $i, $lexed);
                     }
                 }
             });
@@ -155,16 +160,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             Items::Comma => {
                                 i += 1;
                             }
-                            Items::Str(s) => {
-                                args.push(PrintArgs::Str(s.clone()));
-                                i += 1;
-                            }
-                            _ => args.push(PrintArgs::Expr(parse_expr!(
-                                Items::Comma | Items::Semi,
-                                i,
-                                tks,
-                                lexed
-                            ))),
+                            _ => args.push(parse_expr!(Items::Comma | Items::Semi, i, tks, lexed)),
                         }
                     }
 

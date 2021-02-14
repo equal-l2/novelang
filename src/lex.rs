@@ -374,7 +374,9 @@ impl std::fmt::Display for Error {
     }
 }
 
-const RESERVED_CHARS: &[char] = &['+', '-', '*', '/', '%', '"', '<', '>', '!', '=', ';', ',', '(', ')'];
+const RESERVED_CHARS: &[char] = &[
+    '+', '-', '*', '/', '%', '"', '<', '>', '!', '=', ';', ',', '(', ')',
+];
 
 fn is_ident_char(c: char) -> bool {
     !c.is_whitespace() && !RESERVED_CHARS.contains(&c)

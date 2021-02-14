@@ -1,7 +1,6 @@
 mod variable;
 
 use crate::parse::Insts;
-use crate::parse::PrintArgs;
 use crate::parse::Program;
 use crate::types::IntType;
 
@@ -152,24 +151,20 @@ impl Runtime {
     }
 }
 
-fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[PrintArgs]) {
+fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[exprs::Expr]) {
     use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
     write!(lock, "{:04} :", idx).unwrap();
     for arg in args {
-        match arg {
-            PrintArgs::Str(i) => write!(lock, " {}", i),
-            PrintArgs::Expr(i) => {
-                match runtime.eval(i).unwrap_or_else(|e| {
-                    // FIXME
-                    die!("Runtime error: Failed to eval arg of Print: {:?}", e);
-                }) {
-                    Typed::Num(n) => write!(lock, " {}", n),
-                    Typed::Bool(b) => write!(lock, " {}", b),
-                }
-            }
+        let val = arg.eval_on(runtime).unwrap_or_else(|e| {
+            die!("Runtime error: Failed to eval arg of Print: {:?}", e);
+        });
+        match val {
+            Typed::Num(n) => write!(lock, " {}", n),
+            Typed::Bool(b) => write!(lock, " {}", b),
+            Typed::Str(s) => write!(lock, " {}", s),
         }
         .unwrap();
     }

@@ -9,11 +9,8 @@ end;
 
 let i be 0 asmut;
 
-while 1==1;
+while i < 10;
     print i;
     call test;
     modify i to i+1;
-    if i >= 10;
-        break;
-    end;
 end;
