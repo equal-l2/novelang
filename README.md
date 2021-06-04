@@ -19,7 +19,7 @@
 <modify>     ::= "modify" IDENT "to" <expr> ";"
 <input>      ::= "input" [<string>] ";"
 <if>         ::= "if" <expr> ";"
-<elif>       ::= "elif" <expr> ";"
+<elif>       ::= "else" "if" <expr> ";"
 <else>       ::= "else" ";"
 <end>        ::= "end" ";"
 <roll>       ::= "roll" <expr> ("dice"|"dices") "with" <expr> ("face"|"faces") ";"
@@ -35,7 +35,7 @@
 - `let Ident be InitExpr [asmut];` : declare an ident named `Ident` using the value of `InitExpr`.
 - `modify Ident to Expr;` : modify the value of an ident named `Ident` to the value of `InitExpr`.
 - `input [prompt];` : get an input to `_result`.
-- `if expr / elif expr / else`
+- `if expr / else if expr / else`
 - `end;` : ends anything started (e.g. `sub` and `while`)
 - `roll Expr1 dices with Expr2 faces;`
 - `halt` : halt execution.

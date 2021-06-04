@@ -1,3 +1,4 @@
+/// Trait for token items
 pub trait Item
 where
     Self: Sized + Clone + 'static,
@@ -6,13 +7,15 @@ where
 
     fn as_str(&self) -> &str;
 
-    fn check(s: &[char]) -> Option<Self> {
+    /// Parse a char slice to `Item`.
+    fn parse_slice(s: &[char]) -> Option<Self> {
         Self::DISCRIMINANTS
             .iter()
             .find(|i| is_item(&i.as_str().chars().collect::<Vec<_>>(), s))
             .cloned()
     }
 
+    /// Return the length of token in its string form
     fn len(&self) -> usize {
         self.as_str().len()
     }
@@ -36,7 +39,6 @@ pub enum Insts {
     Modify,
     Input,
     If,
-    ElIf,
     Else,
     End,
     Roll,
@@ -81,7 +83,7 @@ impl Item for Keywords {
         }
     }
 
-    fn check(s: &[char]) -> Option<Self> {
+    fn parse_slice(s: &[char]) -> Option<Self> {
         Self::DISCRIMINANTS
             .iter()
             .find(|i| {
@@ -109,7 +111,6 @@ impl Item for Insts {
         Self::Modify,
         Self::Input,
         Self::If,
-        Self::ElIf,
         Self::Else,
         Self::End,
         Self::Roll,
@@ -127,7 +128,6 @@ impl Item for Insts {
             Self::Modify => "modify",
             Self::Input => "input",
             Self::If => "if",
-            Self::ElIf => "elif",
             Self::Else => "else",
             Self::End => "end",
             Self::Roll => "roll",
@@ -136,7 +136,7 @@ impl Item for Insts {
         }
     }
 
-    fn check(s: &[char]) -> Option<Self> {
+    fn parse_slice(s: &[char]) -> Option<Self> {
         Self::DISCRIMINANTS
             .iter()
             .find(|i| {
@@ -228,10 +228,10 @@ impl Item for Ops {
         }
     }
 
-    fn check(s: &[char]) -> Option<Self> {
-        if let Some(i) = AriOps::check(s) {
+    fn parse_slice(s: &[char]) -> Option<Self> {
+        if let Some(i) = AriOps::parse_slice(s) {
             Some(Self::Ari(i))
-        } else if let Some(i) = RelOps::check(s) {
+        } else if let Some(i) = RelOps::parse_slice(s) {
             Some(Self::Rel(i))
         } else {
             None
@@ -457,13 +457,13 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                                 // convert "faces" to "face"
                                 i += 5;
                                 Items::Key(Keywords::Face)
-                            } else if let Some(res) = Keywords::check(vs) {
+                            } else if let Some(res) = Keywords::parse_slice(vs) {
                                 i += res.len();
                                 Items::Key(res)
-                            } else if let Some(res) = Insts::check(vs) {
+                            } else if let Some(res) = Insts::parse_slice(vs) {
                                 i += res.len();
                                 Items::Inst(res)
-                            } else if let Some(res) = Ops::check(vs) {
+                            } else if let Some(res) = Ops::parse_slice(vs) {
                                 i += res.len();
                                 Items::Ops(res)
                             } else if v[i].is_numeric() {

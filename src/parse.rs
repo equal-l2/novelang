@@ -82,7 +82,7 @@ macro_rules! die_cont {
 macro_rules! expects {
     ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
         if $lexed.tokens.len() <= $i {
-            // tokens are exhausted
+            // tokens has been exhausted
             let last_token = &$lexed.tokens.last().unwrap();
             die!(
                 "Error: {}\n{}",
@@ -152,6 +152,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
         if let Items::Inst(inst) = &tks[i].item {
             match inst {
                 lex::Insts::Print => {
+                    // "Print" (expr {"," expr}) ";"
                     i += 1;
                     let mut args = Vec::new();
                     while i < tks.len() {
@@ -168,11 +169,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     insts.push(Insts::Print { args })
                 }
                 lex::Insts::Sub => {
+                    // "Sub" name ";"
+
                     i += 1;
-                    // check if the Sub is nested (which is not allowed)
+                    // check if the Sub is nested (which is not allowed yet)
                     if let Some(top) = waits_end_stack.last() {
                         if let Insts::Sub { .. } = top.kind {
-                            die_cont!("Nested Sub is not allowed", i, lexed);
+                            die_cont!("Nested Sub is not allowed yet", i, lexed);
                         }
                     }
 
@@ -197,6 +200,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }
                 lex::Insts::Call => {
+                    // "Call" name ";"
+
                     i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -207,6 +212,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }
                 lex::Insts::While => {
+                    // "While" cond ";"
+
                     i += 1;
                     let inst_obj = Insts::While {
                         cond: parse_expr!(Items::Semi, i, tks, lexed),
@@ -220,6 +227,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     insts.push(inst_obj);
                 }
                 lex::Insts::Let => {
+                    // "Let" name "Be" expr ("AsMut") ";"
+
                     i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -257,6 +266,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }
                 lex::Insts::Modify => {
+                    // "Modify" name "To" expr ";"
+
                     i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -275,6 +286,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }
                 lex::Insts::If => {
+                    // "If" cond ";"
+
                     i += 1;
 
                     let cond = parse_expr!(Items::Semi, i, tks, lexed);
@@ -290,71 +303,84 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     });
                     insts.push(inst_obj);
                 }
-                lex::Insts::ElIf => {
-                    let prev = waits_end_stack.pop().unwrap_or_else(|| {
-                        die_cont!("A stray ElIf detected.", i, lexed);
-                    });
-
-                    let offset_to_next = insts.len() - prev.index;
-                    insts[prev.index] = match prev.kind {
-                        Insts::If { cond, .. } => Insts::If {
-                            cond: cond.clone(),
-                            offset_to_next,
-                        },
-                        Insts::ElIf { cond, .. } => Insts::ElIf {
-                            cond: cond.clone(),
-                            offset_to_next,
-                        },
-                        _ => {
-                            die_cont!("Cannot find corresponding Element for ElIf", i, lexed);
-                        }
-                    };
-
-                    i += 1;
-
-                    let cond = parse_expr!(Items::Semi, i, tks, lexed);
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-
-                    let inst_obj = Insts::ElIf {
-                        cond,
-                        offset_to_next: 0,
-                    };
-                    waits_end_stack.push(WaitsEnd {
-                        kind: inst_obj.clone(),
-                        index: insts.len(),
-                    });
-                    insts.push(inst_obj);
-                }
                 lex::Insts::Else => {
+                    // "Else" ("If" cond) ";"
                     i += 1;
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    let prev = waits_end_stack.pop().unwrap_or_else(|| {
-                        die_cont!("A stray Else detected.", i, lexed);
-                    });
-                    let offset_to_next = insts.len() - prev.index;
-                    insts[prev.index] = match prev.kind {
-                        Insts::If { cond, .. } => Insts::If {
-                            cond: cond.clone(),
-                            offset_to_next,
-                        },
-                        Insts::ElIf { cond, .. } => Insts::ElIf {
-                            cond: cond.clone(),
-                            offset_to_next,
-                        },
-                        _ => {
-                            die_cont!("Cannot find corresponding Element for Else", i, lexed);
-                        }
+
+                    let inst_obj = if let Items::Inst(lex::Insts::If) = &tks[i].item {
+                        // "Else" "If" cond ";"
+                        let prev = waits_end_stack.pop().unwrap_or_else(|| {
+                            die_cont!("A stray Else-If detected.", i, lexed);
+                        });
+
+                        let offset_to_next = insts.len() - prev.index;
+                        insts[prev.index] = match prev.kind {
+                            Insts::If { cond, .. } => Insts::If {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            Insts::ElIf { cond, .. } => Insts::ElIf {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            _ => {
+                                die_cont!(
+                                    "Cannot find corresponding Element for Else-If",
+                                    i,
+                                    lexed
+                                );
+                            }
+                        };
+
+                        i += 1;
+
+                        let cond = parse_expr!(Items::Semi, i, tks, lexed);
+                        expects!("Semicolon expected", Items::Semi, i, lexed);
+
+                        let inst_obj = Insts::ElIf {
+                            cond,
+                            offset_to_next: 0,
+                        };
+                        waits_end_stack.push(WaitsEnd {
+                            kind: inst_obj.clone(),
+                            index: insts.len(),
+                        });
+                        inst_obj
+                    } else {
+                        // "Else" ";"
+                        expects!("Semicolon expected", Items::Semi, i, lexed);
+                        let prev = waits_end_stack.pop().unwrap_or_else(|| {
+                            die_cont!("A stray Else detected.", i, lexed);
+                        });
+                        let offset_to_next = insts.len() - prev.index;
+                        insts[prev.index] = match prev.kind {
+                            Insts::If { cond, .. } => Insts::If {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            Insts::ElIf { cond, .. } => Insts::ElIf {
+                                cond: cond.clone(),
+                                offset_to_next,
+                            },
+                            _ => {
+                                die_cont!("Cannot find corresponding Element for Else", i, lexed);
+                            }
+                        };
+                        let inst_obj = Insts::Else { offset_to_end: 0 };
+                        waits_end_stack.push(WaitsEnd {
+                            kind: inst_obj.clone(),
+                            index: insts.len(),
+                        });
+                        inst_obj
                     };
-                    let inst_obj = Insts::Else { offset_to_end: 0 };
-                    waits_end_stack.push(WaitsEnd {
-                        kind: inst_obj.clone(),
-                        index: insts.len(),
-                    });
                     insts.push(inst_obj);
                 }
                 lex::Insts::End => {
+                    // "End" ";"
                     i += 1;
                     expects!("Semicolon expected", Items::Semi, i, lexed);
+
+                    // Pop stack and assign end index
                     let start = waits_end_stack.pop().unwrap_or_else(|| {
                         die_cont!("A stray End detected.", i, lexed);
                     });
@@ -385,6 +411,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     insts.push(Insts::End);
                 }
                 lex::Insts::Input => {
+                    // "Input" (prompt) ";"
                     i += 1;
                     insts.push(Insts::Input {
                         prompt: if let Items::Str(prompt) = &tks[i].item {
@@ -397,6 +424,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     expects!("Semicolon expected", Items::Semi, i, lexed);
                 }
                 lex::Insts::Roll => {
+                    // "Roll" n "Dice" "With" k "Face" ";"
                     i += 1;
 
                     let count = parse_expr!(Items::Key(Keywords::Dice), i, tks, lexed);
@@ -411,11 +439,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     insts.push(Insts::Roll { count, face });
                 }
                 lex::Insts::Halt => {
+                    // "Halt" ";"
                     i += 1;
                     expects!("Semicolon expected", Items::Semi, i, lexed);
                     insts.push(Insts::Halt)
                 }
                 lex::Insts::Break => {
+                    // "Break" ";"
                     i += 1;
                     expects!("Semicolon expected", Items::Semi, i, lexed);
                     insts.push(Insts::Break)
