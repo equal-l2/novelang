@@ -63,8 +63,10 @@ struct WaitsEnd {
 
 macro_rules! die {
     ($( $x:expr ),*) => {
-        eprintln!($($x,)*);
-        std::process::exit(1);
+        {
+            eprintln!($($x,)*);
+            std::process::exit(1)
+        }
     }
 }
 
@@ -74,25 +76,34 @@ macro_rules! die_cont {
             "Error: {}\n{}",
             $msg,
             $lexed.generate_loc_info(&$lexed.tokens[$i].loc)
-        );
+        )
     };
 }
 
 // expects!("message here", SomeItem | AnotherItem, i, lexed);
 macro_rules! expects {
     ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
-        if $lexed.tokens.len() <= $i {
-            // tokens has been exhausted
-            let last_token = &$lexed.tokens.last().unwrap();
-            die!(
-                "Error: {}\n{}",
-                $msg,
-                $lexed.generate_loc_info(&last_token.next_col_loc())
-            );
-        } else if !matches!(&$lexed.tokens[$i].item, $($pat)|+) {
-            die_cont!($msg, $i, $lexed);
+        {
+            if $lexed.tokens.len() <= $i {
+                // tokens has been exhausted
+                let last_token = &$lexed.tokens.last().unwrap();
+                die!(
+                    "Error: {}\n{}",
+                    $msg,
+                    $lexed.generate_loc_info(&last_token.next_col_loc())
+                );
+            } else if !matches!(&$lexed.tokens[$i].item, $($pat)|+) {
+                die_cont!($msg, $i, $lexed);
+            }
+            $i += 1;
         }
-        $i += 1;
+    }
+}
+
+// expects_semi!(i, lexed);
+macro_rules! expects_semi {
+    ($i: ident, $lexed: ident) => {
+        expects!("Semicolon expected", Items::Semi, $i, $lexed);
     };
 }
 
@@ -141,6 +152,14 @@ macro_rules! parse_expr {
     }
 }
 
+macro_rules! parse_inst {
+    ($i: ident, $insts: ident, $proc: block) => {{
+        $i += 1;
+        let inst_obj = $proc;
+        $insts.push(inst_obj);
+    }};
+}
+
 pub fn parse(lexed: crate::lex::Lexed) -> Program {
     use lex::{Items, Keywords};
     let mut insts = vec![Insts::Ill];
@@ -151,9 +170,8 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
     while i < tks.len() {
         if let Items::Inst(inst) = &tks[i].item {
             match inst {
-                lex::Insts::Print => {
+                lex::Insts::Print => parse_inst!(i, insts, {
                     // "Print" (expr {"," expr}) ";"
-                    i += 1;
                     let mut args = Vec::new();
                     while i < tks.len() {
                         match &tks[i].item {
@@ -164,14 +182,12 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             _ => args.push(parse_expr!(Items::Comma | Items::Semi, i, tks, lexed)),
                         }
                     }
-
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    insts.push(Insts::Print { args })
-                }
-                lex::Insts::Sub => {
+                    expects_semi!(i, lexed);
+                    Insts::Print { args }
+                }),
+                lex::Insts::Sub => parse_inst!(i, insts, {
                     // "Sub" name ";"
 
-                    i += 1;
                     // check if the Sub is nested (which is not allowed yet)
                     if let Some(top) = waits_end_stack.last() {
                         if let Insts::Sub { .. } = top.kind {
@@ -182,7 +198,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     // register the sub to the name table
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
-                        expects!("Semicolon expected", Items::Semi, i, lexed);
+                        expects_semi!(i, lexed);
                         if subs.insert(name.clone(), insts.len()).is_some() {
                             die_cont!("Conflicting subroutine name", i, lexed);
                         }
@@ -194,42 +210,38 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             kind: inst_obj.clone(),
                             index: insts.len(),
                         });
-                        insts.push(inst_obj);
+                        inst_obj
                     } else {
-                        die_cont!("Expected subroutine name", i, lexed);
+                        die_cont!("Expected subroutine name", i, lexed)
                     }
-                }
-                lex::Insts::Call => {
+                }),
+                lex::Insts::Call => parse_inst!(i, insts, {
                     // "Call" name ";"
-
-                    i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
-                        expects!("Semicolon expected", Items::Semi, i, lexed);
-                        insts.push(Insts::Call { name: name.clone() });
+                        expects_semi!(i, lexed);
+                        Insts::Call { name: name.clone() }
                     } else {
-                        die_cont!("Expected subroutine name", i, lexed);
+                        die_cont!("Expected subroutine name", i, lexed)
                     }
-                }
-                lex::Insts::While => {
+                }),
+                lex::Insts::While => parse_inst!(i, insts, {
                     // "While" cond ";"
-
-                    i += 1;
                     let inst_obj = Insts::While {
                         cond: parse_expr!(Items::Semi, i, tks, lexed),
                         offset_to_end: 0,
                     };
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
+                    expects_semi!(i, lexed);
                     waits_end_stack.push(WaitsEnd {
                         kind: inst_obj.clone(),
                         index: insts.len(),
                     });
-                    insts.push(inst_obj);
-                }
-                lex::Insts::Let => {
+                    inst_obj
+                }),
+
+                lex::Insts::Let => parse_inst!(i, insts, {
                     // "Let" name "Be" expr ("AsMut") ";"
 
-                    i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
                         if name.starts_with('_') {
@@ -249,49 +261,48 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
 
                         let is_mut = {
                             if tks[i - 1].item == Items::Key(Keywords::AsMut) {
-                                expects!("Semicolon expected", Items::Semi, i, lexed);
+                                expects_semi!(i, lexed);
                                 true
                             } else {
                                 false
                             }
                         };
 
-                        insts.push(Insts::Let {
+                        Insts::Let {
                             name: name.clone(),
                             init,
                             is_mut,
-                        });
+                        }
                     } else {
-                        die_cont!("Ident expected", i, lexed);
+                        die_cont!("Ident expected", i, lexed)
                     }
-                }
-                lex::Insts::Modify => {
+                }),
+
+                lex::Insts::Modify => parse_inst!(i, insts, {
                     // "Modify" name "To" expr ";"
 
-                    i += 1;
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
 
                         expects!("To expected", Items::Key(Keywords::To), i, lexed);
 
                         let expr = parse_expr!(Items::Semi, i, tks, lexed);
-                        expects!("Semicolon expected", Items::Semi, i, lexed);
+                        expects_semi!(i, lexed);
 
-                        insts.push(Insts::Modify {
+                        Insts::Modify {
                             name: name.clone(),
                             expr,
-                        });
+                        }
                     } else {
                         die_cont!("Ident expected", i, lexed);
                     }
-                }
-                lex::Insts::If => {
+                }),
+
+                lex::Insts::If => parse_inst!(i, insts, {
                     // "If" cond ";"
 
-                    i += 1;
-
                     let cond = parse_expr!(Items::Semi, i, tks, lexed);
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
+                    expects_semi!(i, lexed);
 
                     let inst_obj = Insts::If {
                         cond,
@@ -301,11 +312,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         kind: inst_obj.clone(),
                         index: insts.len(),
                     });
-                    insts.push(inst_obj);
-                }
-                lex::Insts::Else => {
+                    inst_obj
+                }),
+
+                lex::Insts::Else => parse_inst!(i, insts, {
                     // "Else" ("If" cond) ";"
-                    i += 1;
 
                     let inst_obj = if let Items::Inst(lex::Insts::If) = &tks[i].item {
                         // "Else" "If" cond ";"
@@ -335,20 +346,15 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         i += 1;
 
                         let cond = parse_expr!(Items::Semi, i, tks, lexed);
-                        expects!("Semicolon expected", Items::Semi, i, lexed);
+                        expects_semi!(i, lexed);
 
-                        let inst_obj = Insts::ElIf {
+                        Insts::ElIf {
                             cond,
                             offset_to_next: 0,
-                        };
-                        waits_end_stack.push(WaitsEnd {
-                            kind: inst_obj.clone(),
-                            index: insts.len(),
-                        });
-                        inst_obj
+                        }
                     } else {
                         // "Else" ";"
-                        expects!("Semicolon expected", Items::Semi, i, lexed);
+                        expects_semi!(i, lexed);
                         let prev = waits_end_stack.pop().unwrap_or_else(|| {
                             die_cont!("A stray Else detected.", i, lexed);
                         });
@@ -366,19 +372,20 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 die_cont!("Cannot find corresponding Element for Else", i, lexed);
                             }
                         };
-                        let inst_obj = Insts::Else { offset_to_end: 0 };
-                        waits_end_stack.push(WaitsEnd {
-                            kind: inst_obj.clone(),
-                            index: insts.len(),
-                        });
-                        inst_obj
+                        Insts::Else { offset_to_end: 0 }
                     };
-                    insts.push(inst_obj);
-                }
-                lex::Insts::End => {
+
+                    waits_end_stack.push(WaitsEnd {
+                        kind: inst_obj.clone(),
+                        index: insts.len(),
+                    });
+
+                    inst_obj
+                }),
+
+                lex::Insts::End => parse_inst!(i, insts, {
                     // "End" ";"
-                    i += 1;
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
+                    expects_semi!(i, lexed);
 
                     // Pop stack and assign end index
                     let start = waits_end_stack.pop().unwrap_or_else(|| {
@@ -408,24 +415,25 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         }
                     };
 
-                    insts.push(Insts::End);
-                }
-                lex::Insts::Input => {
+                    Insts::End
+                }),
+
+                lex::Insts::Input => parse_inst!(i, insts, {
                     // "Input" (prompt) ";"
-                    i += 1;
-                    insts.push(Insts::Input {
+                    let obj = Insts::Input {
                         prompt: if let Items::Str(prompt) = &tks[i].item {
                             i += 1;
                             Some(prompt.clone())
                         } else {
                             None
                         },
-                    });
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                }
-                lex::Insts::Roll => {
+                    };
+                    expects_semi!(i, lexed);
+                    obj
+                }),
+
+                lex::Insts::Roll => parse_inst!(i, insts, {
                     // "Roll" n "Dice" "With" k "Face" ";"
-                    i += 1;
 
                     let count = parse_expr!(Items::Key(Keywords::Dice), i, tks, lexed);
                     expects!("\"Dice\" expected", Items::Key(Keywords::Dice), i, lexed);
@@ -435,21 +443,21 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     let face = parse_expr!(Items::Key(Keywords::Face), i, tks, lexed);
                     expects!("\"Face\" expected", Items::Key(Keywords::Face), i, lexed);
 
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    insts.push(Insts::Roll { count, face });
-                }
-                lex::Insts::Halt => {
+                    expects_semi!(i, lexed);
+                    Insts::Roll { count, face }
+                }),
+
+                lex::Insts::Halt => parse_inst!(i, insts, {
                     // "Halt" ";"
-                    i += 1;
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    insts.push(Insts::Halt)
-                }
-                lex::Insts::Break => {
+                    expects_semi!(i, lexed);
+                    Insts::Halt
+                }),
+
+                lex::Insts::Break => parse_inst!(i, insts, {
                     // "Break" ";"
-                    i += 1;
-                    expects!("Semicolon expected", Items::Semi, i, lexed);
-                    insts.push(Insts::Break)
-                }
+                    expects_semi!(i, lexed);
+                    Insts::Break
+                }),
             }
         } else {
             die_cont!("Line must begin with Inst", i, lexed);
