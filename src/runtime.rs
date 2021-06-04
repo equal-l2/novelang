@@ -1,20 +1,11 @@
 mod variable;
 
-use crate::parse::Insts;
-use crate::parse::Program;
-use crate::types::IntType;
-
+use crate::die;
 use crate::exprs;
-use crate::types::Typed;
-use variable::{ModifyError, Variable};
+use crate::parse::{Insts, Program};
+use crate::types::{IntType, Typed};
 
-/// prints expr and exit
-macro_rules! die {
-    ($( $x:expr ),*) => {
-        eprintln!($($x,)*);
-        std::process::exit(1);
-    }
-}
+use variable::{ModifyError, Variable};
 
 type VarTable = std::collections::HashMap<String, Variable>;
 

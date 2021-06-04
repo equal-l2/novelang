@@ -17,6 +17,16 @@ mod types;
 
 use structopt::StructOpt;
 
+#[macro_export]
+macro_rules! die {
+    ($( $x:expr ),*) => {
+        {
+            eprintln!($($x,)*);
+            std::process::exit(1)
+        }
+    }
+}
+
 #[derive(StructOpt)]
 struct Opt {
     filename: String,
@@ -27,17 +37,14 @@ fn main() {
     let s = if opt.filename == "-" {
         use std::io::Read;
         let mut s = String::new();
-        std::io::stdin().read_to_string(&mut s).unwrap_or_else(|e| {
-            eprintln!("Read error: failed to read stdin : {}", e);
-            std::process::exit(1);
-        });
+        std::io::stdin()
+            .read_to_string(&mut s)
+            .unwrap_or_else(|e| die!("Read error: failed to read stdin : {}", e));
         s
     } else {
         let name = &opt.filename;
-        std::fs::read_to_string(name).unwrap_or_else(|e| {
-            eprintln!("Read error: failed to read file \"{}\" : {}", name, e);
-            std::process::exit(1);
-        })
+        std::fs::read_to_string(name)
+            .unwrap_or_else(|e| die!("Read error: failed to read file \"{}\" : {}", name, e))
     };
 
     eprintln!("Info: Lexing");
@@ -46,10 +53,7 @@ fn main() {
             eprintln!("Lexed:\n{}", i);
             i
         }
-        Err(e) => {
-            eprintln!("Syntax Error: {}", e);
-            std::process::exit(1);
-        }
+        Err(e) => die!("Syntax Error: {}", e),
     };
 
     eprintln!("Info: Parsing");

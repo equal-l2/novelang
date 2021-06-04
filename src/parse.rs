@@ -1,5 +1,6 @@
 use crate::exprs::{self, Expr};
 use crate::lex;
+use crate::die;
 
 #[derive(Debug, Clone)]
 pub enum Insts {
@@ -59,15 +60,6 @@ pub struct Program {
 struct WaitsEnd {
     kind: Insts,
     index: usize,
-}
-
-macro_rules! die {
-    ($( $x:expr ),*) => {
-        {
-            eprintln!($($x,)*);
-            std::process::exit(1)
-        }
-    }
 }
 
 macro_rules! die_cont {
