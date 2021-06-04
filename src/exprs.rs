@@ -18,12 +18,12 @@ pub enum EvalError {
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Failed to eval because ")?;
-        Ok(match self {
+        match self {
             Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
             Self::OverFlow => write!(f, "of overflow"),
             Self::ZeroDivision => write!(f, "of zero division"),
             Self::TypeError(s) => write!(f, "of type error: {}", s),
-        }?)
+        }
     }
 }
 

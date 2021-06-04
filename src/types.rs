@@ -23,9 +23,9 @@ impl std::ops::Neg for Typed {
     type Output = Self;
     fn neg(self) -> Self {
         match self {
-            Typed::Num(n) => Typed::Num(-n),
-            Typed::Bool(b) => Typed::Bool(!b),
-            Typed::Str(s) => Typed::Str(s.chars().rev().collect()),
+            Self::Num(n) => Self::Num(-n),
+            Self::Bool(b) => Self::Bool(!b),
+            Self::Str(s) => Self::Str(s.chars().rev().collect()),
         }
     }
 }

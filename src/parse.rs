@@ -1,6 +1,6 @@
+use crate::die;
 use crate::exprs::{self, Expr};
 use crate::lex;
-use crate::die;
 
 #[derive(Debug, Clone)]
 pub enum Insts {

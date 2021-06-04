@@ -101,14 +101,15 @@ impl<'a> FromTokens<'a> for Node {
         T: Iterator<Item = &'a Token>,
     {
         use lex::{AriOps, Ops};
-        match tks.peek() {
-            Some(Token {
-                item: Items::Ops(Ops::Ari(op)),
-                ..
-            }) => match op {
+        if let Some(Token {
+            item: Items::Ops(Ops::Ari(op)),
+            ..
+        }) = tks.peek()
+        {
+            match op {
                 AriOps::Add | AriOps::Sub => {
                     let _ = tks.next().unwrap();
-                    let operand = Node::from_tokens(tks);
+                    let operand = Self::from_tokens(tks);
                     match op {
                         AriOps::Add => Self::Plus(Box::new(operand)),
                         AriOps::Sub => Self::Minus(Box::new(operand)),
@@ -116,11 +117,10 @@ impl<'a> FromTokens<'a> for Node {
                     }
                 }
                 _ => todo!("{:?}", op),
-            },
-            _ => {
-                let operand = Core::from_tokens(tks);
-                Self::Single(operand)
             }
+        } else {
+            let operand = Core::from_tokens(tks);
+            Self::Single(operand)
         }
     }
 }
