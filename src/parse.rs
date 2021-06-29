@@ -113,7 +113,7 @@ macro_rules! parse_expr {
             {
                 j += 1;
             }
-            let expr = Expr::from_tokens(&$tks[$i..j]).unwrap_or_else(|e| {
+            let expr = Expr::try_from_tokens(&$tks[$i..j]).unwrap_or_else(|e| {
                 use exprs::ParseError;
                 match e {
                     ParseError::EmptyExpr => {
@@ -122,18 +122,13 @@ macro_rules! parse_expr {
                     ParseError::InvalidToken(tk) => {
                         die!("Error: {}\n{}", "Failed to parse expr because of this token", $lexed.generate_loc_info(&tk.loc));
                     }
-                    ParseError::NoPairParen(tk) => {
+                    ParseError::NoPairParen{ lparen: tk } => {
                         die!("Error: {}\n{}", "This paren doesn't have its pair", $lexed.generate_loc_info(&tk.loc));
                     }
-                    ParseError::InvalidExpr(opt) => match opt {
-                        Some(tk) => {
-                            die!("Error: {}\n{}", "Something is wrong in this expression because of this token", $lexed.generate_loc_info(&tk.loc));
-                        }
-                        None => {
-                            die_cont!("Something is wrong in this expression", $i, $lexed);
-                        }
+                    ParseError::TrailingToken{from:tk} => {
+                        die!("Error: {}\n{}", "Trailing token from here", $lexed.generate_loc_info(&tk.loc));
                     }
-                    ParseError::NodeExhausted => {
+                    ParseError::TokenExhausted => {
                         die_cont!("Expression abruptly ended", $i, $lexed);
                     }
                 }

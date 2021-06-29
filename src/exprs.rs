@@ -35,17 +35,27 @@ pub struct Expr {
 pub enum ParseError {
     InvalidToken(Token),
     EmptyExpr,
-    NoPairParen(Token),
-    InvalidExpr(Option<Token>),
-    NodeExhausted,
+    NoPairParen { lparen: Token },
+    TrailingToken { from: Token },
+    TokenExhausted,
 }
 
 impl Expr {
-    pub fn from_tokens(tks: &[Token]) -> Result<Self, ParseError> {
-        use parse::FromTokens;
-        Ok(Self {
-            content: items::Rel::from_tokens(&mut tks.iter().peekable()),
-        })
+    pub fn try_from_tokens(tks: &[Token]) -> Result<Self, ParseError> {
+        use parse::TryFromTokens;
+        if tks.len() == 0 {
+            return Err(ParseError::EmptyExpr);
+        }
+
+        let mut it = tks.iter().peekable();
+
+        let expr = items::Rel::try_from_tokens(&mut it)?;
+
+        if let Some(tk) = it.next() {
+            return Err(ParseError::TrailingToken { from: tk.clone() });
+        }
+
+        Ok(Self { content: expr })
     }
 
     pub fn eval_on<T: eval::VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {

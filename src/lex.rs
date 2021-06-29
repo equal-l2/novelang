@@ -496,5 +496,6 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
             }
         }
     }
+
     Ok(Lexed { lines, tokens: tks })
 }
