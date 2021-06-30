@@ -156,6 +156,7 @@ fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[exprs::Expr]) {
             Typed::Num(n) => write!(lock, " {}", n),
             Typed::Bool(b) => write!(lock, " {}", b),
             Typed::Str(s) => write!(lock, " {}", s),
+            _ => unimplemented!()
         }
         .unwrap();
     }
@@ -199,7 +200,7 @@ fn unwrap_bool(val: &Typed) -> bool {
     if let Typed::Bool(b) = val {
         *b
     } else {
-        die!("Runtime error: Bool expected, got Num");
+        die!("Runtime error: Bool expected, got {}", val.typename());
     }
 }
 
@@ -207,7 +208,15 @@ fn unwrap_num(val: &Typed) -> IntType {
     if let Typed::Num(n) = val {
         *n
     } else {
-        die!("Runtime error: Num expected, got Bool");
+        die!("Runtime error: Num expected, got {}", val.typename());
+    }
+}
+
+fn unwrap_sub(val: &Typed) -> usize {
+    if let Typed::Sub(n) = val {
+        *n
+    } else {
+        die!("Runtime error: Sub expected, got {}", val.typename());
     }
 }
 
@@ -228,13 +237,19 @@ pub fn run(prog: Program) {
                     args,
                 );
             }
-            Insts::Sub { offset_to_end, .. } => {
+            Insts::Sub { name, offset_to_end } => {
+                runtime.decl_var(name, Variable::new(Typed::Sub(i)));
                 i += offset_to_end;
             }
             Insts::Call { name } => {
-                if let Some(idx) = prog.subs.get(name) {
+                if let Some(idx) = runtime.get_var(name) {
+                    let idx = unwrap_sub(idx.get());
+
+                    // register address to return (the next line)
                     runtime.push(ScopeKind::Sub, i + 1);
-                    i = *idx;
+
+                    // jump to the address of the sub
+                    i = idx;
                 } else {
                     die!("Runtime error: function \"{}\" was not found", name);
                 }
@@ -244,6 +259,7 @@ pub fn run(prog: Program) {
                 offset_to_end,
             } => {
                 if breaking {
+                    // break was fired, jump to the End
                     breaking = false;
                     i += offset_to_end;
                 } else {
@@ -253,14 +269,17 @@ pub fn run(prog: Program) {
                     });
 
                     if unwrap_bool(&val) {
+                        // condition was met, push a scope
+                        // when reached to end, pop the scope and come here
                         runtime.push(ScopeKind::Loop, i);
                     } else {
+                        // condition wasn't met, jump to the End
                         i += offset_to_end;
                     }
                 }
             }
             Insts::Let { name, init, is_mut } => {
-                // there is no check for internals, as the check is done in the parse phase.
+                // no check for internals, as already checked in the parse phase.
                 let init_val = runtime.eval(init).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval init value of Let: {}", e);
                 });
@@ -274,7 +293,7 @@ pub fn run(prog: Program) {
                 );
             }
             Insts::Modify { name, expr } => {
-                // there is no check for internals, as the check is done in the parse phase.
+                // no check for internals, as already checked in the parse phase.
                 let to_value = runtime.eval(expr).unwrap_or_else(|e| {
                     // FIXME
                     die!("Runtime error: Failed to eval value of Modify: {}", e);
@@ -296,6 +315,7 @@ pub fn run(prog: Program) {
                     // go to body
                     // no-op
                 } else {
+                    // jump to the next Elif/Else/End
                     i += offset_to_next;
                     if_eval = true;
                     continue;
@@ -307,29 +327,33 @@ pub fn run(prog: Program) {
                 ..
             } => {
                 if if_eval {
+                    // jumped from If/Elif
                     let val = runtime.eval(cond).unwrap_or_else(|e| {
                         // FIXME
                         die!("Runtime error: Failed to eval condition of Elif: {}", e);
                     });
                     if unwrap_bool(&val) {
-                        // don't push a frame
-                        // since If pushed the one already
+                        // don't push a frame as If alread pushed one
                         if_eval = false;
                     } else {
+                        // go to the next Elif/Else/End
                         i += offset_to_next;
                         continue;
                     }
                 } else {
+                    // come from a block
+                    // jump to the End
                     i += offset_to_next;
                     continue;
                 }
             }
             Insts::Else { offset_to_end, .. } => {
                 if if_eval {
-                    // don't push a frame
-                    // since If pushed the one already
+                    // jumped from If/Elif
+                    // don't push a frame as If alread pushed one
                     if_eval = false;
                 } else {
+                    // come from a block
                     i += offset_to_end;
                     continue;
                 }
@@ -387,7 +411,7 @@ pub fn run(prog: Program) {
                                 break scope.ret_idx;
                             }
                             ScopeKind::Branch => {
-                                // break outer scope
+                                // break the outer scope
                             }
                         }
                     } else {

@@ -1,3 +1,5 @@
+let i be 0 asmut;
+
 sub test;
     print "hello";
     if i != 5;
@@ -5,9 +7,6 @@ sub test;
     end;
     print "world";
 end;
-
-
-let i be 0 asmut;
 
 while i < 10;
     print i;

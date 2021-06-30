@@ -1,8 +1,8 @@
 use std::iter::Peekable;
 
 use crate::lex::{self, Items, Token};
+use crate::exprs::{*, items::*};
 
-use super::items::*;
 use super::ParseError;
 
 macro_rules! ensure_start {
@@ -28,6 +28,25 @@ pub trait TryFromTokens<'a> {
     where
         T: Iterator<Item = &'a Token>,
         Self: Sized;
+}
+
+impl<'a> TryFromTokens<'a> for Expr {
+    fn can_start_with(item: &Items) -> bool {
+        Rel::can_start_with(item)
+    }
+    fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
+    where
+        T: Iterator<Item = &'a Token>,
+        Self: Sized
+    {
+        let expr = Rel::try_from_tokens(tks)?;
+
+        if let Some(tk) = tks.next() {
+            return Err(ParseError::TrailingToken { from: tk.clone() });
+        }
+
+        Ok(Self { content: expr })
+    }
 }
 
 impl<'a> TryFromTokens<'a> for Rel {
