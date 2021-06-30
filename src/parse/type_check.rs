@@ -75,7 +75,7 @@ impl TypeCheck for Node {
     fn check_type(&self, stack: &ScopeStack) -> Type {
         match self {
             Self::Single(i) => i.check_type(stack),
-            Self::Plus(i) | Self::Minus(i) => i.check_type(stack)
+            Self::Plus(i) | Self::Minus(i) => i.check_type(stack),
         }
     }
 }

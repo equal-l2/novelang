@@ -7,7 +7,7 @@ pub enum Typed {
     Num(IntType),
     Bool(bool),
     Str(String),
-    Sub(usize)
+    Sub(usize),
 }
 
 impl Typed {
@@ -28,7 +28,7 @@ impl std::ops::Neg for Typed {
             Self::Num(n) => Self::Num(-n),
             Self::Bool(b) => Self::Bool(!b),
             Self::Str(s) => Self::Str(s.chars().rev().collect()),
-            Self::Sub(_) => unimplemented!()
+            Self::Sub(_) => unimplemented!(),
         }
     }
 }

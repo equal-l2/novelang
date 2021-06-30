@@ -1,6 +1,6 @@
 let i be 0 asmut;
 let j be 100 asmut;
-while i < 10;
+while i < 3;
     print "value of j (outside):", j;
     let j be 1000 asmut;
     print "value of j (inside):", j;

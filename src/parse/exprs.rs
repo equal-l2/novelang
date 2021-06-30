@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 
+use crate::exprs::{items::*, *};
 use crate::lex::{self, Items, Token};
-use crate::exprs::{*, items::*};
 
 use super::ParseError;
 
@@ -37,7 +37,7 @@ impl<'a> TryFromTokens<'a> for Expr {
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
         T: Iterator<Item = &'a Token>,
-        Self: Sized
+        Self: Sized,
     {
         let expr = Rel::try_from_tokens(tks)?;
 

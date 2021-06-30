@@ -1,5 +1,5 @@
-input "素数判定する整数を入力してください";
-let n be _result;
+let n be 0 asmut;
+input "素数判定する整数を入力してください" to n;
 
 if n < 2;
     print n, "は 2 より小さいため素数ではありません";

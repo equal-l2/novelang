@@ -48,12 +48,10 @@ impl crate::exprs::VarsMap for Runtime {
 impl Runtime {
     fn new() -> Self {
         // internal variables
-        // - "_result": stores result of Input and Roll
-        // - "_wait": flag if wait is enabled
+        // - "_wait": whether wait is enabled
 
         let internals = {
             let mut vt = VarTable::new();
-            vt.insert("_result".to_owned(), Variable::new_mut(Typed::Num(0)));
             vt.insert("_wait".to_owned(), Variable::new_mut(Typed::Bool(false)));
             vt
         };
@@ -156,7 +154,7 @@ fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[exprs::Expr]) {
             Typed::Num(n) => write!(lock, " {}", n),
             Typed::Bool(b) => write!(lock, " {}", b),
             Typed::Str(s) => write!(lock, " {}", s),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
         .unwrap();
     }
@@ -237,7 +235,10 @@ pub fn run(prog: Program) {
                     args,
                 );
             }
-            Insts::Sub { name, offset_to_end } => {
+            Insts::Sub {
+                name,
+                offset_to_end,
+            } => {
                 runtime.decl_var(name, Variable::new(Typed::Sub(i)));
                 i += offset_to_end;
             }
@@ -376,10 +377,18 @@ pub fn run(prog: Program) {
                     }
                 }
             }
-            Insts::Input { prompt } => {
-                runtime.modify_var("_result", Typed::Num(get_int_input(prompt.as_deref())));
+            Insts::Input {
+                prompt,
+                name,
+                as_num,
+            } => {
+                if *as_num {
+                    runtime.modify_var(name, Typed::Num(get_int_input(prompt.as_deref())));
+                } else {
+                    todo!()
+                }
             }
-            Insts::Roll { count, face } => {
+            Insts::Roll { count, face, name } => {
                 let count = unwrap_num(&runtime.eval(count).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval count of Roll: {}", e);
                 }));
@@ -394,7 +403,7 @@ pub fn run(prog: Program) {
                 if face <= 0 {
                     die!("Runtime error: Face for Roll must be a positive integer");
                 }
-                runtime.modify_var("_result", Typed::Num(roll_dice(count, face)));
+                runtime.modify_var(name, Typed::Num(roll_dice(count, face)));
             }
             Insts::Halt => {
                 return;

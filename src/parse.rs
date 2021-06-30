@@ -16,7 +16,7 @@ pub enum ParseError {
     TokenExhausted,
     SubInExpr,
     TypeConflict,
-    VarNotFound
+    VarNotFound,
 }
 
 #[derive(Debug, Clone)]
@@ -58,10 +58,13 @@ pub enum Insts {
     End,
     Input {
         prompt: Option<String>,
+        name: String,
+        as_num: bool,
     },
     Roll {
         count: Expr,
         face: Expr,
+        name: String,
     },
     Halt,
     Ill,
@@ -80,7 +83,7 @@ macro_rules! die_cont {
             $msg,
             $lexed.generate_loc_info(&$lexed.tokens[$i].loc)
         )
-    }
+    };
 }
 
 // expects!("message here", SomeItem | AnotherItem, i, lexed);
@@ -110,10 +113,7 @@ macro_rules! expects_semi {
     };
 }
 
-fn parse_expr_from_tokens(
-    tks: &[lex::Token],
-    stack: &ScopeStack,
-) -> Result<Expr, ParseError> {
+fn parse_expr_from_tokens(tks: &[lex::Token], stack: &ScopeStack) -> Result<Expr, ParseError> {
     if tks.len() == 0 {
         return Err(ParseError::EmptyExpr);
     }
@@ -125,7 +125,7 @@ fn parse_expr_from_tokens(
         Type::Sub => Err(ParseError::SubInExpr),
         Type::Conflict => Err(ParseError::TypeConflict),
         Type::NotFound => Err(ParseError::VarNotFound),
-        _ => Ok(ret)
+        _ => Ok(ret),
     }
 }
 
@@ -205,14 +205,13 @@ macro_rules! expects_type {
     ($expr: ident, $ty: path, $stack: ident, $i: ident, $lexed: ident) => {
         let ty = $expr.check_type(&$stack);
         if ty != $ty {
-            die!(
-                "Error: Expected {}, found {}\n{}",
-                $ty.typename(),
-                ty.typename(),
-                $lexed.generate_loc_info(&$lexed.tokens[$i].loc)
+            die_cont!(
+                format!("Expected {}, found {}", $ty.typename(), ty.typename()),
+                $i,
+                $lexed
             )
         }
-    }
+    };
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -233,7 +232,7 @@ impl Type {
             Self::Str => "Str",
             Self::Sub => "Sub",
             Self::Conflict => "Conflict",
-            Self::NotFound => "NotFound"
+            Self::NotFound => "NotFound",
         }
     }
 }
@@ -280,8 +279,17 @@ struct ScopeStack {
 
 impl ScopeStack {
     fn new() -> Self {
-        let scopes = vec![Scope::new(0)]; // init with global table
-        Self { scopes }
+        let mut internals = Scope::new(0);
+        internals.add_var(
+            String::from("_wait"),
+            TypeInfo {
+                ty: Type::Bool,
+                is_mut: true,
+            },
+        );
+        Self {
+            scopes: vec![internals],
+        }
     }
 
     fn push(&mut self, ret_idx: usize) {
@@ -307,7 +315,9 @@ impl ScopeStack {
     }
 
     fn get_type_info(&self, name: &String) -> Option<&TypeInfo> {
-        self.scopes.iter().rev()
+        self.scopes
+            .iter()
+            .rev()
             .map(|m| m.get_type_info(name))
             .find(Option::is_some)
             .flatten()
@@ -394,7 +404,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
 
                         let info = scope_stack.get_type_info(name);
                         if info.is_none() || info.unwrap().ty != Type::Sub {
-                            die_cont!("The specified subroutine was not found", i, lexed);
+                            die_cont!(format!("Subroutine \"{}\" was not found", name), i, lexed);
                         }
 
                         Insts::Call { name: name.clone() }
@@ -453,10 +463,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             }
                         };
 
-                        let success = scope_stack.add_var(name.clone(), TypeInfo {
-                            ty: init.check_type(&scope_stack),
-                            is_mut
-                        });
+                        let success = scope_stack.add_var(
+                            name.clone(),
+                            TypeInfo {
+                                ty: init.check_type(&scope_stack),
+                                is_mut,
+                            },
+                        );
 
                         if !success {
                             die_cont!("Conflicting variable name", i, lexed);
@@ -496,7 +509,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 die_cont!("Variable is immutable", i, lexed);
                             }
                         } else {
-                            die_cont!("The specified variable was not found", i, lexed);
+                            die_cont!(format!("Variable \"{}\" was not found", name), i, lexed);
                         }
 
                         Insts::Modify {
@@ -632,21 +645,48 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                 }),
 
                 lex::Insts::Input => parse_inst!(i, insts, {
-                    // "Input" (prompt) ";"
-                    let obj = Insts::Input {
-                        prompt: if let Items::Str(prompt) = &tks[i].item {
-                            i += 1;
-                            Some(prompt.clone())
-                        } else {
-                            None
-                        },
+                    // "Input" (prompt) "To" name ";"
+
+                    let prompt = if let Items::Str(prompt) = &tks[i].item {
+                        i += 1;
+                        Some(prompt.clone())
+                    } else {
+                        None
                     };
+
+                    expects!("\"To\" expected", Items::Key(Keywords::To), i, lexed);
+
+                    let name = if let Items::Ident(n) = &tks[i].item {
+                        i += 1;
+                        n.clone()
+                    } else {
+                        die_cont!("Ident expected", i, lexed)
+                    };
+
+                    let as_num = match scope_stack.get_type_info(&name) {
+                        Some(info) => {
+                            if !info.is_mut {
+                                die_cont!("Variable is immutable", i, lexed);
+                            }
+                            match info.ty {
+                                Type::Num => true,
+                                Type::Str => false,
+                                _ => die_cont!("Expected Num or Str", i, lexed),
+                            }
+                        }
+                        None => die_cont!(format!("Variable \"{}\" was not found", name), i, lexed),
+                    };
+
                     expects_semi!(i, lexed);
-                    obj
+                    Insts::Input {
+                        prompt,
+                        name,
+                        as_num,
+                    }
                 }),
 
                 lex::Insts::Roll => parse_inst!(i, insts, {
-                    // "Roll" n "Dice" "With" k "Face" ";"
+                    // "Roll" n "Dice" "With" k "Face" "To" name ";"
 
                     let count = parse_expr!(Items::Key(Keywords::Dice), i, tks, lexed, scope_stack);
                     if count.check_type(&scope_stack) != Type::Num {
@@ -664,8 +704,29 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
 
                     expects!("\"Face\" expected", Items::Key(Keywords::Face), i, lexed);
 
+                    expects!("\"To\" expected", Items::Key(Keywords::To), i, lexed);
+
+                    let name = if let Items::Ident(n) = &tks[i].item {
+                        i += 1;
+                        n.clone()
+                    } else {
+                        die_cont!("Ident expected", i, lexed)
+                    };
+
+                    match scope_stack.get_type_info(&name) {
+                        Some(info) => {
+                            if !matches!(info.ty, Type::Num) {
+                                die_cont!("Expected Num", i, lexed)
+                            }
+                            if !info.is_mut {
+                                die_cont!("Variable is immutable", i, lexed);
+                            }
+                        }
+                        None => die_cont!(format!("Variable \"{}\" was not found", name), i, lexed),
+                    };
+
                     expects_semi!(i, lexed);
-                    Insts::Roll { count, face }
+                    Insts::Roll { count, face, name }
                 }),
 
                 lex::Insts::Halt => parse_inst!(i, insts, {
