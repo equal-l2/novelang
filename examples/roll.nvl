@@ -1,7 +1,7 @@
 let cnt be 0 asmut;
 while cnt < 10;
     let res be 0 asmut;
-    Roll 1 dice with 6 faces to res;
+    Roll 1 die with 6 faces to res;
     print res;
     modify cnt to cnt+1;
 end;

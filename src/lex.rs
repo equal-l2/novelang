@@ -261,8 +261,7 @@ impl Items {
             Inst(i) => i.len(),
             Ops(i) => i.len(),
             Num(_, l) => *l,
-            Ident(i) => i.len(),
-            Str(i) => i.len(), //NOTE: is this right? (+2 may be required)
+            Ident(i) | Str(i) => i.len(),
             Semi | Comma | LParen | RParen => 1,
         }
     }
@@ -446,10 +445,10 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         _ => {
                             let vs = &v[i..];
                             let confirm_item = |len| len == vs.len() || is_sep(vs[len]);
-                            if is_item(&"dices".chars().collect::<Vec<_>>(), vs) && confirm_item(5)
+                            if is_item(&"die".chars().collect::<Vec<_>>(), vs) && confirm_item(3)
                             {
-                                // convert "dices" to "dice"
-                                i += 5;
+                                // convert "die" to "dice"
+                                i += 3;
                                 Items::Key(Keywords::Dice)
                             } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs)
                                 && confirm_item(5)

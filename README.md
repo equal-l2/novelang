@@ -22,7 +22,7 @@
 <elif>       ::= "else" "if" <expr> ";"
 <else>       ::= "else" ";"
 <end>        ::= "end" ";"
-<roll>       ::= "roll" <expr> ("dice"|"dices") "with" <expr> ("face"|"faces") "to" <ident>";"
+<roll>       ::= "roll" <expr> ("die"|"dice") "with" <expr> ("face"|"faces") "to" <ident>";"
 <halt>       ::= "halt" ";"
 <break>      ::= "break" ";"
 ```
@@ -37,7 +37,7 @@
 - `input [prompt];` : get an input to `_result`.
 - `if expr / else if expr / else`
 - `end;` : ends anything started (e.g. `sub` and `while`)
-- `roll Expr1 dices with Expr2 faces;`
+- `roll Expr1 dice with Expr2 faces;`
 - `halt` : halt execution.
 - `break`
 
