@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::exprs::{items::*, *};
+use crate::exprs::{items::*, Expr};
 use crate::lex::{self, Items, Token};
 
 use super::ParseError;
@@ -22,7 +22,7 @@ macro_rules! ensure_start {
 
 type Result<T> = std::result::Result<T, ParseError>;
 
-pub trait TryFromTokens<'a> {
+pub(super) trait TryFromTokens<'a> {
     fn can_start_with(item: &Items) -> bool;
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where

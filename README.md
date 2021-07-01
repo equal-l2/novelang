@@ -1,4 +1,4 @@
-# novelint
+# novelang
 
 > "<code><b>Let</b> there <b>be</b> light;</code>" That's, uh... God. I was quoting God.
 
@@ -41,10 +41,16 @@
 - `halt` : halt execution.
 - `break`
 
+## String arithmetic
+- `-<str>` : string inversion
+- `<str> + <str>` : string concatenation
+- `<str> * <num>` or `<num> * <str>` : repeating string
+
 ## TODO
 - Add `for`
 - Add array type
 - Add compound conditions
     - Add `&&`
     - Add `||`
-- Add `String` variable type
+- add subroutine with return value
+- better type checking (i.e. better diagnostics)

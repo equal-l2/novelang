@@ -6,17 +6,21 @@ mod exprs;
 mod type_check;
 
 use exprs::TryFromTokens;
-use type_check::TypeCheck;
+use type_check::{TypeCheck, TypeError};
 
-pub enum ParseError {
+enum ParseError {
     InvalidToken(lex::Token),
     EmptyExpr,
     NoPairParen { lparen: lex::Token },
     TrailingToken { from: lex::Token },
     TokenExhausted,
-    SubInExpr,
-    TypeConflict,
-    VarNotFound,
+    TypeError(TypeError),
+}
+
+impl From<TypeError> for ParseError {
+    fn from(e: TypeError) -> Self {
+        Self::TypeError(e)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -114,19 +118,15 @@ macro_rules! expects_semi {
 }
 
 fn parse_expr_from_tokens(tks: &[lex::Token], stack: &ScopeStack) -> Result<Expr, ParseError> {
-    if tks.len() == 0 {
+    if tks.is_empty() {
         return Err(ParseError::EmptyExpr);
     }
 
-    let ret = Expr::try_from_tokens(&mut tks.iter().peekable())?;
+    let expr = Expr::try_from_tokens(&mut tks.iter().peekable())?;
 
-    let ty = ret.check_type(stack);
-    match ty {
-        Type::Sub => Err(ParseError::SubInExpr),
-        Type::Conflict => Err(ParseError::TypeConflict),
-        Type::NotFound => Err(ParseError::VarNotFound),
-        _ => Ok(ret),
-    }
+    let _ = expr.check_type(stack)?;
+
+    Ok(expr)
 }
 
 fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexed) -> ! {
@@ -158,15 +158,27 @@ fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexed) -> ! {
         ParseError::TokenExhausted => {
             die_cont!("Expression abruptly ended", i, lexed);
         }
-        ParseError::TypeConflict => {
-            die_cont!("Expression has conflicting types", i, lexed);
-        }
-        ParseError::SubInExpr => {
-            die_cont!("Type Sub cannot be in Expr", i, lexed);
-        }
-        ParseError::VarNotFound => {
-            die_cont!("Variable was not found", i, lexed);
-        }
+        ParseError::TypeError(te) => match te {
+            TypeError::VarNotFound(name) => {
+                die_cont!(format!("Variable {} was not found", name), i, lexed);
+            }
+            TypeError::UnaryUndefined(ty) => {
+                //TODO: show operator (such as '<=')
+                die_cont!(
+                    format!("Unary operator is not defined for {}", ty),
+                    i,
+                    lexed
+                );
+            }
+            TypeError::BinaryUndefined(l, r) => {
+                //TODO: show operator (such as '-' or '+')
+                die_cont!(
+                    format!("Unary operator is not defined for {} and {}", l, r),
+                    i,
+                    lexed
+                );
+            }
+        },
     }
 }
 
@@ -203,13 +215,15 @@ macro_rules! parse_inst {
 
 macro_rules! expects_type {
     ($expr: ident, $ty: path, $stack: ident, $i: ident, $lexed: ident) => {
-        let ty = $expr.check_type(&$stack);
-        if ty != $ty {
-            die_cont!(
-                format!("Expected {}, found {}", $ty.typename(), ty.typename()),
-                $i,
-                $lexed
-            )
+        match $expr.check_type(&$stack) {
+            Ok(t) => {
+                if t != $ty {
+                    die_cont!(format!("Expected {}, found {}", $ty, t), $i, $lexed)
+                }
+            }
+            Err(e) => {
+                die_by_expr_parse_error(e.into(), $i, &$lexed);
+            }
         }
     };
 }
@@ -220,19 +234,21 @@ enum Type {
     Num,
     Str,
     Sub,
-    Conflict,
-    NotFound,
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.typename())
+    }
 }
 
 impl Type {
-    fn typename(&self) -> &str {
+    const fn typename(&self) -> &str {
         match self {
             Self::Bool => "Bool",
             Self::Num => "Num",
             Self::Str => "Str",
             Self::Sub => "Sub",
-            Self::Conflict => "Conflict",
-            Self::NotFound => "NotFound",
         }
     }
 }
@@ -268,7 +284,7 @@ impl Scope {
         !exists
     }
 
-    fn get_type_info(&self, name: &String) -> Option<&TypeInfo> {
+    fn get_type_info(&self, name: &str) -> Option<&TypeInfo> {
         self.map.get(name)
     }
 }
@@ -314,7 +330,7 @@ impl ScopeStack {
         self.get_top_mut().add_var(name, info)
     }
 
-    fn get_type_info(&self, name: &String) -> Option<&TypeInfo> {
+    fn get_type_info(&self, name: &str) -> Option<&TypeInfo> {
         self.scopes
             .iter()
             .rev()
@@ -447,6 +463,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             scope_stack
                         );
 
+                        let init_ty = match init.check_type(&scope_stack) {
+                            Ok(t) => t,
+                            Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                        };
+
                         expects!(
                             "\"AsMut\" or semicolon expected",
                             Items::Semi | Items::Key(Keywords::AsMut),
@@ -466,7 +487,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         let success = scope_stack.add_var(
                             name.clone(),
                             TypeInfo {
-                                ty: init.check_type(&scope_stack),
+                                ty: init_ty,
                                 is_mut,
                             },
                         );
@@ -499,7 +520,10 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         let var_tinfo = scope_stack.get_type_info(name);
                         if let Some(info) = var_tinfo {
                             // TODO: better error message (maybe)
-                            let expr_ty = expr.check_type(&scope_stack);
+                            let expr_ty = match expr.check_type(&scope_stack) {
+                                Ok(t) => t,
+                                Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                            };
 
                             if info.ty != expr_ty {
                                 die_cont!("Type mismatch", i, lexed);
@@ -663,18 +687,17 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         die_cont!("Ident expected", i, lexed)
                     };
 
-                    let as_num = match scope_stack.get_type_info(&name) {
-                        Some(info) => {
-                            if !info.is_mut {
-                                die_cont!("Variable is immutable", i, lexed);
-                            }
-                            match info.ty {
-                                Type::Num => true,
-                                Type::Str => false,
-                                _ => die_cont!("Expected Num or Str", i, lexed),
-                            }
+                    let as_num = if let Some(info) = scope_stack.get_type_info(&name) {
+                        if !info.is_mut {
+                            die_cont!("Variable is immutable", i, lexed);
                         }
-                        None => die_cont!(format!("Variable \"{}\" was not found", name), i, lexed),
+                        match info.ty {
+                            Type::Num => true,
+                            Type::Str => false,
+                            _ => die_cont!("Expected Num or Str", i, lexed),
+                        }
+                    } else {
+                        die_cont!(format!("Variable \"{}\" was not found", name), i, lexed)
                     };
 
                     expects_semi!(i, lexed);
@@ -689,7 +712,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     // "Roll" n "Dice" "With" k "Face" "To" name ";"
 
                     let count = parse_expr!(Items::Key(Keywords::Dice), i, tks, lexed, scope_stack);
-                    if count.check_type(&scope_stack) != Type::Num {
+
+                    let count_ty = match count.check_type(&scope_stack) {
+                        Ok(t) => t,
+                        Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                    };
+
+                    if count_ty != Type::Num {
                         die_cont!("Expected Num Expr", i, lexed);
                     }
 
@@ -698,7 +727,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     expects!("\"With\" expected", Items::Key(Keywords::With), i, lexed);
 
                     let face = parse_expr!(Items::Key(Keywords::Face), i, tks, lexed, scope_stack);
-                    if face.check_type(&scope_stack) != Type::Num {
+
+                    let face_ty = match count.check_type(&scope_stack) {
+                        Ok(t) => t,
+                        Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                    };
+
+                    if face_ty != Type::Num {
                         die_cont!("Expected Num Expr", i, lexed);
                     }
 
@@ -713,16 +748,15 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         die_cont!("Ident expected", i, lexed)
                     };
 
-                    match scope_stack.get_type_info(&name) {
-                        Some(info) => {
-                            if !matches!(info.ty, Type::Num) {
-                                die_cont!("Expected Num", i, lexed)
-                            }
-                            if !info.is_mut {
-                                die_cont!("Variable is immutable", i, lexed);
-                            }
+                    if let Some(info) = scope_stack.get_type_info(&name) {
+                        if !matches!(info.ty, Type::Num) {
+                            die_cont!("Expected Num", i, lexed)
                         }
-                        None => die_cont!(format!("Variable \"{}\" was not found", name), i, lexed),
+                        if !info.is_mut {
+                            die_cont!("Variable is immutable", i, lexed);
+                        }
+                    } else {
+                        die_cont!(format!("Variable \"{}\" was not found", name), i, lexed)
                     };
 
                     expects_semi!(i, lexed);
