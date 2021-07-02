@@ -361,13 +361,25 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             Items::Comma => {
                                 i += 1;
                             }
-                            _ => args.push(parse_expr!(
-                                Items::Comma | Items::Semi,
-                                i,
-                                tks,
-                                lexed,
-                                scope_stack
-                            )),
+                            _ => {
+                                let expr = parse_expr!(
+                                    Items::Comma | Items::Semi,
+                                    i,
+                                    tks,
+                                    lexed,
+                                    scope_stack
+                                );
+
+                                match expr.check_type(&scope_stack) {
+                                    Ok(ty) => {
+                                        if ty == Type::Sub {
+                                            die_cont!("Value of type Sub cannot be printed", i, lexed)
+                                        }
+                                        args.push(expr);
+                                    },
+                                    Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                                }
+                            },
                         }
                     }
                     expects_semi!(i, lexed);

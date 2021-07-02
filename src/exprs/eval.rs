@@ -90,14 +90,23 @@ impl Eval for MulDiv {
     fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
             Self::Single(l) => l.eval_on(vmap)?,
-            Self::Mul(l, r) => def_ari!(
-                vmap,
-                l,
-                r,
-                checked_mul,
-                EvalError::OverFlow,
-                "multiplication"
-            )?,
+            Self::Mul(l, r) => {
+                let l = l.eval_on(vmap)?;
+                let r = r.eval_on(vmap)?;
+                match (&l, &r) {
+                    (Typed::Num(this), Typed::Num(that)) => match this.checked_add(*that) {
+                        Some(n) => Ok(Typed::Num(n)),
+                        None => Err(EvalError::OverFlow),
+                    },
+                    (Typed::Num(n), Typed::Str(s)) | (Typed::Str(s), Typed::Num(n)) => Ok(Typed::Str(s.repeat(*n as usize))),
+                    _ => Err(EvalError::TypeError(format!(
+                        "cannot perform {} between {} and {}",
+                        "multiplication",
+                        l.typename(),
+                        r.typename()
+                    ))),
+                }
+            }?,
             Self::Div(l, r) => {
                 def_ari!(vmap, l, r, checked_div, EvalError::ZeroDivision, "division")?
             }
