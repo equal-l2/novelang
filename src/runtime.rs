@@ -1,9 +1,12 @@
+mod eval;
 mod variable;
 
 use crate::die;
-use crate::exprs;
+use crate::exprs::Expr;
 use crate::parse::{Statement, AST};
 use crate::types::{IntType, Typed};
+
+use eval::Eval;
 
 use variable::{ModifyError, Variable};
 
@@ -39,7 +42,7 @@ pub struct Runtime {
     internals: VarTable,
 }
 
-impl crate::exprs::VarsMap for Runtime {
+impl eval::VarsMap for Runtime {
     fn get(&self, name: &str) -> Option<&Typed> {
         self.get_var(name).map(Variable::get)
     }
@@ -135,12 +138,12 @@ impl Runtime {
             .flatten()
     }
 
-    fn eval(&self, expr: &exprs::Expr) -> Result<Typed, exprs::EvalError> {
+    fn eval(&self, expr: &Expr) -> Result<Typed, eval::EvalError> {
         expr.eval_on(self)
     }
 }
 
-fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[exprs::Expr]) {
+fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[Expr]) {
     use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();

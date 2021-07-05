@@ -82,11 +82,18 @@ pub struct AST {
 
 macro_rules! die_cont {
     ($msg: expr, $i: expr, $lexed: ident) => {
-        die!(
-            "Error: {}\n{}",
-            $msg,
-            $lexed.generate_loc_info(&$lexed.tokens[$i].loc)
-        )
+        {
+            let idx = if $i >= $lexed.tokens.len() {
+                $lexed.tokens.len() - 1
+            } else {
+                $i
+            };
+            die!(
+                "Error: {}\n{}",
+                $msg,
+                $lexed.generate_loc_info(&$lexed.tokens[idx].loc)
+            )
+        }
     };
 }
 

@@ -9,11 +9,13 @@
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::similar_names)]
 
+mod codegen;
 mod exprs;
 mod lex;
 mod parse;
 mod runtime;
 mod types;
+mod vm;
 
 use structopt::StructOpt;
 
@@ -61,5 +63,9 @@ fn main() {
     eprintln!("{:?}", parsed.stmts);
     eprintln!("Info: Load completed");
 
+    let asm = codegen::codegen(parsed.clone());
+    eprintln!("{:?}", asm);
+
     runtime::run(parsed);
+    vm::run(asm);
 }
