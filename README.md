@@ -6,8 +6,8 @@
 
 ```
 <program>    ::= {<line>}
-<line>       ::= {<inst>} ["#" { CHAR }] NL
-<inst>       ::= <print> | <sub> | <call> | <while> | <let>
+<line>       ::= {<stmt>} ["#" { CHAR }] NL
+<stmt>       ::= <print> | <sub> | <call> | <while> | <let>
                | <modify> | <input> | <if> | <elif> | <else>
                | <end> | <roll> | <halt> | <break>
 <print>      ::= "print" <print-args> ";"

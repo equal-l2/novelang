@@ -58,7 +58,7 @@ fn main() {
 
     eprintln!("Info: Parsing");
     let parsed = parse::parse(lexed);
-    eprintln!("{:?}", parsed.insts);
+    eprintln!("{:?}", parsed.stmts);
     eprintln!("Info: Load completed");
 
     runtime::run(parsed);

@@ -14,7 +14,7 @@ pub(super) trait TypeCheck {
 }
 
 impl TypeCheck for Expr {
-    fn check_type(&self, stack: &ScopeStack) -> Result{
+    fn check_type(&self, stack: &ScopeStack) -> Result {
         self.content.check_type(stack)
     }
 }
@@ -81,7 +81,7 @@ impl TypeCheck for MulDiv {
                 match (&l_ty, &r_ty) {
                     (Type::Num, Type::Num) => Ok(Type::Num),
                     (Type::Num, Type::Str) | (Type::Str, Type::Num) => Ok(Type::Str),
-                    _ => Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
                 }
             }
             Self::Div(l, r) | Self::Mod(l, r) => {

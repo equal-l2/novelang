@@ -24,7 +24,7 @@ impl From<TypeError> for ParseError {
 }
 
 #[derive(Debug, Clone)]
-pub enum Insts {
+pub enum Statement {
     Print {
         args: Vec<Expr>,
     },
@@ -76,8 +76,8 @@ pub enum Insts {
 }
 
 #[derive(Debug, Clone)]
-pub struct Program {
-    pub insts: Vec<Insts>,
+pub struct AST {
+    pub stmts: Vec<Statement>,
 }
 
 macro_rules! die_cont {
@@ -205,11 +205,11 @@ macro_rules! parse_expr {
     }
 }
 
-macro_rules! parse_inst {
-    ($i: ident, $insts: ident, $proc: block) => {{
+macro_rules! parse_stmt {
+    ($i: ident, $stmts: ident, $proc: block) => {{
         $i += 1;
         let inst_obj = $proc;
-        $insts.push(inst_obj);
+        $stmts.push(inst_obj);
     }};
 }
 
@@ -340,19 +340,19 @@ impl ScopeStack {
     }
 }
 
-pub fn parse(lexed: crate::lex::Lexed) -> Program {
+pub fn parse(lexed: crate::lex::Lexed) -> AST {
     use lex::{Items, Keywords};
 
-    let mut insts = vec![Insts::Ill];
+    let mut stmts = vec![Statement::Ill];
     let mut scope_stack = ScopeStack::new();
 
     let tks = &lexed.tokens;
 
     let mut i = 0;
     while i < tks.len() {
-        if let Items::Inst(inst) = &tks[i].item {
+        if let Items::Cmd(inst) = &tks[i].item {
             match inst {
-                lex::Insts::Print => parse_inst!(i, insts, {
+                lex::Command::Print => parse_stmt!(i, stmts, {
                     // "Print" (expr {"," expr}) ";"
                     let mut args = Vec::new();
                     while i < tks.len() {
@@ -373,34 +373,31 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 match expr.check_type(&scope_stack) {
                                     Ok(ty) => {
                                         if ty == Type::Sub {
-                                            die_cont!("Value of type Sub cannot be printed", i, lexed)
+                                            die_cont!(
+                                                "Value of type Sub cannot be printed",
+                                                i,
+                                                lexed
+                                            )
                                         }
                                         args.push(expr);
-                                    },
+                                    }
                                     Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
                                 }
-                            },
+                            }
                         }
                     }
                     expects_semi!(i, lexed);
-                    Insts::Print { args }
+                    Statement::Print { args }
                 }),
 
-                lex::Insts::Sub => parse_inst!(i, insts, {
+                lex::Command::Sub => parse_stmt!(i, stmts, {
                     // "Sub" name ";"
 
-                    // check if the Sub is nested (which is not allowed yet)
-                    /*if let Some(top) = waits_end_stack.last() {
-                        if let Insts::Sub { .. } = top.kind {
-                            die_cont!("Nested Sub is not allowed yet", i, lexed);
-                        }
-                    }*/
-
-                    // register the sub to the name table
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
                         expects_semi!(i, lexed);
 
+                        // add this sub to var table
                         let success = scope_stack.add_var(
                             name.clone(),
                             TypeInfo {
@@ -413,9 +410,10 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             die_cont!("Conflicting subroutine name", i, lexed);
                         }
 
-                        scope_stack.push(insts.len());
+                        // create new scope
+                        scope_stack.push(stmts.len());
 
-                        Insts::Sub {
+                        Statement::Sub {
                             name: name.clone(),
                             offset_to_end: 0,
                         }
@@ -424,7 +422,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }),
 
-                lex::Insts::Call => parse_inst!(i, insts, {
+                lex::Command::Call => parse_stmt!(i, stmts, {
                     // "Call" name ";"
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -435,29 +433,29 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             die_cont!(format!("Subroutine \"{}\" was not found", name), i, lexed);
                         }
 
-                        Insts::Call { name: name.clone() }
+                        Statement::Call { name: name.clone() }
                     } else {
                         die_cont!("Expected subroutine name", i, lexed)
                     }
                 }),
 
-                lex::Insts::While => parse_inst!(i, insts, {
+                lex::Command::While => parse_stmt!(i, stmts, {
                     // "While" cond ";"
 
-                    scope_stack.push(insts.len());
+                    scope_stack.push(stmts.len());
 
                     let expr = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
                     expects_type!(expr, Type::Bool, scope_stack, i, lexed);
 
                     expects_semi!(i, lexed);
 
-                    Insts::While {
+                    Statement::While {
                         cond: expr,
                         offset_to_end: 0,
                     }
                 }),
 
-                lex::Insts::Let => parse_inst!(i, insts, {
+                lex::Command::Let => parse_stmt!(i, stmts, {
                     // "Let" name "Be" expr ("AsMut") ";"
 
                     if let Items::Ident(name) = &tks[i].item {
@@ -508,7 +506,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             die_cont!("Conflicting variable name", i, lexed);
                         }
 
-                        Insts::Let {
+                        Statement::Let {
                             name: name.clone(),
                             init,
                             is_mut,
@@ -518,7 +516,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }),
 
-                lex::Insts::Modify => parse_inst!(i, insts, {
+                lex::Command::Modify => parse_stmt!(i, stmts, {
                     // "Modify" name "To" expr ";"
 
                     if let Items::Ident(name) = &tks[i].item {
@@ -548,7 +546,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             die_cont!(format!("Variable \"{}\" was not found", name), i, lexed);
                         }
 
-                        Insts::Modify {
+                        Statement::Modify {
                             name: name.clone(),
                             expr,
                         }
@@ -557,24 +555,24 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     }
                 }),
 
-                lex::Insts::If => parse_inst!(i, insts, {
+                lex::Command::If => parse_stmt!(i, stmts, {
                     // "If" cond ";"
 
                     let cond = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
                     expects_semi!(i, lexed);
 
-                    scope_stack.push(insts.len());
+                    scope_stack.push(stmts.len());
 
-                    Insts::If {
+                    Statement::If {
                         cond,
                         offset_to_next: 0,
                     }
                 }),
 
-                lex::Insts::Else => parse_inst!(i, insts, {
+                lex::Command::Else => parse_stmt!(i, stmts, {
                     // "Else" ("If" cond) ";"
 
-                    let inst_obj = if let Items::Inst(lex::Insts::If) = &tks[i].item {
+                    let inst_obj = if let Items::Cmd(lex::Command::If) = &tks[i].item {
                         // "Else" "If" cond ";"
                         i += 1;
 
@@ -582,15 +580,15 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             die_cont!("A stray Else-If detected.", i, lexed);
                         });
 
-                        let offset_to_next = insts.len() - prev_idx;
+                        let offset_to_next = stmts.len() - prev_idx;
 
-                        let prev = insts[prev_idx].clone();
-                        insts[prev_idx] = match prev {
-                            Insts::If { cond, .. } => Insts::If {
+                        let prev = stmts[prev_idx].clone();
+                        stmts[prev_idx] = match prev {
+                            Statement::If { cond, .. } => Statement::If {
                                 cond: cond.clone(),
                                 offset_to_next,
                             },
-                            Insts::ElIf { cond, .. } => Insts::ElIf {
+                            Statement::ElIf { cond, .. } => Statement::ElIf {
                                 cond: cond.clone(),
                                 offset_to_next,
                             },
@@ -606,7 +604,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         let cond = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
                         expects_semi!(i, lexed);
 
-                        Insts::ElIf {
+                        Statement::ElIf {
                             cond,
                             offset_to_next: 0,
                         }
@@ -618,15 +616,15 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                             die_cont!("A stray Else detected.", i, lexed);
                         });
 
-                        let offset_to_next = insts.len() - prev_idx;
+                        let offset_to_next = stmts.len() - prev_idx;
 
-                        let prev = insts[prev_idx].clone();
-                        insts[prev_idx] = match prev {
-                            Insts::If { cond, .. } => Insts::If {
+                        let prev = stmts[prev_idx].clone();
+                        stmts[prev_idx] = match prev {
+                            Statement::If { cond, .. } => Statement::If {
                                 cond: cond.clone(),
                                 offset_to_next,
                             },
-                            Insts::ElIf { cond, .. } => Insts::ElIf {
+                            Statement::ElIf { cond, .. } => Statement::ElIf {
                                 cond: cond.clone(),
                                 offset_to_next,
                             },
@@ -634,15 +632,15 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                                 die_cont!("Cannot find corresponding Element for Else", i, lexed);
                             }
                         };
-                        Insts::Else { offset_to_end: 0 }
+                        Statement::Else { offset_to_end: 0 }
                     };
 
-                    scope_stack.push(insts.len());
+                    scope_stack.push(stmts.len());
 
                     inst_obj
                 }),
 
-                lex::Insts::End => parse_inst!(i, insts, {
+                lex::Command::End => parse_stmt!(i, stmts, {
                     // "End" ";"
                     expects_semi!(i, lexed);
 
@@ -651,36 +649,36 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                         die_cont!("A stray End detected.", i, lexed);
                     });
 
-                    let offset_to_end = insts.len() - prev_idx;
+                    let offset_to_end = stmts.len() - prev_idx;
 
-                    let prev = insts[prev_idx].clone();
-                    insts[prev_idx] = match prev {
-                        Insts::Sub { name, .. } => Insts::Sub {
+                    let prev = stmts[prev_idx].clone();
+                    stmts[prev_idx] = match prev {
+                        Statement::Sub { name, .. } => Statement::Sub {
                             name,
                             offset_to_end,
                         },
-                        Insts::While { cond, .. } => Insts::While {
+                        Statement::While { cond, .. } => Statement::While {
                             cond,
                             offset_to_end,
                         },
-                        Insts::If { ref cond, .. } => Insts::If {
+                        Statement::If { ref cond, .. } => Statement::If {
                             cond: cond.clone(),
                             offset_to_next: offset_to_end,
                         },
-                        Insts::ElIf { ref cond, .. } => Insts::ElIf {
+                        Statement::ElIf { ref cond, .. } => Statement::ElIf {
                             cond: cond.clone(),
                             offset_to_next: offset_to_end,
                         },
-                        Insts::Else { .. } => Insts::Else { offset_to_end },
+                        Statement::Else { .. } => Statement::Else { offset_to_end },
                         _ => {
                             die_cont!("Cannot find corresponding Element for End", i, lexed);
                         }
                     };
 
-                    Insts::End
+                    Statement::End
                 }),
 
-                lex::Insts::Input => parse_inst!(i, insts, {
+                lex::Command::Input => parse_stmt!(i, stmts, {
                     // "Input" (prompt) "To" name ";"
 
                     let prompt = if let Items::Str(prompt) = &tks[i].item {
@@ -713,14 +711,14 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     };
 
                     expects_semi!(i, lexed);
-                    Insts::Input {
+                    Statement::Input {
                         prompt,
                         name,
                         as_num,
                     }
                 }),
 
-                lex::Insts::Roll => parse_inst!(i, insts, {
+                lex::Command::Roll => parse_stmt!(i, stmts, {
                     // "Roll" n "Dice" "With" k "Face" "To" name ";"
 
                     let count = parse_expr!(Items::Key(Keywords::Dice), i, tks, lexed, scope_stack);
@@ -772,24 +770,24 @@ pub fn parse(lexed: crate::lex::Lexed) -> Program {
                     };
 
                     expects_semi!(i, lexed);
-                    Insts::Roll { count, face, name }
+                    Statement::Roll { count, face, name }
                 }),
 
-                lex::Insts::Halt => parse_inst!(i, insts, {
+                lex::Command::Halt => parse_stmt!(i, stmts, {
                     // "Halt" ";"
                     expects_semi!(i, lexed);
-                    Insts::Halt
+                    Statement::Halt
                 }),
 
-                lex::Insts::Break => parse_inst!(i, insts, {
+                lex::Command::Break => parse_stmt!(i, stmts, {
                     // "Break" ";"
                     expects_semi!(i, lexed);
-                    Insts::Break
+                    Statement::Break
                 }),
             }
         } else {
-            die_cont!("Line must begin with Inst", i, lexed);
+            die_cont!("Line must begin with Command", i, lexed);
         }
     }
-    Program { insts }
+    AST { stmts }
 }

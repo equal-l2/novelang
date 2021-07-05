@@ -2,7 +2,7 @@ mod variable;
 
 use crate::die;
 use crate::exprs;
-use crate::parse::{Insts, Program};
+use crate::parse::{Statement, AST};
 use crate::types::{IntType, Typed};
 
 use variable::{ModifyError, Variable};
@@ -218,16 +218,16 @@ fn unwrap_sub(val: &Typed) -> usize {
     }
 }
 
-pub fn run(prog: Program) {
+pub fn run(prog: AST) {
     let mut runtime = Runtime::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
     let mut if_eval = false;
     let mut breaking = false;
 
-    while i < prog.insts.len() {
-        match &prog.insts[i] {
-            Insts::Print { args } => {
+    while i < prog.stmts.len() {
+        match &prog.stmts[i] {
+            Statement::Print { args } => {
                 exec_print(
                     i,
                     &runtime,
@@ -235,14 +235,14 @@ pub fn run(prog: Program) {
                     args,
                 );
             }
-            Insts::Sub {
+            Statement::Sub {
                 name,
                 offset_to_end,
             } => {
                 runtime.decl_var(name, Variable::new(Typed::Sub(i)));
                 i += offset_to_end;
             }
-            Insts::Call { name } => {
+            Statement::Call { name } => {
                 if let Some(idx) = runtime.get_var(name) {
                     let idx = unwrap_sub(idx.get());
 
@@ -255,7 +255,7 @@ pub fn run(prog: Program) {
                     die!("Runtime error: function \"{}\" was not found", name);
                 }
             }
-            Insts::While {
+            Statement::While {
                 cond,
                 offset_to_end,
             } => {
@@ -279,7 +279,7 @@ pub fn run(prog: Program) {
                     }
                 }
             }
-            Insts::Let { name, init, is_mut } => {
+            Statement::Let { name, init, is_mut } => {
                 // no check for internals, as already checked in the parse phase.
                 let init_val = runtime.eval(init).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval init value of Let: {}", e);
@@ -293,7 +293,7 @@ pub fn run(prog: Program) {
                     },
                 );
             }
-            Insts::Modify { name, expr } => {
+            Statement::Modify { name, expr } => {
                 // no check for internals, as already checked in the parse phase.
                 let to_value = runtime.eval(expr).unwrap_or_else(|e| {
                     // FIXME
@@ -301,7 +301,7 @@ pub fn run(prog: Program) {
                 });
                 runtime.modify_var(name, to_value);
             }
-            Insts::If {
+            Statement::If {
                 cond,
                 offset_to_next,
             } => {
@@ -322,7 +322,7 @@ pub fn run(prog: Program) {
                     continue;
                 }
             }
-            Insts::ElIf {
+            Statement::ElIf {
                 cond,
                 offset_to_next,
                 ..
@@ -348,7 +348,7 @@ pub fn run(prog: Program) {
                     continue;
                 }
             }
-            Insts::Else { offset_to_end, .. } => {
+            Statement::Else { offset_to_end, .. } => {
                 if if_eval {
                     // jumped from If/Elif
                     // don't push a frame as If alread pushed one
@@ -359,7 +359,7 @@ pub fn run(prog: Program) {
                     continue;
                 }
             }
-            Insts::End => {
+            Statement::End => {
                 if_eval = false;
                 let top = runtime.pop().map(|s| s.ret_idx);
                 match top {
@@ -377,7 +377,7 @@ pub fn run(prog: Program) {
                     }
                 }
             }
-            Insts::Input {
+            Statement::Input {
                 prompt,
                 name,
                 as_num,
@@ -388,7 +388,7 @@ pub fn run(prog: Program) {
                     todo!()
                 }
             }
-            Insts::Roll { count, face, name } => {
+            Statement::Roll { count, face, name } => {
                 let count = unwrap_num(&runtime.eval(count).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval count of Roll: {}", e);
                 }));
@@ -405,10 +405,10 @@ pub fn run(prog: Program) {
                 }
                 runtime.modify_var(name, Typed::Num(roll_dice(count, face)));
             }
-            Insts::Halt => {
+            Statement::Halt => {
                 return;
             }
-            Insts::Break => {
+            Statement::Break => {
                 i = loop {
                     if let Some(scope) = runtime.pop() {
                         match scope.kind {

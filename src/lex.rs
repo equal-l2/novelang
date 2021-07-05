@@ -30,7 +30,7 @@ fn is_item(item_chars: &[char], src_chars: &[char]) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Insts {
+pub enum Command {
     Print,
     Sub,
     Call,
@@ -101,7 +101,7 @@ impl Item for Keywords {
     }
 }
 
-impl Item for Insts {
+impl Item for Command {
     const DISCRIMINANTS: &'static [Self] = &[
         Self::Print,
         Self::Sub,
@@ -242,7 +242,7 @@ impl Item for Ops {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Items {
     Key(Keywords),
-    Inst(Insts),
+    Cmd(Command),
     Ops(Ops),
     Num(crate::types::IntType, usize),
     Ident(String),
@@ -258,7 +258,7 @@ impl Items {
         use Items::*;
         match self {
             Key(i) => i.len(),
-            Inst(i) => i.len(),
+            Cmd(i) => i.len(),
             Ops(i) => i.len(),
             Num(_, l) => *l,
             Ident(i) | Str(i) => i.len(),
@@ -445,8 +445,7 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         _ => {
                             let vs = &v[i..];
                             let confirm_item = |len| len == vs.len() || is_sep(vs[len]);
-                            if is_item(&"die".chars().collect::<Vec<_>>(), vs) && confirm_item(3)
-                            {
+                            if is_item(&"die".chars().collect::<Vec<_>>(), vs) && confirm_item(3) {
                                 // convert "die" to "dice"
                                 i += 3;
                                 Items::Key(Keywords::Dice)
@@ -459,9 +458,9 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                             } else if let Some(res) = Keywords::parse_slice(vs) {
                                 i += res.len();
                                 Items::Key(res)
-                            } else if let Some(res) = Insts::parse_slice(vs) {
+                            } else if let Some(res) = Command::parse_slice(vs) {
                                 i += res.len();
-                                Items::Inst(res)
+                                Items::Cmd(res)
                             } else if let Some(res) = Ops::parse_slice(vs) {
                                 i += res.len();
                                 Items::Ops(res)

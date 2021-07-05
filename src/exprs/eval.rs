@@ -98,7 +98,9 @@ impl Eval for MulDiv {
                         Some(n) => Ok(Typed::Num(n)),
                         None => Err(EvalError::OverFlow),
                     },
-                    (Typed::Num(n), Typed::Str(s)) | (Typed::Str(s), Typed::Num(n)) => Ok(Typed::Str(s.repeat(*n as usize))),
+                    (Typed::Num(n), Typed::Str(s)) | (Typed::Str(s), Typed::Num(n)) => {
+                        Ok(Typed::Str(s.repeat(*n as usize)))
+                    }
                     _ => Err(EvalError::TypeError(format!(
                         "cannot perform {} between {} and {}",
                         "multiplication",
