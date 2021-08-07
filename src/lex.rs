@@ -158,26 +158,39 @@ impl Item for Command {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AriOps {
+pub enum AddOps {
     Add, // +
     Sub, // -
+}
+
+impl Item for AddOps {
+    const DISCRIMINANTS: &'static [Self] = &[
+        Self::Add, // +
+        Self::Sub, // -
+    ];
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MulOps {
     Mul, // *
     Div, // /
     Mod, // %
 }
 
-impl Item for AriOps {
+impl Item for MulOps {
     const DISCRIMINANTS: &'static [Self] = &[
-        Self::Add, // +
-        Self::Sub, // -
         Self::Mul, // *
         Self::Div, // /
         Self::Mod, // %
     ];
     fn as_str(&self) -> &str {
         match self {
-            Self::Add => "+",
-            Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
             Self::Mod => "%",
@@ -186,9 +199,26 @@ impl Item for AriOps {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EquOps {
+    Equal,    // ==
+    NotEqual, // !=
+}
+
+impl Item for EquOps {
+    const DISCRIMINANTS: &'static [Self] = &[
+        Self::Equal,    // ==
+        Self::NotEqual, // !=
+    ];
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelOps {
-    Equal,        // ==
-    NotEqual,     // !=
     LessEqual,    // <=
     GreaterEqual, // >=
     LessThan,     // <
@@ -197,8 +227,6 @@ pub enum RelOps {
 
 impl Item for RelOps {
     const DISCRIMINANTS: &'static [Self] = &[
-        Self::Equal,        // ==
-        Self::NotEqual,     // !=
         Self::LessEqual,    // <=
         Self::GreaterEqual, // >=
         Self::LessThan,     // <
@@ -206,8 +234,6 @@ impl Item for RelOps {
     ];
     fn as_str(&self) -> &str {
         match self {
-            Self::Equal => "==",
-            Self::NotEqual => "!=",
             Self::LessEqual => "<=",
             Self::GreaterEqual => ">=",
             Self::LessThan => "<",
@@ -218,24 +244,33 @@ impl Item for RelOps {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ops {
-    Ari(AriOps),
+    Equ(EquOps),
     Rel(RelOps),
+    Add(AddOps),
+    Mul(MulOps),
 }
 
 impl Item for Ops {
     const DISCRIMINANTS: &'static [Self] = &[];
     fn as_str(&self) -> &str {
+        use Ops::*;
         match self {
-            Self::Ari(i) => i.as_str(),
-            Self::Rel(i) => i.as_str(),
+            Equ(i) => i.as_str(),
+            Rel(i) => i.as_str(),
+            Add(i) => i.as_str(),
+            Mul(i) => i.as_str(),
         }
     }
 
     fn parse_slice(s: &[char]) -> Option<Self> {
-        if let Some(i) = AriOps::parse_slice(s) {
-            Some(Self::Ari(i))
+        if let Some(i) = EquOps::parse_slice(s) {
+            Some(Self::Equ(i))
         } else if let Some(i) = RelOps::parse_slice(s) {
             Some(Self::Rel(i))
+        } else if let Some(i) = AddOps::parse_slice(s) {
+            Some(Self::Add(i))
+        } else if let Some(i) = MulOps::parse_slice(s) {
+            Some(Self::Mul(i))
         } else {
             None
         }
@@ -266,21 +301,6 @@ impl Items {
             Num(_, l) => *l,
             Ident(i) | Str(i) => i.len(),
             Semi | Comma | LParen | RParen => 1,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        use Items::*;
-        match self {
-            Key(i) => i.as_str().into(),
-            Cmd(i) => i.as_str().into(),
-            Ops(i) => i.as_str().into(),
-            Num(_, l) => l.to_string(),
-            Ident(i) | Str(i) => i.clone(),
-            Semi => ";".into(),
-            Comma => ",".into(),
-            LParen => "(".into(),
-            RParen => ")".into(),
         }
     }
 }

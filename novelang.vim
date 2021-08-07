@@ -4,9 +4,8 @@ syntax case match
 syntax keyword Special _wait
 
 syntax case ignore
-syntax keyword Statement Print Sub Call While Let Modify Input End
-syntax keyword Statement Roll Halt Break Be To
-syntax keyword Statement Die Dice With Faces Face
+syntax keyword Statement Print While Let Modify Input If Else End Roll Halt Break Assert
+syntax keyword Statement Be To Die Dice With Face Faces
 syntax keyword Statement Sub Call nextgroup=FuncName skipwhite skipempty
 syntax keyword Boolean True False
 syntax keyword StorageClass AsMut

@@ -10,6 +10,42 @@ pub trait Eval {
     fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError>;
 }
 
+impl Eval for Equ {
+    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+        Ok(match self {
+            Self::Single(l) => l.eval_on(vmap)?,
+            Self::Equal(l, r) => {
+                let l = l.eval_on(vmap)?;
+                let r = r.eval_on(vmap)?;
+                match (&l, &r) {
+                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l == r),
+                    (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l == r),
+                    (Typed::Str(l), Typed::Str(r)) => Typed::Bool(l == r),
+                    _ => Err(EvalError::TypeError(format!(
+                        "cannot compare {} with {}",
+                        l.typename(),
+                        r.typename()
+                    )))?,
+                }
+            }
+            Self::NotEqual(l, r) => {
+                let l = l.eval_on(vmap)?;
+                let r = r.eval_on(vmap)?;
+                match (&l, &r) {
+                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l != r),
+                    (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l != r),
+                    (Typed::Str(l), Typed::Str(r)) => Typed::Bool(l != r),
+                    _ => Err(EvalError::TypeError(format!(
+                        "cannot compare {} with {}",
+                        l.typename(),
+                        r.typename()
+                    )))?,
+                }
+            }
+        })
+    }
+}
+
 macro_rules! def_cmp {
     ($vmap: expr, $l: expr, $r: expr, $( $pat:pat )|+) => {
         {
@@ -29,8 +65,6 @@ impl Eval for Rel {
         use std::cmp::Ordering;
         Ok(match self {
             Self::Single(l) => l.eval_on(vmap)?,
-            Self::Equal(l, r) => def_cmp!(vmap, l, r, Ordering::Equal)?,
-            Self::NotEqual(l, r) => def_cmp!(vmap, l, r, Ordering::Less | Ordering::Greater)?,
             Self::LessEqual(l, r) => def_cmp!(vmap, l, r, Ordering::Less | Ordering::Equal)?,
             Self::GreaterEqual(l, r) => def_cmp!(vmap, l, r, Ordering::Greater | Ordering::Equal)?,
             Self::LessThan(l, r) => def_cmp!(vmap, l, r, Ordering::Less)?,
@@ -94,7 +128,7 @@ impl Eval for MulDiv {
                 let l = l.eval_on(vmap)?;
                 let r = r.eval_on(vmap)?;
                 match (&l, &r) {
-                    (Typed::Num(this), Typed::Num(that)) => match this.checked_add(*that) {
+                    (Typed::Num(this), Typed::Num(that)) => match this.checked_mul(*that) {
                         Some(n) => Ok(Typed::Num(n)),
                         None => Err(EvalError::OverFlow),
                     },

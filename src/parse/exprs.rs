@@ -32,20 +32,51 @@ pub(super) trait TryFromTokens<'a> {
 
 impl<'a> TryFromTokens<'a> for Expr {
     fn can_start_with(item: &Items) -> bool {
-        Rel::can_start_with(item)
+        Equ::can_start_with(item)
     }
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
         T: Iterator<Item = &'a Token>,
         Self: Sized,
     {
-        let expr = Rel::try_from_tokens(tks)?;
+        let expr = Equ::try_from_tokens(tks)?;
 
         if let Some(tk) = tks.next() {
             return Err(ParseError::TrailingToken { from: tk.clone() });
         }
 
         Ok(Self { content: expr })
+    }
+}
+
+impl<'a> TryFromTokens<'a> for Equ {
+    fn can_start_with(item: &Items) -> bool {
+        Rel::can_start_with(item)
+    }
+
+    fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
+    where
+        T: Iterator<Item = &'a Token>,
+    {
+        use lex::{EquOps, Ops};
+
+        let mut lop = Equ::Single(Rel::try_from_tokens(tks)?);
+        loop {
+            if let Some(Token {
+                item: Items::Ops(Ops::Equ(op)),
+                ..
+            }) = tks.peek()
+            {
+                let _ = tks.next().unwrap();
+                let rop = Rel::try_from_tokens(tks)?;
+                match op {
+                    EquOps::Equal => lop = Self::Equal(Box::new(lop), rop),
+                    EquOps::NotEqual => lop = Self::NotEqual(Box::new(lop), rop),
+                }
+            } else {
+                return Ok(lop);
+            }
+        }
     }
 }
 
@@ -63,24 +94,24 @@ impl<'a> TryFromTokens<'a> for Rel {
         ensure_start!(tks);
 
         let lop = AddSub::try_from_tokens(tks)?;
-        Ok(match tks.peek() {
-            Some(Token {
+        Ok(
+            if let Some(Token {
                 item: Items::Ops(Ops::Rel(op)),
                 ..
-            }) => {
+            }) = tks.peek()
+            {
                 let _ = tks.next().unwrap();
                 let rop = AddSub::try_from_tokens(tks)?;
                 match op {
-                    RelOps::Equal => Self::Equal(lop, rop),
-                    RelOps::NotEqual => Self::NotEqual(lop, rop),
                     RelOps::LessEqual => Self::LessEqual(lop, rop),
                     RelOps::GreaterEqual => Self::GreaterEqual(lop, rop),
                     RelOps::LessThan => Self::LessThan(lop, rop),
                     RelOps::GreaterThan => Self::GreaterThan(lop, rop),
                 }
-            }
-            _ => Self::Single(lop),
-        })
+            } else {
+                Self::Single(lop)
+            },
+        )
     }
 }
 
@@ -93,29 +124,27 @@ impl<'a> TryFromTokens<'a> for AddSub {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{AriOps, Ops};
+        use lex::{AddOps, Ops};
 
         ensure_start!(tks);
 
-        let lop = MulDiv::try_from_tokens(tks)?;
-        Ok(match tks.peek() {
-            Some(Token {
-                item: Items::Ops(Ops::Ari(op)),
+        let mut lop = AddSub::Single(MulDiv::try_from_tokens(tks)?);
+        loop {
+            if let Some(Token {
+                item: Items::Ops(Ops::Add(op)),
                 ..
-            }) => match op {
-                AriOps::Add | AriOps::Sub => {
-                    let _ = tks.next().unwrap();
-                    let rop = Self::try_from_tokens(tks)?;
-                    match op {
-                        AriOps::Add => Self::Add(lop, Box::new(rop)),
-                        AriOps::Sub => Self::Sub(lop, Box::new(rop)),
-                        _ => unreachable!(),
-                    }
+            }) = tks.peek()
+            {
+                let _ = tks.next().unwrap();
+                let rop = MulDiv::try_from_tokens(tks)?;
+                match op {
+                    AddOps::Add => lop = Self::Add(Box::new(lop), rop),
+                    AddOps::Sub => lop = Self::Sub(Box::new(lop), rop),
                 }
-                _ => Self::Single(lop),
-            },
-            _ => Self::Single(lop),
-        })
+            } else {
+                return Ok(lop);
+            }
+        }
     }
 }
 
@@ -128,37 +157,35 @@ impl<'a> TryFromTokens<'a> for MulDiv {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{AriOps, Ops};
+        use lex::{MulOps, Ops};
 
         ensure_start!(tks);
 
-        let lop = Node::try_from_tokens(tks)?;
-        Ok(match tks.peek() {
-            Some(Token {
-                item: Items::Ops(Ops::Ari(op)),
+        let mut lop = MulDiv::Single(Node::try_from_tokens(tks)?);
+        loop {
+            if let Some(Token {
+                item: Items::Ops(Ops::Mul(op)),
                 ..
-            }) => match op {
-                AriOps::Mul | AriOps::Div | AriOps::Mod => {
-                    let _ = tks.next().unwrap();
-                    let rop = Self::try_from_tokens(tks)?;
-                    match op {
-                        AriOps::Mul => Self::Mul(lop, Box::new(rop)),
-                        AriOps::Div => Self::Div(lop, Box::new(rop)),
-                        AriOps::Mod => Self::Mod(lop, Box::new(rop)),
-                        _ => unreachable!(),
-                    }
+            }) = tks.peek()
+            {
+                let _ = tks.next().unwrap();
+                let rop = Node::try_from_tokens(tks)?;
+                match op {
+                    MulOps::Mul => lop = Self::Mul(Box::new(lop), rop),
+                    MulOps::Div => lop = Self::Div(Box::new(lop), rop),
+                    MulOps::Mod => lop = Self::Mod(Box::new(lop), rop),
                 }
-                _ => Self::Single(lop),
-            },
-            _ => Self::Single(lop),
-        })
+            } else {
+                return Ok(lop);
+            }
+        }
     }
 }
 
 impl<'a> TryFromTokens<'a> for Node {
     fn can_start_with(item: &Items) -> bool {
-        use lex::{AriOps, Ops};
-        matches!(item, Items::Ops(Ops::Ari(AriOps::Add | AriOps::Sub)))
+        use lex::{AddOps, Ops};
+        matches!(item, Items::Ops(Ops::Add(AddOps::Add | AddOps::Sub)))
             || Core::can_start_with(item)
     }
 
@@ -166,27 +193,20 @@ impl<'a> TryFromTokens<'a> for Node {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{AriOps, Ops};
+        use lex::{AddOps, Ops};
 
         ensure_start!(tks);
 
         Ok(
             if let Some(Token {
-                item: Items::Ops(Ops::Ari(op)),
+                item: Items::Ops(Ops::Add(op)),
                 ..
             }) = tks.peek()
             {
-                let tk = tks.next().unwrap();
+                let operand = Self::try_from_tokens(tks)?;
                 match op {
-                    AriOps::Add | AriOps::Sub => {
-                        let operand = Self::try_from_tokens(tks)?;
-                        match op {
-                            AriOps::Add => Self::Plus(Box::new(operand)),
-                            AriOps::Sub => Self::Minus(Box::new(operand)),
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => return Err(ParseError::InvalidToken(tk.clone())),
+                    AddOps::Add => Self::Plus(Box::new(operand)),
+                    AddOps::Sub => Self::Minus(Box::new(operand)),
                 }
             } else {
                 let operand = Core::try_from_tokens(tks)?;
@@ -225,14 +245,14 @@ impl<'a> TryFromTokens<'a> for Core {
             Items::Key(Keywords::True) => Self::True,
             Items::Key(Keywords::False) => Self::False,
             Items::LParen => {
-                let rel = Rel::try_from_tokens(tks)?;
+                let equ = Equ::try_from_tokens(tks)?;
 
                 let next_tk = tks.next();
                 match next_tk {
                     Some(Token {
                         item: Items::RParen,
                         ..
-                    }) => Self::Paren(Box::new(rel)),
+                    }) => Self::Paren(Box::new(equ)),
                     _ => Err(ParseError::NoPairParen { lparen: tk.clone() })?,
                 }
             }

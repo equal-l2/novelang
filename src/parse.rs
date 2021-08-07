@@ -790,7 +790,6 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Assert => parse_stmt!(i, stmts, {
-                    let idx_start = i;
                     // "Assert" (<str> "With") <cond> ";"
                     let expr1 = parse_expr!(
                         Items::Semi | Items::Key(Keywords::With),
@@ -837,15 +836,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             cond = expr2;
                         }
                         Type::Bool => {
-                            let s = ((idx_start+1)..i).map(|i| tks[i].item.to_string()).fold(
-                                tks[idx_start].item.to_string(),
-                                |mut acc, x| {
-                                    acc += " ";
-                                    acc += &x;
-                                    acc
-                                },
-                            );
-                            mesg = Expr::new_str(s);
+                            mesg = Expr::new_str(expr1.to_string());
                             cond = expr1;
                         }
                         _ => die_cont!("Expected Str or Num", i, lexed),

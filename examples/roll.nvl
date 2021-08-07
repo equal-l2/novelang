@@ -14,7 +14,7 @@ let cnt5 be 0 asmut;
 let cnt6 be 0 asmut;
 
 modify cnt to 0;
-while cnt < 10000;
+while cnt < 30000;
     let res be 0 asmut;
     Roll 1 dice with 6 faces to res;
     if res == 1;

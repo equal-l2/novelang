@@ -19,13 +19,29 @@ impl TypeCheck for Expr {
     }
 }
 
+impl TypeCheck for Equ {
+    fn check_type(&self, stack: &ScopeStack) -> Result {
+        match self {
+            Self::Single(i) => i.check_type(stack),
+            Self::Equal(l, r) | Self::NotEqual(l, r) => {
+                let l_ty = l.check_type(stack)?;
+                let r_ty = r.check_type(stack)?;
+
+                if l_ty == r_ty {
+                    Ok(Type::Bool)
+                } else {
+                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                }
+            }
+        }
+    }
+}
+
 impl TypeCheck for Rel {
     fn check_type(&self, stack: &ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
-            Self::Equal(l, r)
-            | Self::NotEqual(l, r)
-            | Self::LessEqual(l, r)
+            Self::LessEqual(l, r)
             | Self::GreaterEqual(l, r)
             | Self::LessThan(l, r)
             | Self::GreaterThan(l, r) => {
