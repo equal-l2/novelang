@@ -48,6 +48,7 @@ impl PartialOrd for Typed {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Typed::Num(this), Typed::Num(that)) => Some(this.cmp(that)),
+            (Typed::Str(this), Typed::Str(that)) => Some(this.cmp(that)),
             _ => None,
         }
     }
