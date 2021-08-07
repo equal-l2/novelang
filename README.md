@@ -10,21 +10,22 @@
 <stmt>       ::= <print> | <sub> | <call> | <while> | <let>
                | <modify> | <input> | <if> | <elif> | <else>
                | <end> | <roll> | <halt> | <break>
-<print>      ::= "print" <print-args> ";"
-<print-args> ::= (<expr> | <string>) {"," (<expr> | <string>)}
+<print>      ::= "print" [<print-args>] ";"
+<print-args> ::= <expr> {"," <expr>}
 <sub>        ::= "sub" IDENT ";"
 <call>       ::= "call" IDENT ";"
 <while>      ::= "while" <expr> ";"
 <let>        ::= "let" IDENT "be" <expr> ["asmut"] ";"
 <modify>     ::= "modify" IDENT "to" <expr> ";"
-<input>      ::= "input" [<string>] "to" <ident>";"
-<if>         ::= "if" <expr> ";"
-<elif>       ::= "else" "if" <expr> ";"
+<input>      ::= "input" [<expr>] "to" <ident>";"
+<if>         ::= "if" <cond> ";"
+<elif>       ::= "else" "if" <cond> ";"
 <else>       ::= "else" ";"
 <end>        ::= "end" ";"
-<roll>       ::= "roll" <expr> ("die"|"dice") "with" <expr> ("face"|"faces") "to" <ident>";"
+<roll>       ::= "roll" <expr> ("die"|"dice") "with" <expr> ("face"|"faces") "to" <ident> ";"
 <halt>       ::= "halt" ";"
 <break>      ::= "break" ";"
+<assert>     ::= "assert" [<expr> "with"] <cond> ";"
 ```
 
 ## Instructions

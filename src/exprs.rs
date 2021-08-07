@@ -32,6 +32,13 @@ impl Expr {
         use eval::Eval;
         self.content.eval_on(vmap)
     }
+
+    pub fn new_str(s: String) -> Self {
+        use items::*;
+        Self {
+            content: Rel::Single(AddSub::Single(MulDiv::Single(Node::Single(Core::Str(s))))),
+        }
+    }
 }
 
 pub mod items {

@@ -44,6 +44,7 @@ pub enum Command {
     Roll,
     Halt,
     Break,
+    Assert,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +117,7 @@ impl Item for Command {
         Self::Roll,
         Self::Halt,
         Self::Break,
+        Self::Assert,
     ];
 
     fn as_str(&self) -> &str {
@@ -133,6 +135,7 @@ impl Item for Command {
             Self::Roll => "roll",
             Self::Halt => "halt",
             Self::Break => "break",
+            Self::Assert => "assert",
         }
     }
 
@@ -263,6 +266,21 @@ impl Items {
             Num(_, l) => *l,
             Ident(i) | Str(i) => i.len(),
             Semi | Comma | LParen | RParen => 1,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        use Items::*;
+        match self {
+            Key(i) => i.as_str().into(),
+            Cmd(i) => i.as_str().into(),
+            Ops(i) => i.as_str().into(),
+            Num(_, l) => l.to_string(),
+            Ident(i) | Str(i) => i.clone(),
+            Semi => ";".into(),
+            Comma => ",".into(),
+            LParen => "(".into(),
+            RParen => ")".into(),
         }
     }
 }

@@ -73,6 +73,10 @@ pub enum Statement {
     Halt,
     Ill,
     Break,
+    Assert {
+        mesg: Expr,
+        cond: Expr,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -783,6 +787,73 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     // "Break" ";"
                     expects_semi!(i, lexed);
                     Statement::Break
+                }),
+
+                lex::Command::Assert => parse_stmt!(i, stmts, {
+                    let idx_start = i;
+                    // "Assert" (<str> "With") <cond> ";"
+                    let expr1 = parse_expr!(
+                        Items::Semi | Items::Key(Keywords::With),
+                        i,
+                        tks,
+                        lexed,
+                        scope_stack
+                    );
+
+                    let expr1_ty = match expr1.check_type(&scope_stack) {
+                        Ok(t) => t,
+                        Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                    };
+
+                    let mesg;
+                    let cond;
+                    match expr1_ty {
+                        Type::Str => {
+                            // "Assert" <str> "With" <cond> ";"
+                            mesg = expr1;
+                            expects!(
+                                "\"With\" expected, as the first expression was Str",
+                                Items::Key(Keywords::With),
+                                i,
+                                lexed
+                            );
+
+                            let expr2 = parse_expr!(
+                                Items::Semi | Items::Key(Keywords::With),
+                                i,
+                                tks,
+                                lexed,
+                                scope_stack
+                            );
+                            let expr2_ty = match expr2.check_type(&scope_stack) {
+                                Ok(t) => t,
+                                Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                            };
+
+                            if expr2_ty != Type::Bool {
+                                die_cont!("Expected Bool", i, lexed);
+                            }
+
+                            cond = expr2;
+                        }
+                        Type::Bool => {
+                            let s = ((idx_start+1)..i).map(|i| tks[i].item.to_string()).fold(
+                                tks[idx_start].item.to_string(),
+                                |mut acc, x| {
+                                    acc += " ";
+                                    acc += &x;
+                                    acc
+                                },
+                            );
+                            mesg = Expr::new_str(s);
+                            cond = expr1;
+                        }
+                        _ => die_cont!("Expected Str or Num", i, lexed),
+                    }
+
+                    expects_semi!(i, lexed);
+
+                    Statement::Assert { mesg, cond }
                 }),
             }
         } else {

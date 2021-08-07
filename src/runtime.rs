@@ -218,6 +218,14 @@ fn unwrap_sub(val: &Typed) -> usize {
     }
 }
 
+fn unwrap_str(val: &Typed) -> String {
+    if let Typed::Str(s) = val {
+        s.clone()
+    } else {
+        die!("Runtime error: Str expected, got {}", val.typename());
+    }
+}
+
 pub fn run(prog: AST) {
     let mut runtime = Runtime::new();
 
@@ -428,6 +436,17 @@ pub fn run(prog: AST) {
                     }
                 };
                 continue;
+            }
+            Statement::Assert { mesg, cond } => {
+                let mesg_str = unwrap_str(&runtime.eval(&mesg).unwrap_or_else(|e| {
+                    die!("Runtime error: Failed to eval message in Assert: {}", e);
+                }));
+
+                if !unwrap_bool(&runtime.eval(cond).unwrap_or_else(|e| {
+                    die!("Runtime error: Failed to eval condition in Assert: {}", e);
+                })) {
+                    die!("Runtime error: Assert \"{}\" failed", mesg_str);
+                }
             }
             #[allow(unreachable_patterns)]
             other => {
