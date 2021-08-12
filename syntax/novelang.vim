@@ -1,4 +1,10 @@
-syntax clear
+" Novelang syntax file
+
+if exists("b:current_syntax")
+  finish
+endif
+
+let b:current_syntax = "novelang"
 
 syntax case match
 syntax keyword Special _wait
