@@ -5,27 +5,28 @@
 ## Syntax
 
 ```
-<program>    ::= {<line>}
-<line>       ::= {<stmt>} ["#" { CHAR }] NL
-<stmt>       ::= <print> | <sub> | <call> | <while> | <let>
-               | <modify> | <input> | <if> | <elif> | <else>
-               | <end> | <roll> | <halt> | <break>
-<print>      ::= "print" [<print-args>] ";"
-<print-args> ::= <expr> {"," <expr>}
-<sub>        ::= "sub" IDENT ";"
-<call>       ::= "call" IDENT ";"
-<while>      ::= "while" <expr> ";"
-<let>        ::= "let" IDENT "be" <expr> ["asmut"] ";"
-<modify>     ::= "modify" IDENT "to" <expr> ";"
-<input>      ::= "input" [<expr>] "to" <ident>";"
-<if>         ::= "if" <cond> ";"
-<elif>       ::= "else" "if" <cond> ";"
-<else>       ::= "else" ";"
-<end>        ::= "end" ";"
-<roll>       ::= "roll" <expr> ("die"|"dice") "with" <expr> ("face"|"faces") "to" <ident> ";"
-<halt>       ::= "halt" ";"
-<break>      ::= "break" ";"
-<assert>     ::= "assert" [<expr> "with"] <cond> ";"
+<program>  ::= {<line>}
+<line>     ::= {<stmt>} ["#" { CHAR }] NL
+<stmt>     ::= <print> | <sub> | <call> | <while> | <let>
+             | <modify> | <input> | <if> | <elif> | <else>
+             | <end> | <roll> | <halt> | <break>
+<print>    ::= "print" <expr> {"," <expr>} ";"
+<sub>      ::= "sub" IDENT ";"
+<call>     ::= "call" IDENT ";"
+<while>    ::= "while" <expr> ";"
+<let>      ::= "let" IDENT "be" <expr> ["asmut"] ";"
+<modify>   ::= "modify" IDENT "to" <expr> ";"
+<input>    ::= "input" [<expr>] "to" <ident>";"
+<if>       ::= "if" <cond> ";"
+<elif>     ::= "else" "if" <cond> ";"
+<else>     ::= "else" ";"
+<end>      ::= "end" ";"
+<roll>     ::= "roll" <expr> ("die"|"dice") "with" <expr> ("face"|"faces") "to" <ident> ";"
+<halt>     ::= "halt" ";"
+<break>    ::= "break" ";"
+<assert>   ::= "assert" [<expr> "with"] <cond> ";"
+<continue> ::= "continue" ";"
+<for>      ::= "for" IDENT "from" <expr> "to" <expr> ";"
 ```
 
 ## Instructions

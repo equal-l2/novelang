@@ -1,6 +1,4 @@
-let i be 1 asmut;
-
-while i <= 100;
+for i from 1 to 100;
     if i % 15 == 0;
         print "fizzbuzz";
     else if i % 3 == 0;
@@ -10,5 +8,4 @@ while i <= 100;
     else;
         print i;
     end;
-    modify i to i+1;
 end;

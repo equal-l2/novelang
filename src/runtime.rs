@@ -26,10 +26,12 @@ impl Scope {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum ScopeKind {
     Branch,
     Loop,
     Sub,
+    ForWrap,
 }
 
 /// Represents the store for runtime state
@@ -99,6 +101,10 @@ impl Runtime {
     /// Pop the current scope
     fn pop(&mut self) -> Option<Scope> {
         self.stack.pop()
+    }
+
+    fn peek(&self) -> Option<&Scope> {
+        self.stack.last()
     }
 
     /// Push a new scope
@@ -422,14 +428,17 @@ pub fn run(prog: AST) {
                         match scope.kind {
                             ScopeKind::Loop => {
                                 breaking = true;
+                                // go to starting stmt
                                 break scope.ret_idx;
                             }
                             ScopeKind::Sub => {
+                                // return to called index
                                 break scope.ret_idx;
                             }
                             ScopeKind::Branch => {
                                 // break the outer scope
                             }
+                            _ => panic!("unexpected scope kind: {:?}", scope.kind),
                         }
                     } else {
                         die!("Runtime error: scope stack is empty");
@@ -461,12 +470,85 @@ pub fn run(prog: AST) {
                             ScopeKind::Branch => {
                                 // break the outer scope
                             }
+                            _ => panic!("unexpected scope kind: {:?}", scope.kind),
                         }
                     } else {
                         die!("Runtime error: scope stack is empty");
                     }
                 };
                 continue;
+            }
+            Statement::For {
+                counter,
+                from,
+                to,
+                offset_to_end,
+            } => {
+                if breaking {
+                    // remove wrapper scope
+                    let s = runtime.pop();
+                    debug_assert!(matches!(
+                        s,
+                        Some(Scope {
+                            kind: ScopeKind::ForWrap,
+                            ..
+                        })
+                    ));
+
+                    // break was fired, jump to the End
+                    breaking = false;
+                    i += offset_to_end;
+                } else {
+                    let on_for;
+                    if let Some(scope) = runtime.peek() {
+                        on_for = scope.kind == ScopeKind::ForWrap;
+                    } else {
+                        on_for = false;
+                    }
+
+                    let to = unwrap_num(
+                        &(runtime.eval(to).unwrap_or_else(|e| {
+                            die!("Runtime error: failed to eval to of For: {}", e);
+                        })),
+                    );
+
+                    if !on_for {
+                        // create counter
+                        runtime.push(ScopeKind::ForWrap, i);
+                        let from = unwrap_num(&runtime.eval(from).unwrap_or_else(|e| {
+                            die!("Runtime error: failed to eval from of For: {}", e);
+                        }));
+
+                        if from > to {
+                            // loop ended
+                            i += offset_to_end;
+                        } else {
+                            runtime.decl_var(counter, Variable::new(Typed::Num(from)));
+                            runtime.push(ScopeKind::Loop, i);
+                        }
+                    } else {
+                        let cnt = {
+                            unwrap_num(
+                                &runtime
+                                    .get_var_mut(counter)
+                                    .expect("counter should be there")
+                                    .get(),
+                            )
+                        };
+
+                        if cnt >= to {
+                            // loop ended
+                            i += offset_to_end;
+                        } else {
+                            // loop continues
+                            runtime
+                                .get_var_mut(counter)
+                                .expect("counter should be there")
+                                .force_modify(Typed::Num(cnt + 1));
+                            runtime.push(ScopeKind::Loop, i);
+                        }
+                    }
+                }
             }
             #[allow(unreachable_patterns)]
             other => {

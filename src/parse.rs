@@ -78,6 +78,12 @@ pub enum Statement {
         cond: Expr,
     },
     Continue,
+    For {
+        counter: String,
+        from: Expr,
+        to: Expr,
+        offset_to_end: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -675,6 +681,14 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             offset_to_next: offset_to_end,
                         },
                         Statement::Else { .. } => Statement::Else { offset_to_end },
+                        Statement::For {
+                            counter, from, to, ..
+                        } => Statement::For {
+                            counter,
+                            from,
+                            to,
+                            offset_to_end,
+                        },
                         _ => {
                             die_cont!("Cannot find corresponding Element for End", i, lexed);
                         }
@@ -840,7 +854,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             mesg = Expr::new_str(expr1.to_string());
                             cond = expr1;
                         }
-                        _ => die_cont!("Expected Str or Num", i, lexed),
+                        _ => die_cont!("Expected Str or Bool", i, lexed),
                     }
 
                     expects_semi!(i, lexed);
@@ -848,10 +862,73 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     Statement::Assert { mesg, cond }
                 }),
 
-                lex::Command::Continue=> parse_stmt!(i, stmts, {
+                lex::Command::Continue => parse_stmt!(i, stmts, {
                     // "Continue" ";"
                     expects_semi!(i, lexed);
                     Statement::Continue
+                }),
+
+                lex::Command::For => parse_stmt!(i, stmts, {
+                    // "For" name "from" expr "to" expr ";"
+
+                    if let Items::Ident(name) = &tks[i].item {
+                        i += 1;
+                        if name.starts_with('_') {
+                            die_cont!("Identifier starts with _ is reserved", i, lexed);
+                        }
+                        expects!("\"From\" expected", Items::Key(Keywords::From), i, lexed);
+
+                        let from =
+                            parse_expr!(Items::Key(Keywords::To), i, tks, lexed, scope_stack);
+
+                        {
+                            let from_ty = match from.check_type(&scope_stack) {
+                                Ok(t) => t,
+                                Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                            };
+
+                            if from_ty != Type::Num {
+                                die_cont!("Expected Str or Num", i, lexed);
+                            }
+                        }
+
+                        expects!("\"To\" expected", Items::Key(Keywords::To), i, lexed);
+
+                        let to = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
+
+                        {
+                            let to_ty = match to.check_type(&scope_stack) {
+                                Ok(t) => t,
+                                Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                            };
+
+                            if to_ty != Type::Num {
+                                die_cont!("Expected Str or Num", i, lexed);
+                            }
+                        }
+
+                        scope_stack.push(stmts.len());
+
+                        // always successful because we are pushing it to a new scope
+                        let _ = scope_stack.add_var(
+                            name.clone(),
+                            TypeInfo {
+                                ty: Type::Num,
+                                is_mut: false,
+                            },
+                        );
+
+                        expects_semi!(i, lexed);
+
+                        Statement::For {
+                            counter: name.clone(),
+                            from,
+                            to,
+                            offset_to_end: 0,
+                        }
+                    } else {
+                        die_cont!("Ident expected", i, lexed)
+                    }
                 }),
             }
         } else {

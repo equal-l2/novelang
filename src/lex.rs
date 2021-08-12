@@ -46,6 +46,7 @@ pub enum Command {
     Break,
     Assert,
     Continue,
+    For,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +59,7 @@ pub enum Keywords {
     Face,
     True,
     False,
+    From,
 }
 
 impl Item for Keywords {
@@ -70,6 +72,7 @@ impl Item for Keywords {
         Self::Face,
         Self::True,
         Self::False,
+        Self::From,
     ];
 
     fn as_str(&self) -> &str {
@@ -82,6 +85,7 @@ impl Item for Keywords {
             Self::Face => "face",
             Self::True => "true",
             Self::False => "false",
+            Self::From => "from",
         }
     }
 
@@ -120,6 +124,7 @@ impl Item for Command {
         Self::Break,
         Self::Assert,
         Self::Continue,
+        Self::For,
     ];
 
     fn as_str(&self) -> &str {
@@ -139,6 +144,7 @@ impl Item for Command {
             Self::Break => "break",
             Self::Assert => "assert",
             Self::Continue => "continue",
+            Self::For => "for",
         }
     }
 
