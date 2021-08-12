@@ -77,6 +77,7 @@ pub enum Statement {
         mesg: Expr,
         cond: Expr,
     },
+    Continue,
 }
 
 #[derive(Debug, Clone)]
@@ -845,6 +846,12 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     expects_semi!(i, lexed);
 
                     Statement::Assert { mesg, cond }
+                }),
+
+                lex::Command::Continue=> parse_stmt!(i, stmts, {
+                    // "Continue" ";"
+                    expects_semi!(i, lexed);
+                    Statement::Continue
                 }),
             }
         } else {

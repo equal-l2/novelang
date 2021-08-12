@@ -45,6 +45,7 @@ pub enum Command {
     Halt,
     Break,
     Assert,
+    Continue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +119,7 @@ impl Item for Command {
         Self::Halt,
         Self::Break,
         Self::Assert,
+        Self::Continue,
     ];
 
     fn as_str(&self) -> &str {
@@ -136,6 +138,7 @@ impl Item for Command {
             Self::Halt => "halt",
             Self::Break => "break",
             Self::Assert => "assert",
+            Self::Continue => "continue",
         }
     }
 

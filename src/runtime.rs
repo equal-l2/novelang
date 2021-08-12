@@ -448,6 +448,26 @@ pub fn run(prog: AST) {
                     die!("Runtime error: Assert \"{}\" failed", mesg_str);
                 }
             }
+            Statement::Continue => {
+                i = loop {
+                    if let Some(scope) = runtime.pop() {
+                        match scope.kind {
+                            ScopeKind::Loop => {
+                                break scope.ret_idx;
+                            }
+                            ScopeKind::Sub => {
+                                die!("Runtime error: cannot continue in sub scope");
+                            }
+                            ScopeKind::Branch => {
+                                // break the outer scope
+                            }
+                        }
+                    } else {
+                        die!("Runtime error: scope stack is empty");
+                    }
+                };
+                continue;
+            }
             #[allow(unreachable_patterns)]
             other => {
                 die!("Runtime error: unknown instruction: {:?}", other);
