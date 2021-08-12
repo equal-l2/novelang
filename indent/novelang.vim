@@ -31,7 +31,7 @@ function! GetNovelangIndent(...)
         let l:res = l:previndent
     endif
 
-    echom l:res
+    #echom l:res
 
     return l:res
 endfunction
