@@ -50,8 +50,5 @@
 ## TODO
 - Add `for`
 - Add array type
-- Add compound conditions
-    - Add `&&`
-    - Add `||`
 - add subroutine with return value
 - better type checking (i.e. better diagnostics)

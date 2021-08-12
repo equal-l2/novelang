@@ -8,6 +8,17 @@ impl Display for Expr {
     }
 }
 
+impl Display for Log {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        use Log::*;
+        match self {
+            Single(i) => write!(f, "{}", i),
+            And(l, r) => write!(f, "{} && {}", l, r),
+            Or(l, r) => write!(f, "{} || {}", l, r),
+        }
+    }
+}
+
 impl Display for Equ {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         use Equ::*;

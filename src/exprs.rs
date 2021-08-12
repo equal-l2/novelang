@@ -25,7 +25,7 @@ impl std::fmt::Display for EvalError {
 
 #[derive(Debug, Clone)]
 pub struct Expr {
-    pub content: items::Equ,
+    pub content: items::Log,
 }
 
 impl Expr {
@@ -37,14 +37,21 @@ impl Expr {
     pub fn new_str(s: String) -> Self {
         use items::*;
         Self {
-            content: Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(Node::Single(
-                Core::Str(s),
+            content: Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
+                Node::Single(Core::Str(s)),
             ))))),
         }
     }
 }
 
 pub mod items {
+    #[derive(Debug, Clone)]
+    pub enum Log {
+        Single(Equ),
+        And(Box<Self>, Equ),
+        Or(Box<Self>, Equ),
+    }
+
     #[derive(Debug, Clone)]
     pub enum Equ {
         Single(Rel),

@@ -10,6 +10,38 @@ pub trait Eval {
     fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError>;
 }
 
+impl Eval for Log {
+    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+        Ok(match self {
+            Self::Single(l) => l.eval_on(vmap)?,
+            Self::And(l, r) => {
+                let l = l.eval_on(vmap)?;
+                let r = r.eval_on(vmap)?;
+                match (&l, &r) {
+                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l && *r),
+                    _ => Err(EvalError::TypeError(format!(
+                        "cannot eval composite logic between {} with {}",
+                        l.typename(),
+                        r.typename()
+                    )))?,
+                }
+            }
+            Self::Or(l, r) => {
+                let l = l.eval_on(vmap)?;
+                let r = r.eval_on(vmap)?;
+                match (&l, &r) {
+                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l || *r),
+                    _ => Err(EvalError::TypeError(format!(
+                        "cannot eval composite logic between {} with {}",
+                        l.typename(),
+                        r.typename()
+                    )))?,
+                }
+            }
+        })
+    }
+}
+
 impl Eval for Equ {
     fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {

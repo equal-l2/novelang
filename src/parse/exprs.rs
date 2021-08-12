@@ -32,20 +32,51 @@ pub(super) trait TryFromTokens<'a> {
 
 impl<'a> TryFromTokens<'a> for Expr {
     fn can_start_with(item: &Items) -> bool {
-        Equ::can_start_with(item)
+        Log::can_start_with(item)
     }
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
         T: Iterator<Item = &'a Token>,
         Self: Sized,
     {
-        let expr = Equ::try_from_tokens(tks)?;
+        let expr = Log::try_from_tokens(tks)?;
 
         if let Some(tk) = tks.next() {
             return Err(ParseError::TrailingToken { from: tk.clone() });
         }
 
         Ok(Self { content: expr })
+    }
+}
+
+impl<'a> TryFromTokens<'a> for Log {
+    fn can_start_with(item: &Items) -> bool {
+        Equ::can_start_with(item)
+    }
+
+    fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
+    where
+        T: Iterator<Item = &'a Token>,
+    {
+        use lex::{LogOps, Ops};
+
+        let mut lop = Log::Single(Equ::try_from_tokens(tks)?);
+        loop {
+            if let Some(Token {
+                item: Items::Ops(Ops::Log(op)),
+                ..
+            }) = tks.peek()
+            {
+                let _ = tks.next().unwrap();
+                let rop = Equ::try_from_tokens(tks)?;
+                match op {
+                    LogOps::And => lop = Self::And(Box::new(lop), rop),
+                    LogOps::Or => lop = Self::Or(Box::new(lop), rop),
+                }
+            } else {
+                return Ok(lop);
+            }
+        }
     }
 }
 

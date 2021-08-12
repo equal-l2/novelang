@@ -18,7 +18,7 @@ syntax keyword StorageClass AsMut
 syntax keyword Conditional If Else
 syntax match Comment '^\s*#.*$' display
 syntax match FuncName '[^[:cntrl:][:space:][:digit:][:punct:]]\%([^[:cntrl:][:space:][:punct:]]\|_\)*' contained display
-syntax match Operator '+\|-\|*\|/\|%\|<\|>\|=\|!' display
+syntax match Operator '&&\|||\|+\|-\|*\|/\|%\|<\|>\|=\|!' display
 syntax match Number '\<\d*\>' display
 syntax region String start='\"' end='\"' display
 

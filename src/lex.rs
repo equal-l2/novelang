@@ -158,42 +158,20 @@ impl Item for Command {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AddOps {
-    Add, // +
-    Sub, // -
+pub enum LogOps {
+    And, // &&
+    Or,  // ||
 }
 
-impl Item for AddOps {
+impl Item for LogOps {
     const DISCRIMINANTS: &'static [Self] = &[
-        Self::Add, // +
-        Self::Sub, // -
+        Self::And, // &&
+        Self::Or,  // ||
     ];
     fn as_str(&self) -> &str {
         match self {
-            Self::Add => "+",
-            Self::Sub => "-",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MulOps {
-    Mul, // *
-    Div, // /
-    Mod, // %
-}
-
-impl Item for MulOps {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::Mul, // *
-        Self::Div, // /
-        Self::Mod, // %
-    ];
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Mul => "*",
-            Self::Div => "/",
-            Self::Mod => "%",
+            Self::And => "&&",
+            Self::Or => "||",
         }
     }
 }
@@ -243,7 +221,49 @@ impl Item for RelOps {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddOps {
+    Add, // +
+    Sub, // -
+}
+
+impl Item for AddOps {
+    const DISCRIMINANTS: &'static [Self] = &[
+        Self::Add, // +
+        Self::Sub, // -
+    ];
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MulOps {
+    Mul, // *
+    Div, // /
+    Mod, // %
+}
+
+impl Item for MulOps {
+    const DISCRIMINANTS: &'static [Self] = &[
+        Self::Mul, // *
+        Self::Div, // /
+        Self::Mod, // %
+    ];
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Mod => "%",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ops {
+    Log(LogOps),
     Equ(EquOps),
     Rel(RelOps),
     Add(AddOps),
@@ -255,6 +275,7 @@ impl Item for Ops {
     fn as_str(&self) -> &str {
         use Ops::*;
         match self {
+            Log(i) => i.as_str(),
             Equ(i) => i.as_str(),
             Rel(i) => i.as_str(),
             Add(i) => i.as_str(),
@@ -263,7 +284,9 @@ impl Item for Ops {
     }
 
     fn parse_slice(s: &[char]) -> Option<Self> {
-        if let Some(i) = EquOps::parse_slice(s) {
+        if let Some(i) = LogOps::parse_slice(s) {
+            Some(Self::Log(i))
+        } else if let Some(i) = EquOps::parse_slice(s) {
             Some(Self::Equ(i))
         } else if let Some(i) = RelOps::parse_slice(s) {
             Some(Self::Rel(i))
