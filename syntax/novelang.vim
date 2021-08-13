@@ -11,7 +11,7 @@ syntax keyword Special _wait
 
 syntax case ignore
 syntax keyword Statement Print While Let Modify Input If Else End Roll Halt Break Assert
-syntax keyword Statement Break Assert For
+syntax keyword Statement Break Assert For Continue
 syntax keyword Statement Be To Die Dice With Face Faces From
 syntax keyword Statement Sub Call nextgroup=FuncName skipwhite skipempty
 syntax keyword Boolean True False

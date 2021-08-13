@@ -126,15 +126,24 @@ struct TypeInfo {
 
 type VarMap = std::collections::HashMap<String, TypeInfo>;
 
+#[derive(Clone)]
+enum ScopeKind {
+    Loop,
+    Sub,
+    Other,
+}
+
 struct Scope {
     map: VarMap,
+    kind: ScopeKind,
     ret_idx: usize,
 }
 
 impl Scope {
-    fn new(ret_idx: usize) -> Self {
+    fn new(kind: ScopeKind, ret_idx: usize) -> Self {
         Self {
             map: VarMap::new(),
+            kind,
             ret_idx,
         }
     }
@@ -160,7 +169,7 @@ struct ScopeStack {
 
 impl ScopeStack {
     fn new() -> Self {
-        let mut internals = Scope::new(0);
+        let mut internals = Scope::new(ScopeKind::Other, 0);
         internals.add_var(
             String::from("_wait"),
             TypeInfo {
@@ -173,8 +182,12 @@ impl ScopeStack {
         }
     }
 
-    fn push(&mut self, ret_idx: usize) {
-        self.scopes.push(Scope::new(ret_idx))
+    fn scope_kind(&self) -> &ScopeKind {
+        &self.scopes.last().expect("one scope should be there at least").kind
+    }
+
+    fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
+        self.scopes.push(Scope::new(kind, ret_idx))
     }
 
     fn pop(&mut self) -> Option<usize> {
@@ -276,7 +289,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
 
                         // create new scope
-                        scope_stack.push(stmts.len());
+                        scope_stack.push(ScopeKind::Sub, stmts.len());
 
                         Statement::Sub {
                             name: name.clone(),
@@ -307,7 +320,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::While => parse_stmt!(i, stmts, {
                     // "While" cond ";"
 
-                    scope_stack.push(stmts.len());
+                    scope_stack.push(ScopeKind::Loop, stmts.len());
 
                     let expr = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
                     expects_type!(expr, Type::Bool, scope_stack, i, lexed);
@@ -426,7 +439,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     let cond = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
                     expects_semi!(i, lexed);
 
-                    scope_stack.push(stmts.len());
+                    scope_stack.push(ScopeKind::Other, stmts.len());
 
                     Statement::If {
                         cond,
@@ -500,7 +513,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         Statement::Else { offset_to_end: 0 }
                     };
 
-                    scope_stack.push(stmts.len());
+                    scope_stack.push(ScopeKind::Other, stmts.len());
 
                     inst_obj
                 }),
@@ -655,7 +668,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Break => parse_stmt!(i, stmts, {
                     // "Break" ";"
                     expects_semi!(i, lexed);
-                    Statement::Break
+                    if let ScopeKind::Loop = scope_stack.scope_kind() {
+                        Statement::Break
+                    } else {
+                        die_cont!("Break must be in a loop", i, lexed);
+                    }
                 }),
 
                 lex::Command::Assert => parse_stmt!(i, stmts, {
@@ -719,7 +736,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Continue => parse_stmt!(i, stmts, {
                     // "Continue" ";"
                     expects_semi!(i, lexed);
-                    Statement::Continue
+                    if let ScopeKind::Loop = scope_stack.scope_kind() {
+                        Statement::Continue
+                    } else {
+                        die_cont!("Continue must be in a loop", i, lexed);
+                    }
                 }),
 
                 lex::Command::For => parse_stmt!(i, stmts, {
@@ -761,7 +782,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             }
                         }
 
-                        scope_stack.push(stmts.len());
+                        scope_stack.push(ScopeKind::Loop, stmts.len());
 
                         // always successful because we are pushing it to a new scope
                         let _ = scope_stack.add_var(
