@@ -1,22 +1,49 @@
-use super::items::*;
-use super::EvalError;
+pub use crate::exprs::Expr;
+
+use crate::exprs::items::*;
 use crate::types::Typed;
 
 pub trait VarsMap {
     fn get(&self, name: &str) -> Option<&Typed>;
 }
 
+#[derive(Debug)]
+pub enum EvalError {
+    VariableNotFound(String),
+    OverFlow,
+    ZeroDivision,
+    TypeError(String),
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed to eval because ")?;
+        match self {
+            Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
+            Self::OverFlow => write!(f, "of overflow"),
+            Self::ZeroDivision => write!(f, "of zero division"),
+            Self::TypeError(s) => write!(f, "of type error: {}", s),
+        }
+    }
+}
+
 pub trait Eval {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError>;
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError>;
+}
+
+impl Eval for Expr {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+        self.content.eval(vmap)
+    }
 }
 
 impl Eval for Log {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
-            Self::Single(l) => l.eval_on(vmap)?,
+            Self::Single(l) => l.eval(vmap)?,
             Self::And(l, r) => {
-                let l = l.eval_on(vmap)?;
-                let r = r.eval_on(vmap)?;
+                let l = l.eval(vmap)?;
+                let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l && *r),
                     _ => Err(EvalError::TypeError(format!(
@@ -27,8 +54,8 @@ impl Eval for Log {
                 }
             }
             Self::Or(l, r) => {
-                let l = l.eval_on(vmap)?;
-                let r = r.eval_on(vmap)?;
+                let l = l.eval(vmap)?;
+                let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l || *r),
                     _ => Err(EvalError::TypeError(format!(
@@ -43,12 +70,12 @@ impl Eval for Log {
 }
 
 impl Eval for Equ {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
-            Self::Single(l) => l.eval_on(vmap)?,
+            Self::Single(l) => l.eval(vmap)?,
             Self::Equal(l, r) => {
-                let l = l.eval_on(vmap)?;
-                let r = r.eval_on(vmap)?;
+                let l = l.eval(vmap)?;
+                let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l == r),
                     (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l == r),
@@ -61,8 +88,8 @@ impl Eval for Equ {
                 }
             }
             Self::NotEqual(l, r) => {
-                let l = l.eval_on(vmap)?;
-                let r = r.eval_on(vmap)?;
+                let l = l.eval(vmap)?;
+                let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l != r),
                     (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l != r),
@@ -81,8 +108,8 @@ impl Eval for Equ {
 macro_rules! def_cmp {
     ($vmap: expr, $l: expr, $r: expr, $( $pat:pat )|+) => {
         {
-            let l = $l.eval_on($vmap)?;
-            let r = $r.eval_on($vmap)?;
+            let l = $l.eval($vmap)?;
+            let r = $r.eval($vmap)?;
             if let Some(o) = l.partial_cmp(&r) {
                 Ok(Typed::Bool(matches!(o, $($pat)|+)))
             } else {
@@ -93,10 +120,10 @@ macro_rules! def_cmp {
 }
 
 impl Eval for Rel {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         use std::cmp::Ordering;
         Ok(match self {
-            Self::Single(l) => l.eval_on(vmap)?,
+            Self::Single(l) => l.eval(vmap)?,
             Self::LessEqual(l, r) => def_cmp!(vmap, l, r, Ordering::Less | Ordering::Equal)?,
             Self::GreaterEqual(l, r) => def_cmp!(vmap, l, r, Ordering::Greater | Ordering::Equal)?,
             Self::LessThan(l, r) => def_cmp!(vmap, l, r, Ordering::Less)?,
@@ -107,8 +134,8 @@ impl Eval for Rel {
 
 macro_rules! def_ari {
     ($vmap: expr, $l: expr, $r: expr, $method: ident, $err: path, $op: literal) => {{
-        let l = $l.eval_on($vmap)?;
-        let r = $r.eval_on($vmap)?;
+        let l = $l.eval($vmap)?;
+        let r = $r.eval($vmap)?;
         match (&l, &r) {
             (Typed::Num(this), Typed::Num(that)) => match this.$method(*that) {
                 Some(n) => Ok(Typed::Num(n)),
@@ -125,12 +152,12 @@ macro_rules! def_ari {
 }
 
 impl Eval for AddSub {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
-            Self::Single(l) => l.eval_on(vmap)?,
+            Self::Single(l) => l.eval(vmap)?,
             Self::Add(l, r) => {
-                let l = l.eval_on(vmap)?;
-                let r = r.eval_on(vmap)?;
+                let l = l.eval(vmap)?;
+                let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Num(this), Typed::Num(that)) => match this.checked_add(*that) {
                         Some(n) => Ok(Typed::Num(n)),
@@ -153,12 +180,12 @@ impl Eval for AddSub {
 }
 
 impl Eval for MulDiv {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
-            Self::Single(l) => l.eval_on(vmap)?,
+            Self::Single(l) => l.eval(vmap)?,
             Self::Mul(l, r) => {
-                let l = l.eval_on(vmap)?;
-                let r = r.eval_on(vmap)?;
+                let l = l.eval(vmap)?;
+                let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Num(this), Typed::Num(that)) => match this.checked_mul(*that) {
                         Some(n) => Ok(Typed::Num(n)),
@@ -184,17 +211,17 @@ impl Eval for MulDiv {
 }
 
 impl Eval for Node {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
-            Self::Single(l) => l.eval_on(vmap)?,
-            Self::Plus(l) => l.eval_on(vmap)?,
-            Self::Minus(l) => -l.eval_on(vmap)?,
+            Self::Single(l) => l.eval(vmap)?,
+            Self::Plus(l) => l.eval(vmap)?,
+            Self::Minus(l) => -l.eval(vmap)?,
         })
     }
 }
 
 impl Eval for Core {
-    fn eval_on<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
         Ok(match self {
             Self::Str(s) => Typed::Str(s.clone()),
             Self::Num(n) => Typed::Num(*n),
@@ -204,7 +231,7 @@ impl Eval for Core {
                 .ok_or_else(|| EvalError::VariableNotFound(name.clone()))?,
             Self::True => Typed::Bool(true),
             Self::False => Typed::Bool(false),
-            Self::Paren(expr) => expr.eval_on(vmap)?,
+            Self::Paren(expr) => expr.eval(vmap)?,
         })
     }
 }

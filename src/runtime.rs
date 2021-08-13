@@ -1,10 +1,11 @@
+mod exprs;
 mod variable;
 
 use crate::die;
-use crate::exprs;
 use crate::parse::{Statement, AST};
 use crate::types::{IntType, Typed};
 
+use exprs::{Eval, Expr};
 use variable::{ModifyError, Variable};
 
 type VarTable = std::collections::HashMap<String, Variable>;
@@ -41,7 +42,7 @@ pub struct Runtime {
     internals: VarTable,
 }
 
-impl crate::exprs::VarsMap for Runtime {
+impl exprs::VarsMap for Runtime {
     fn get(&self, name: &str) -> Option<&Typed> {
         self.get_var(name).map(Variable::get)
     }
@@ -140,20 +141,16 @@ impl Runtime {
             .find(Option::is_some)
             .flatten()
     }
-
-    fn eval(&self, expr: &exprs::Expr) -> Result<Typed, exprs::EvalError> {
-        expr.eval_on(self)
-    }
 }
 
-fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[exprs::Expr]) {
+fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[Expr]) {
     use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
 
     write!(lock, "{:04} :", idx).unwrap();
     for arg in args {
-        let val = arg.eval_on(runtime).unwrap_or_else(|e| {
+        let val = arg.eval(runtime).unwrap_or_else(|e| {
             die!("Runtime error: Failed to eval arg of Print: {:?}", e);
         });
         match val {
@@ -233,7 +230,7 @@ fn unwrap_str(val: &Typed) -> String {
 }
 
 pub fn run(prog: AST) {
-    let mut runtime = Runtime::new();
+    let mut rt = Runtime::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
     let mut if_eval = false;
@@ -244,8 +241,8 @@ pub fn run(prog: AST) {
             Statement::Print { args } => {
                 exec_print(
                     i,
-                    &runtime,
-                    unwrap_bool(runtime.get_var("_wait").unwrap().get()),
+                    &rt,
+                    unwrap_bool(rt.get_var("_wait").unwrap().get()),
                     args,
                 );
             }
@@ -253,15 +250,15 @@ pub fn run(prog: AST) {
                 name,
                 offset_to_end,
             } => {
-                runtime.decl_var(name, Variable::new(Typed::Sub(i)));
+                rt.decl_var(name, Variable::new(Typed::Sub(i)));
                 i += offset_to_end;
             }
             Statement::Call { name } => {
-                if let Some(idx) = runtime.get_var(name) {
+                if let Some(idx) = rt.get_var(name) {
                     let idx = unwrap_sub(idx.get());
 
                     // register address to return (the next line)
-                    runtime.push(ScopeKind::Sub, i + 1);
+                    rt.push(ScopeKind::Sub, i + 1);
 
                     // jump to the address of the sub
                     i = idx;
@@ -278,7 +275,7 @@ pub fn run(prog: AST) {
                     breaking = false;
                     i += offset_to_end;
                 } else {
-                    let val = runtime.eval(cond).unwrap_or_else(|e| {
+                    let val = cond.eval(&rt).unwrap_or_else(|e| {
                         // FIXME
                         die!("Runtime error: failed to eval condition of While : {}", e);
                     });
@@ -286,7 +283,7 @@ pub fn run(prog: AST) {
                     if unwrap_bool(&val) {
                         // condition was met, push a scope
                         // when reached to end, pop the scope and come here
-                        runtime.push(ScopeKind::Loop, i);
+                        rt.push(ScopeKind::Loop, i);
                     } else {
                         // condition wasn't met, jump to the End
                         i += offset_to_end;
@@ -295,10 +292,10 @@ pub fn run(prog: AST) {
             }
             Statement::Let { name, init, is_mut } => {
                 // no check for internals, as already checked in the parse phase.
-                let init_val = runtime.eval(init).unwrap_or_else(|e| {
+                let init_val = init.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval init value of Let: {}", e);
                 });
-                runtime.decl_var(
+                rt.decl_var(
                     name,
                     if *is_mut {
                         Variable::new_mut(init_val)
@@ -309,11 +306,11 @@ pub fn run(prog: AST) {
             }
             Statement::Modify { name, expr } => {
                 // no check for internals, as already checked in the parse phase.
-                let to_value = runtime.eval(expr).unwrap_or_else(|e| {
+                let to_value = expr.eval(&rt).unwrap_or_else(|e| {
                     // FIXME
                     die!("Runtime error: Failed to eval value of Modify: {}", e);
                 });
-                runtime.modify_var(name, to_value);
+                rt.modify_var(name, to_value);
             }
             Statement::If {
                 cond,
@@ -321,8 +318,8 @@ pub fn run(prog: AST) {
             } => {
                 // use a scope, but don't use a return address
                 // push a frame always to unify End behavior
-                runtime.push(ScopeKind::Branch, 0);
-                let val = runtime.eval(cond).unwrap_or_else(|e| {
+                rt.push(ScopeKind::Branch, 0);
+                let val = cond.eval(&rt).unwrap_or_else(|e| {
                     // FIXME
                     die!("Runtime error: Failed to eval condition of If: {}", e);
                 });
@@ -343,7 +340,7 @@ pub fn run(prog: AST) {
             } => {
                 if if_eval {
                     // jumped from If/Elif
-                    let val = runtime.eval(cond).unwrap_or_else(|e| {
+                    let val = cond.eval(&rt).unwrap_or_else(|e| {
                         // FIXME
                         die!("Runtime error: Failed to eval condition of Elif: {}", e);
                     });
@@ -375,7 +372,7 @@ pub fn run(prog: AST) {
             }
             Statement::End => {
                 if_eval = false;
-                let top = runtime.pop().map(|s| s.ret_idx);
+                let top = rt.pop().map(|s| s.ret_idx);
                 match top {
                     Some(0) => {
                         // return address unspecified
@@ -397,16 +394,16 @@ pub fn run(prog: AST) {
                 as_num,
             } => {
                 if *as_num {
-                    runtime.modify_var(name, Typed::Num(get_int_input(prompt.as_deref())));
+                    rt.modify_var(name, Typed::Num(get_int_input(prompt.as_deref())));
                 } else {
                     todo!()
                 }
             }
             Statement::Roll { count, face, name } => {
-                let count = unwrap_num(&runtime.eval(count).unwrap_or_else(|e| {
+                let count = unwrap_num(&count.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval count of Roll: {}", e);
                 }));
-                let face = unwrap_num(&runtime.eval(face).unwrap_or_else(|e| {
+                let face = unwrap_num(&face.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval face of Roll: {}", e);
                 }));
 
@@ -417,14 +414,14 @@ pub fn run(prog: AST) {
                 if face <= 0 {
                     die!("Runtime error: Face for Roll must be a positive integer");
                 }
-                runtime.modify_var(name, Typed::Num(roll_dice(count, face)));
+                rt.modify_var(name, Typed::Num(roll_dice(count, face)));
             }
             Statement::Halt => {
                 return;
             }
             Statement::Break => {
                 i = loop {
-                    if let Some(scope) = runtime.pop() {
+                    if let Some(scope) = rt.pop() {
                         match scope.kind {
                             ScopeKind::Loop => {
                                 breaking = true;
@@ -447,11 +444,11 @@ pub fn run(prog: AST) {
                 continue;
             }
             Statement::Assert { mesg, cond } => {
-                let mesg_str = unwrap_str(&runtime.eval(&mesg).unwrap_or_else(|e| {
+                let mesg_str = unwrap_str(&mesg.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval message in Assert: {}", e);
                 }));
 
-                if !unwrap_bool(&runtime.eval(cond).unwrap_or_else(|e| {
+                if !unwrap_bool(&cond.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval condition in Assert: {}", e);
                 })) {
                     die!("Runtime error: Assert \"{}\" failed", mesg_str);
@@ -459,7 +456,7 @@ pub fn run(prog: AST) {
             }
             Statement::Continue => {
                 i = loop {
-                    if let Some(scope) = runtime.pop() {
+                    if let Some(scope) = rt.pop() {
                         match scope.kind {
                             ScopeKind::Loop => {
                                 break scope.ret_idx;
@@ -486,7 +483,7 @@ pub fn run(prog: AST) {
             } => {
                 if breaking {
                     // remove wrapper scope
-                    let s = runtime.pop();
+                    let s = rt.pop();
                     debug_assert!(matches!(
                         s,
                         Some(Scope {
@@ -500,22 +497,22 @@ pub fn run(prog: AST) {
                     i += offset_to_end;
                 } else {
                     let on_for;
-                    if let Some(scope) = runtime.peek() {
+                    if let Some(scope) = rt.peek() {
                         on_for = scope.kind == ScopeKind::ForWrap;
                     } else {
                         on_for = false;
                     }
 
                     let to = unwrap_num(
-                        &(runtime.eval(to).unwrap_or_else(|e| {
+                        &(to.eval(&rt).unwrap_or_else(|e| {
                             die!("Runtime error: failed to eval to of For: {}", e);
                         })),
                     );
 
                     if !on_for {
                         // create counter
-                        runtime.push(ScopeKind::ForWrap, i);
-                        let from = unwrap_num(&runtime.eval(from).unwrap_or_else(|e| {
+                        rt.push(ScopeKind::ForWrap, i);
+                        let from = unwrap_num(&from.eval(&rt).unwrap_or_else(|e| {
                             die!("Runtime error: failed to eval from of For: {}", e);
                         }));
 
@@ -523,14 +520,13 @@ pub fn run(prog: AST) {
                             // loop ended
                             i += offset_to_end;
                         } else {
-                            runtime.decl_var(counter, Variable::new(Typed::Num(from)));
-                            runtime.push(ScopeKind::Loop, i);
+                            rt.decl_var(counter, Variable::new(Typed::Num(from)));
+                            rt.push(ScopeKind::Loop, i);
                         }
                     } else {
                         let cnt = {
                             unwrap_num(
-                                &runtime
-                                    .get_var_mut(counter)
+                                &rt.get_var_mut(counter)
                                     .expect("counter should be there")
                                     .get(),
                             )
@@ -541,11 +537,10 @@ pub fn run(prog: AST) {
                             i += offset_to_end;
                         } else {
                             // loop continues
-                            runtime
-                                .get_var_mut(counter)
+                            rt.get_var_mut(counter)
                                 .expect("counter should be there")
                                 .force_modify(Typed::Num(cnt + 1));
-                            runtime.push(ScopeKind::Loop, i);
+                            rt.push(ScopeKind::Loop, i);
                         }
                     }
                 }
