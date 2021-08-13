@@ -219,7 +219,7 @@ impl ScopeStack {
 }
 
 pub fn parse(lexed: crate::lex::Lexed) -> AST {
-    use lex::{Items, Keywords};
+    use lex::{Items, Keyword};
 
     let mut stmts = vec![Statement::Ill];
     let mut scope_stack = ScopeStack::new();
@@ -341,10 +341,10 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         if name.starts_with('_') {
                             die_cont!("Identifier starts with _ is reserved", i, lexed);
                         }
-                        expects!("\"Be\" expected", Items::Key(Keywords::Be), i, lexed);
+                        expects!("\"Be\" expected", Items::Key(Keyword::Be), i, lexed);
 
                         let init = parse_expr!(
-                            Items::Semi | Items::Key(Keywords::AsMut),
+                            Items::Semi | Items::Key(Keyword::AsMut),
                             i,
                             tks,
                             lexed,
@@ -358,13 +358,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                         expects!(
                             "\"AsMut\" or semicolon expected",
-                            Items::Semi | Items::Key(Keywords::AsMut),
+                            Items::Semi | Items::Key(Keyword::AsMut),
                             i,
                             lexed
                         );
 
                         let is_mut = {
-                            if tks[i - 1].item == Items::Key(Keywords::AsMut) {
+                            if tks[i - 1].item == Items::Key(Keyword::AsMut) {
                                 expects_semi!(i, lexed);
                                 true
                             } else {
@@ -400,7 +400,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
 
-                        expects!("To expected", Items::Key(Keywords::To), i, lexed);
+                        expects!("To expected", Items::Key(Keyword::To), i, lexed);
 
                         let expr = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
                         expects_semi!(i, lexed);
@@ -574,7 +574,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         None
                     };
 
-                    expects!("\"To\" expected", Items::Key(Keywords::To), i, lexed);
+                    expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
 
                     let name = if let Items::Ident(n) = &tks[i].item {
                         i += 1;
@@ -607,7 +607,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Roll => parse_stmt!(i, stmts, {
                     // "Roll" n "Dice" "With" k "Face" "To" name ";"
 
-                    let count = parse_expr!(Items::Key(Keywords::Dice), i, tks, lexed, scope_stack);
+                    let count = parse_expr!(Items::Key(Keyword::Dice), i, tks, lexed, scope_stack);
 
                     let count_ty = match count.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -618,11 +618,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         die_cont!("Expected Num Expr", i, lexed);
                     }
 
-                    expects!("\"Dice\" expected", Items::Key(Keywords::Dice), i, lexed);
+                    expects!("\"Dice\" expected", Items::Key(Keyword::Dice), i, lexed);
 
-                    expects!("\"With\" expected", Items::Key(Keywords::With), i, lexed);
+                    expects!("\"With\" expected", Items::Key(Keyword::With), i, lexed);
 
-                    let face = parse_expr!(Items::Key(Keywords::Face), i, tks, lexed, scope_stack);
+                    let face = parse_expr!(Items::Key(Keyword::Face), i, tks, lexed, scope_stack);
 
                     let face_ty = match count.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -633,9 +633,9 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         die_cont!("Expected Num Expr", i, lexed);
                     }
 
-                    expects!("\"Face\" expected", Items::Key(Keywords::Face), i, lexed);
+                    expects!("\"Face\" expected", Items::Key(Keyword::Face), i, lexed);
 
-                    expects!("\"To\" expected", Items::Key(Keywords::To), i, lexed);
+                    expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
 
                     let name = if let Items::Ident(n) = &tks[i].item {
                         i += 1;
@@ -691,7 +691,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Assert => parse_stmt!(i, stmts, {
                     // "Assert" (<str> "With") <cond> ";"
                     let expr1 = parse_expr!(
-                        Items::Semi | Items::Key(Keywords::With),
+                        Items::Semi | Items::Key(Keyword::With),
                         i,
                         tks,
                         lexed,
@@ -711,13 +711,13 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             mesg = expr1;
                             expects!(
                                 "\"With\" expected, as the first expression was Str",
-                                Items::Key(Keywords::With),
+                                Items::Key(Keyword::With),
                                 i,
                                 lexed
                             );
 
                             let expr2 = parse_expr!(
-                                Items::Semi | Items::Key(Keywords::With),
+                                Items::Semi | Items::Key(Keyword::With),
                                 i,
                                 tks,
                                 lexed,
@@ -776,10 +776,10 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         if name.starts_with('_') {
                             die_cont!("Identifier starts with _ is reserved", i, lexed);
                         }
-                        expects!("\"From\" expected", Items::Key(Keywords::From), i, lexed);
+                        expects!("\"From\" expected", Items::Key(Keyword::From), i, lexed);
 
                         let from =
-                            parse_expr!(Items::Key(Keywords::To), i, tks, lexed, scope_stack);
+                            parse_expr!(Items::Key(Keyword::To), i, tks, lexed, scope_stack);
 
                         {
                             let from_ty = match from.check_type(&scope_stack) {
@@ -792,7 +792,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             }
                         }
 
-                        expects!("\"To\" expected", Items::Key(Keywords::To), i, lexed);
+                        expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
 
                         let to = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
 

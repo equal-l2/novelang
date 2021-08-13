@@ -29,246 +29,136 @@ fn is_item(item_chars: &[char], src_chars: &[char]) -> bool {
             .all(|(i, s)| i.to_lowercase().eq(s.to_lowercase()))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Command {
-    Print,
-    Sub,
-    Call,
-    While,
-    Let,
-    Modify,
-    Input,
-    If,
-    Else,
-    End,
-    Roll,
-    Halt,
-    Break,
-    Assert,
-    Continue,
-    For,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Keywords {
-    AsMut,
-    Be,
-    To,
-    Dice,
-    With,
-    Face,
-    True,
-    False,
-    From,
-}
-
-impl Item for Keywords {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::AsMut,
-        Self::Be,
-        Self::To,
-        Self::Dice,
-        Self::With,
-        Self::Face,
-        Self::True,
-        Self::False,
-        Self::From,
-    ];
-
-    fn as_str(&self) -> &str {
-        match self {
-            Self::AsMut => "asmut",
-            Self::Be => "be",
-            Self::To => "to",
-            Self::Dice => "dice",
-            Self::With => "with",
-            Self::Face => "face",
-            Self::True => "true",
-            Self::False => "false",
-            Self::From => "from",
+macro_rules! decl_ops {
+    ($name: ident, { $( $var:ident => $str:literal ),+ $(,)? }) => {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub enum $name {
+            $(
+                $var
+            ),+
         }
-    }
 
-    fn parse_slice(s: &[char]) -> Option<Self> {
-        Self::DISCRIMINANTS
-            .iter()
-            .find(|i| {
-                let i_chars: Vec<_> = i.as_str().chars().collect();
-                if is_item(&i_chars, s) {
-                    // For Reserved we need this check to separate Ident
-                    // (example: "be" is Reserved but "bed" is Ident)
-                    if i_chars.len() == s.len() || is_sep(s[i_chars.len()]) {
-                        return true;
-                    }
+        impl Item for $name {
+            const DISCRIMINANTS: &'static [Self] = &[
+                $(
+                    Self::$var
+                ),+
+            ];
+
+            fn as_str(&self) -> &str {
+                match self {
+                    $(
+                        Self::$var => $str
+                    ),+
                 }
-                false
-            })
-            .cloned()
+            }
+        }
     }
 }
 
-impl Item for Command {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::Print,
-        Self::Sub,
-        Self::Call,
-        Self::While,
-        Self::Let,
-        Self::Modify,
-        Self::Input,
-        Self::If,
-        Self::Else,
-        Self::End,
-        Self::Roll,
-        Self::Halt,
-        Self::Break,
-        Self::Assert,
-        Self::Continue,
-        Self::For,
-    ];
-
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Print => "print",
-            Self::Sub => "sub",
-            Self::Call => "call",
-            Self::While => "while",
-            Self::Let => "let",
-            Self::Modify => "modify",
-            Self::Input => "input",
-            Self::If => "if",
-            Self::Else => "else",
-            Self::End => "end",
-            Self::Roll => "roll",
-            Self::Halt => "halt",
-            Self::Break => "break",
-            Self::Assert => "assert",
-            Self::Continue => "continue",
-            Self::For => "for",
+// TODO: replace this with proc macro? (to automatically generate lowercase str)
+macro_rules! decl_reserved {
+    ($name: ident, { $( $var:ident => $str:literal ),+ $(,)? }) => {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub enum $name {
+            $(
+                $var
+            ),+
         }
-    }
 
-    fn parse_slice(s: &[char]) -> Option<Self> {
-        Self::DISCRIMINANTS
-            .iter()
-            .find(|i| {
-                let i_chars: Vec<_> = i.as_str().chars().collect();
-                if is_item(&i_chars, s) {
-                    // For Reserved we need this check to separate Ident
-                    // (example: "be" is Reserved but "bed" is Ident)
-                    if i_chars.len() == s.len() || is_sep(s[i_chars.len()]) {
-                        return true;
-                    }
+        impl Item for $name {
+            const DISCRIMINANTS: &'static [Self] = &[
+                $(
+                    Self::$var
+                ),+
+            ];
+
+            fn as_str(&self) -> &str {
+                match self {
+                    $(
+                        Self::$var => $str
+                    ),+
                 }
-                false
-            })
-            .cloned()
-    }
-}
+            }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LogOps {
-    And, // &&
-    Or,  // ||
-}
-
-impl Item for LogOps {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::And, // &&
-        Self::Or,  // ||
-    ];
-    fn as_str(&self) -> &str {
-        match self {
-            Self::And => "&&",
-            Self::Or => "||",
+            fn parse_slice(s: &[char]) -> Option<Self> {
+                Self::DISCRIMINANTS
+                    .iter()
+                    .find(|i| {
+                        let i_chars: Vec<_> = i.as_str().chars().collect();
+                        if is_item(&i_chars, s) {
+                            // For Reserved we need this check to separate Ident
+                            // (example: "be" is Reserved but "bed" is Ident)
+                            if i_chars.len() == s.len() || is_sep(s[i_chars.len()]) {
+                                return true;
+                            }
+                        }
+                        false
+                    })
+                .cloned()
+            }
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EquOps {
-    Equal,    // ==
-    NotEqual, // !=
-}
+decl_reserved!(Command, {
+    Print => "print",
+    Sub => "sub",
+    Call => "call",
+    While => "while",
+    Let => "let",
+    Modify => "modify",
+    Input => "input",
+    If => "if",
+    Else => "else",
+    End => "end",
+    Roll => "roll",
+    Halt => "halt",
+    Break => "break",
+    Assert => "assert",
+    Continue => "continue",
+    For => "for",
+});
 
-impl Item for EquOps {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::Equal,    // ==
-        Self::NotEqual, // !=
-    ];
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Equal => "==",
-            Self::NotEqual => "!=",
-        }
-    }
-}
+decl_reserved!(Keyword, {
+    AsMut => "asmut",
+    Be => "be",
+    To => "to",
+    Dice => "dice",
+    With => "with",
+    Face => "face",
+    True => "true",
+    False => "false",
+    From => "from",
+});
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RelOps {
-    LessEqual,    // <=
-    GreaterEqual, // >=
-    LessThan,     // <
-    GreaterThan,  // >
-}
+decl_ops!(LogOps,{
+    And => "&&",
+    Or => "||",
+});
 
-impl Item for RelOps {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::LessEqual,    // <=
-        Self::GreaterEqual, // >=
-        Self::LessThan,     // <
-        Self::GreaterThan,  // >
-    ];
-    fn as_str(&self) -> &str {
-        match self {
-            Self::LessEqual => "<=",
-            Self::GreaterEqual => ">=",
-            Self::LessThan => "<",
-            Self::GreaterThan => ">",
-        }
-    }
-}
+decl_ops!(EquOps,{
+    Equal => "==",
+    NotEqual => "!=",
+});
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AddOps {
-    Add, // +
-    Sub, // -
-}
+decl_ops!(RelOps,{
+    LessEqual => "<=",
+    GreaterEqual => ">=",
+    LessThan => "<",
+    GreaterThan => ">",
+});
 
-impl Item for AddOps {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::Add, // +
-        Self::Sub, // -
-    ];
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Add => "+",
-            Self::Sub => "-",
-        }
-    }
-}
+decl_ops!(AddOps,{
+    Add => "+",
+    Sub => "-",
+});
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MulOps {
-    Mul, // *
-    Div, // /
-    Mod, // %
-}
-
-impl Item for MulOps {
-    const DISCRIMINANTS: &'static [Self] = &[
-        Self::Mul, // *
-        Self::Div, // /
-        Self::Mod, // %
-    ];
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Mul => "*",
-            Self::Div => "/",
-            Self::Mod => "%",
-        }
-    }
-}
+decl_ops!(MulOps,{
+    Mul => "*",
+    Div => "/",
+    Mod => "%",
+});
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ops {
@@ -311,9 +201,9 @@ impl Item for Ops {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Items {
-    Key(Keywords),
+    Key(Keyword),
     Cmd(Command),
-    Ops(Ops),
+    Op(Ops),
     Num(crate::types::IntType, usize),
     Ident(String),
     Str(String),
@@ -329,7 +219,7 @@ impl Items {
         match self {
             Key(i) => i.len(),
             Cmd(i) => i.len(),
-            Ops(i) => i.len(),
+            Op(i) => i.len(),
             Num(_, l) => *l,
             Ident(i) | Str(i) => i.len(),
             Semi | Comma | LParen | RParen => 1,
@@ -518,14 +408,14 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                             if is_item(&"die".chars().collect::<Vec<_>>(), vs) && confirm_item(3) {
                                 // convert "die" to "dice"
                                 i += 3;
-                                Items::Key(Keywords::Dice)
+                                Items::Key(Keyword::Dice)
                             } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs)
                                 && confirm_item(5)
                             {
                                 // convert "faces" to "face"
                                 i += 5;
-                                Items::Key(Keywords::Face)
-                            } else if let Some(res) = Keywords::parse_slice(vs) {
+                                Items::Key(Keyword::Face)
+                            } else if let Some(res) = Keyword::parse_slice(vs) {
                                 i += res.len();
                                 Items::Key(res)
                             } else if let Some(res) = Command::parse_slice(vs) {
@@ -533,7 +423,7 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                                 Items::Cmd(res)
                             } else if let Some(res) = Ops::parse_slice(vs) {
                                 i += res.len();
-                                Items::Ops(res)
+                                Items::Op(res)
                             } else if v[i].is_numeric() {
                                 let mut s = String::new();
                                 while i < v.len() && v[i].is_numeric() {

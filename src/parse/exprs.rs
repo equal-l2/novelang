@@ -58,20 +58,18 @@ impl<'a> TryFromTokens<'a> for Log {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{LogOps, Ops};
-
         let mut lop = Log::Single(Equ::try_from_tokens(tks)?);
         loop {
             if let Some(Token {
-                item: Items::Ops(Ops::Log(op)),
+                item: Items::Op(lex::Ops::Log(op)),
                 ..
             }) = tks.peek()
             {
                 let _ = tks.next().unwrap();
                 let rop = Equ::try_from_tokens(tks)?;
                 match op {
-                    LogOps::And => lop = Self::And(Box::new(lop), rop),
-                    LogOps::Or => lop = Self::Or(Box::new(lop), rop),
+                    lex::LogOps::And => lop = Self::And(Box::new(lop), rop),
+                    lex::LogOps::Or => lop = Self::Or(Box::new(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -89,20 +87,18 @@ impl<'a> TryFromTokens<'a> for Equ {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{EquOps, Ops};
-
         let mut lop = Equ::Single(Rel::try_from_tokens(tks)?);
         loop {
             if let Some(Token {
-                item: Items::Ops(Ops::Equ(op)),
+                item: Items::Op(lex::Ops::Equ(op)),
                 ..
             }) = tks.peek()
             {
                 let _ = tks.next().unwrap();
                 let rop = Rel::try_from_tokens(tks)?;
                 match op {
-                    EquOps::Equal => lop = Self::Equal(Box::new(lop), rop),
-                    EquOps::NotEqual => lop = Self::NotEqual(Box::new(lop), rop),
+                    lex::EquOps::Equal => lop = Self::Equal(Box::new(lop), rop),
+                    lex::EquOps::NotEqual => lop = Self::NotEqual(Box::new(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -120,24 +116,22 @@ impl<'a> TryFromTokens<'a> for Rel {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{Ops, RelOps};
-
         ensure_start!(tks);
 
         let lop = AddSub::try_from_tokens(tks)?;
         Ok(
             if let Some(Token {
-                item: Items::Ops(Ops::Rel(op)),
+                item: Items::Op(lex::Ops::Rel(op)),
                 ..
             }) = tks.peek()
             {
                 let _ = tks.next().unwrap();
                 let rop = AddSub::try_from_tokens(tks)?;
                 match op {
-                    RelOps::LessEqual => Self::LessEqual(lop, rop),
-                    RelOps::GreaterEqual => Self::GreaterEqual(lop, rop),
-                    RelOps::LessThan => Self::LessThan(lop, rop),
-                    RelOps::GreaterThan => Self::GreaterThan(lop, rop),
+                    lex::RelOps::LessEqual => Self::LessEqual(lop, rop),
+                    lex::RelOps::GreaterEqual => Self::GreaterEqual(lop, rop),
+                    lex::RelOps::LessThan => Self::LessThan(lop, rop),
+                    lex::RelOps::GreaterThan => Self::GreaterThan(lop, rop),
                 }
             } else {
                 Self::Single(lop)
@@ -155,22 +149,20 @@ impl<'a> TryFromTokens<'a> for AddSub {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{AddOps, Ops};
-
         ensure_start!(tks);
 
         let mut lop = AddSub::Single(MulDiv::try_from_tokens(tks)?);
         loop {
             if let Some(Token {
-                item: Items::Ops(Ops::Add(op)),
+                item: Items::Op(lex::Ops::Add(op)),
                 ..
             }) = tks.peek()
             {
                 let _ = tks.next().unwrap();
                 let rop = MulDiv::try_from_tokens(tks)?;
                 match op {
-                    AddOps::Add => lop = Self::Add(Box::new(lop), rop),
-                    AddOps::Sub => lop = Self::Sub(Box::new(lop), rop),
+                    lex::AddOps::Add => lop = Self::Add(Box::new(lop), rop),
+                    lex::AddOps::Sub => lop = Self::Sub(Box::new(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -188,23 +180,21 @@ impl<'a> TryFromTokens<'a> for MulDiv {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::{MulOps, Ops};
-
         ensure_start!(tks);
 
         let mut lop = MulDiv::Single(Node::try_from_tokens(tks)?);
         loop {
             if let Some(Token {
-                item: Items::Ops(Ops::Mul(op)),
+                item: Items::Op(lex::Ops::Mul(op)),
                 ..
             }) = tks.peek()
             {
                 let _ = tks.next().unwrap();
                 let rop = Node::try_from_tokens(tks)?;
                 match op {
-                    MulOps::Mul => lop = Self::Mul(Box::new(lop), rop),
-                    MulOps::Div => lop = Self::Div(Box::new(lop), rop),
-                    MulOps::Mod => lop = Self::Mod(Box::new(lop), rop),
+                    lex::MulOps::Mul => lop = Self::Mul(Box::new(lop), rop),
+                    lex::MulOps::Div => lop = Self::Div(Box::new(lop), rop),
+                    lex::MulOps::Mod => lop = Self::Mod(Box::new(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -216,7 +206,7 @@ impl<'a> TryFromTokens<'a> for MulDiv {
 impl<'a> TryFromTokens<'a> for Node {
     fn can_start_with(item: &Items) -> bool {
         use lex::{AddOps, Ops};
-        matches!(item, Items::Ops(Ops::Add(AddOps::Add | AddOps::Sub)))
+        matches!(item, Items::Op(Ops::Add(AddOps::Add | AddOps::Sub)))
             || Core::can_start_with(item)
     }
 
@@ -230,7 +220,7 @@ impl<'a> TryFromTokens<'a> for Node {
 
         Ok(
             if let Some(Token {
-                item: Items::Ops(Ops::Add(op)),
+                item: Items::Op(Ops::Add(op)),
                 ..
             }) = tks.peek()
             {
@@ -249,13 +239,13 @@ impl<'a> TryFromTokens<'a> for Node {
 
 impl<'a> TryFromTokens<'a> for Core {
     fn can_start_with(item: &Items) -> bool {
-        use lex::Keywords;
+        use lex::Keyword;
         matches!(
             item,
             Items::Str(_)
                 | Items::Num(_, _)
                 | Items::Ident(_)
-                | Items::Key(Keywords::True | Keywords::False)
+                | Items::Key(Keyword::True | Keyword::False)
                 | Items::LParen
         )
     }
@@ -264,7 +254,7 @@ impl<'a> TryFromTokens<'a> for Core {
     where
         T: Iterator<Item = &'a Token>,
     {
-        use lex::Keywords;
+        use lex::Keyword;
 
         ensure_start!(tks);
 
@@ -273,8 +263,8 @@ impl<'a> TryFromTokens<'a> for Core {
             Items::Str(s) => Self::Str(s.clone()),
             Items::Num(n, _) => Self::Num(*n),
             Items::Ident(s) => Self::Ident(s.clone()),
-            Items::Key(Keywords::True) => Self::True,
-            Items::Key(Keywords::False) => Self::False,
+            Items::Key(Keyword::True) => Self::True,
+            Items::Key(Keyword::False) => Self::False,
             Items::LParen => {
                 let equ = Equ::try_from_tokens(tks)?;
 
