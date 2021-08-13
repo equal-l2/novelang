@@ -84,9 +84,7 @@ impl Runtime {
     fn modify_var(&mut self, name: &str, val: Typed) {
         // no check for internals as already done in the parse phase.
 
-        let var = self.get_var_mut(name).unwrap_or_else(|| {
-            die!("Runtime error: variable was not found");
-        });
+        let var = self.get_var_mut(name).expect("variable should be there");
 
         match var.modify(val) {
             Ok(_) => {}
@@ -201,7 +199,7 @@ fn unwrap_bool(val: &Typed) -> bool {
     if let Typed::Bool(b) = val {
         *b
     } else {
-        die!("Runtime error: Bool expected, got {}", val.typename());
+        panic!("Runtime error: Bool expected, got {}", val.typename());
     }
 }
 
@@ -209,7 +207,7 @@ fn unwrap_num(val: &Typed) -> IntType {
     if let Typed::Num(n) = val {
         *n
     } else {
-        die!("Runtime error: Num expected, got {}", val.typename());
+        panic!("Runtime error: Num expected, got {}", val.typename());
     }
 }
 
@@ -217,7 +215,7 @@ fn unwrap_sub(val: &Typed) -> usize {
     if let Typed::Sub(n) = val {
         *n
     } else {
-        die!("Runtime error: Sub expected, got {}", val.typename());
+        panic!("Runtime error: Sub expected, got {}", val.typename());
     }
 }
 
@@ -225,7 +223,7 @@ fn unwrap_str(val: &Typed) -> String {
     if let Typed::Str(s) = val {
         s.clone()
     } else {
-        die!("Runtime error: Str expected, got {}", val.typename());
+        panic!("Runtime error: Str expected, got {}", val.typename());
     }
 }
 
@@ -263,7 +261,7 @@ pub fn run(prog: AST) {
                     // jump to the address of the sub
                     i = idx;
                 } else {
-                    die!("Runtime error: function \"{}\" was not found", name);
+                    panic!("Runtime error: function \"{}\" was not found", name);
                 }
             }
             Statement::While {
@@ -384,7 +382,7 @@ pub fn run(prog: AST) {
                         continue;
                     }
                     _ => {
-                        die!("Runtime error: scope stack is empty");
+                        panic!("Runtime error: scope stack is empty");
                     }
                 }
             }
@@ -429,8 +427,7 @@ pub fn run(prog: AST) {
                                 break scope.ret_idx;
                             }
                             ScopeKind::Sub => {
-                                // return to called index
-                                break scope.ret_idx;
+                                panic!("Runtime error: cannot break in sub scope");
                             }
                             ScopeKind::Branch => {
                                 // break the outer scope
@@ -462,7 +459,7 @@ pub fn run(prog: AST) {
                                 break scope.ret_idx;
                             }
                             ScopeKind::Sub => {
-                                die!("Runtime error: cannot continue in sub scope");
+                                panic!("Runtime error: cannot continue in sub scope");
                             }
                             ScopeKind::Branch => {
                                 // break the outer scope
@@ -470,7 +467,7 @@ pub fn run(prog: AST) {
                             _ => panic!("unexpected scope kind: {:?}", scope.kind),
                         }
                     } else {
-                        die!("Runtime error: scope stack is empty");
+                        panic!("Runtime error: scope stack is empty");
                     }
                 };
                 continue;
