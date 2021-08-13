@@ -182,8 +182,8 @@ impl ScopeStack {
         }
     }
 
-    fn scope_kind(&self) -> &ScopeKind {
-        &self.scopes.last().expect("one scope should be there at least").kind
+    fn kinds(&self) -> Vec<&ScopeKind> {
+        self.scopes.iter().map(|sc| &sc.kind).rev().collect()
     }
 
     fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
@@ -668,7 +668,20 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Break => parse_stmt!(i, stmts, {
                     // "Break" ";"
                     expects_semi!(i, lexed);
-                    if let ScopeKind::Loop = scope_stack.scope_kind() {
+
+                    let mut loop_found = false;
+                    for k in scope_stack.kinds() {
+                        match k {
+                            ScopeKind::Loop => {
+                                loop_found = true;
+                                break;
+                            }
+                            ScopeKind::Sub => break,
+                            _ => {}
+                        }
+                    }
+
+                    if loop_found {
                         Statement::Break
                     } else {
                         die_cont!("Break must be in a loop", i, lexed);
@@ -736,10 +749,22 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Continue => parse_stmt!(i, stmts, {
                     // "Continue" ";"
                     expects_semi!(i, lexed);
-                    if let ScopeKind::Loop = scope_stack.scope_kind() {
+                    let mut loop_found = false;
+                    for k in scope_stack.kinds() {
+                        match k {
+                            ScopeKind::Loop => {
+                                loop_found = true;
+                                break;
+                            }
+                            ScopeKind::Sub => break,
+                            _ => {}
+                        }
+                    }
+
+                    if loop_found {
                         Statement::Continue
                     } else {
-                        die_cont!("Continue must be in a loop", i, lexed);
+                        die_cont!("Break must be in a loop", i, lexed);
                     }
                 }),
 
