@@ -1,3 +1,4 @@
+print "roll 10 times";
 let cnt be 0 asmut;
 while cnt < 10;
     let res be 0 asmut;
@@ -6,6 +7,8 @@ while cnt < 10;
     modify cnt to cnt+1;
 end;
 
+let time be 6000;
+print "roll", time, "times";
 let cnt1 be 0 asmut;
 let cnt2 be 0 asmut;
 let cnt3 be 0 asmut;
@@ -14,7 +17,7 @@ let cnt5 be 0 asmut;
 let cnt6 be 0 asmut;
 
 modify cnt to 0;
-while cnt < 30000;
+while cnt < time;
     let res be 0 asmut;
     Roll 1 dice with 6 faces to res;
     if res == 1;
@@ -35,9 +38,10 @@ while cnt < 30000;
     modify cnt to cnt+1;
 end;
 
-print 1, cnt1;
-print 2, cnt2;
-print 3, cnt3;
-print 4, cnt4;
-print 5, cnt5;
-print 6, cnt6;
+let div be time/6/50;
+print 1, "#"*(cnt1/div), cnt1;
+print 2, "#"*(cnt2/div), cnt2;
+print 3, "#"*(cnt3/div), cnt3;
+print 4, "#"*(cnt4/div), cnt4;
+print 5, "#"*(cnt5/div), cnt5;
+print 6, "#"*(cnt6/div), cnt6;

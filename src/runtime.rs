@@ -40,6 +40,7 @@ pub struct Runtime {
     stack: Vec<Scope>,
     globals: VarTable,
     internals: VarTable,
+    rng: rand::rngs::SmallRng,
 }
 
 impl exprs::VarsMap for Runtime {
@@ -50,6 +51,7 @@ impl exprs::VarsMap for Runtime {
 
 impl Runtime {
     fn new() -> Self {
+        use rand::SeedableRng;
         // internal variables
         // - "_wait": whether wait is enabled
 
@@ -59,10 +61,13 @@ impl Runtime {
             vt
         };
 
+        let rng = rand::rngs::SmallRng::from_entropy();
+
         Self {
             stack: vec![],
             globals: VarTable::new(),
             internals,
+            rng,
         }
     }
 
@@ -84,7 +89,7 @@ impl Runtime {
     fn modify_var(&mut self, name: &str, val: Typed) {
         // no check for internals as already done in the parse phase.
 
-        let var = self.get_var_mut(name).expect("variable should be there");
+        let var = self.get_var_mut(name).expect("variable must exist");
 
         match var.modify(val) {
             Ok(_) => {}
@@ -139,48 +144,99 @@ impl Runtime {
             .find(Option::is_some)
             .flatten()
     }
-}
 
-fn exec_print(idx: usize, runtime: &Runtime, wait: bool, args: &[Expr]) {
-    use std::io::Write;
-    let stdout = std::io::stdout();
-    let mut lock = stdout.lock();
+    pub fn exec_roll(&mut self, cnt: &Expr, face: &Expr, name: &String) {
+        use rand::Rng;
 
-    write!(lock, "{:04} :", idx).unwrap();
-    for arg in args {
-        let val = arg.eval(runtime).unwrap_or_else(|e| {
-            die!("Runtime error: Failed to eval arg of Print: {:?}", e);
-        });
-        match val {
-            Typed::Num(n) => write!(lock, " {}", n),
-            Typed::Bool(b) => write!(lock, " {}", b),
-            Typed::Str(s) => write!(lock, " {}", s),
-            _ => unimplemented!(),
+        let cnt = unwrap_num(&cnt.eval(self).unwrap_or_else(|e| {
+            die!("Runtime error: Failed to eval count of Roll: {}", e);
+        }));
+        let face = unwrap_num(&face.eval(self).unwrap_or_else(|e| {
+            die!("Runtime error: Failed to eval face of Roll: {}", e);
+        }));
+
+        if cnt <= 0 {
+            die!("Runtime error: Count for Roll must be a positive integer");
         }
-        .unwrap();
-    }
-    writeln!(lock).unwrap();
-    let _ = lock.flush();
 
-    if wait {
-        write!(lock, "[Proceed with Enter⏎ ]").unwrap();
-        let _ = lock.flush();
-        let _ = read_line_from_stdin();
-        {
-            use crossterm::cursor;
-            use crossterm::execute;
-            use crossterm::terminal;
-            execute!(
-                lock,
-                cursor::MoveToPreviousLine(1),
-                terminal::Clear(terminal::ClearType::CurrentLine)
-            )
+        if face <= 0 {
+            die!("Runtime error: Face for Roll must be a positive integer");
+        }
+
+        let val = std::iter::repeat_with(|| self.rng.gen_range(1..=face))
+            .take(cnt as usize)
+            .sum();
+
+        self.modify_var(name, Typed::Num(val));
+    }
+
+    pub fn exec_print(&mut self, args: &[Expr]) {
+        use std::io::Write;
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+
+        if let Some(arg) = args.get(0) {
+            let val = arg.eval(self).unwrap_or_else(|e| {
+                die!("Runtime error: Failed to eval arg of Print: {:?}", e);
+            });
+            match val {
+                Typed::Num(n) => write!(lock, "{}", n),
+                Typed::Bool(b) => write!(lock, "{}", b),
+                Typed::Str(s) => write!(lock, "{}", s),
+                _ => unimplemented!(),
+            }
             .unwrap();
         }
+        for arg in &args[1..] {
+            let val = arg.eval(self).unwrap_or_else(|e| {
+                die!("Runtime error: Failed to eval arg of Print: {:?}", e);
+            });
+            match val {
+                Typed::Num(n) => write!(lock, " {}", n),
+                Typed::Bool(b) => write!(lock, " {}", b),
+                Typed::Str(s) => write!(lock, " {}", s),
+                _ => unimplemented!(),
+            }
+            .unwrap();
+        }
+        writeln!(lock).unwrap();
+        let _ = lock.flush();
+
+        let wait = unwrap_bool(
+            self.get_var("_wait")
+                .expect("internal variable \"_wait\" must exist")
+                .get(),
+        );
+
+        if wait {
+            write!(lock, "[Proceed with Enter⏎ ]").unwrap();
+            let _ = lock.flush();
+            let _ = read_line_from_stdin();
+            // move to the prev line and erase the line
+            write!(lock, "\x1B[F\x1B[2K").unwrap();
+            let _ = lock.flush();
+        }
+    }
+
+    pub fn exec_input(&mut self, prompt: &Option<String>, name: &String, as_num: bool) {
+        if as_num {
+            let input = get_input(prompt.as_deref());
+            self.modify_var(name, Typed::Num(input));
+        } else {
+            let input = get_input(prompt.as_deref());
+            self.modify_var(name, Typed::Str(input));
+        }
     }
 }
 
-fn get_int_input(prompt: Option<&str>) -> IntType {
+fn read_line_from_stdin() -> String {
+    use std::io::BufRead;
+    let stdin = std::io::stdin();
+    let mut it = stdin.lock().lines();
+    it.next().unwrap_or_else(|| Ok("".to_owned())).unwrap()
+}
+
+fn get_input<T: std::str::FromStr>(prompt: Option<&str>) -> T {
     use std::io::Write;
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
@@ -237,12 +293,7 @@ pub fn run(prog: AST) {
     while i < prog.stmts.len() {
         match &prog.stmts[i] {
             Statement::Print { args } => {
-                exec_print(
-                    i,
-                    &rt,
-                    unwrap_bool(rt.get_var("_wait").unwrap().get()),
-                    args,
-                );
+                rt.exec_print(args);
             }
             Statement::Sub {
                 name,
@@ -391,28 +442,10 @@ pub fn run(prog: AST) {
                 name,
                 as_num,
             } => {
-                if *as_num {
-                    rt.modify_var(name, Typed::Num(get_int_input(prompt.as_deref())));
-                } else {
-                    todo!()
-                }
+                rt.exec_input(prompt, name, *as_num);
             }
             Statement::Roll { count, face, name } => {
-                let count = unwrap_num(&count.eval(&rt).unwrap_or_else(|e| {
-                    die!("Runtime error: Failed to eval count of Roll: {}", e);
-                }));
-                let face = unwrap_num(&face.eval(&rt).unwrap_or_else(|e| {
-                    die!("Runtime error: Failed to eval face of Roll: {}", e);
-                }));
-
-                if count <= 0 {
-                    die!("Runtime error: Count for Roll must be a positive integer");
-                }
-
-                if face <= 0 {
-                    die!("Runtime error: Face for Roll must be a positive integer");
-                }
-                rt.modify_var(name, Typed::Num(roll_dice(count, face)));
+                rt.exec_roll(count, face, name);
             }
             Statement::Halt => {
                 return;
@@ -522,11 +555,7 @@ pub fn run(prog: AST) {
                         }
                     } else {
                         let cnt = {
-                            unwrap_num(
-                                &rt.get_var_mut(counter)
-                                    .expect("counter should be there")
-                                    .get(),
-                            )
+                            unwrap_num(&rt.get_var_mut(counter).expect("counter must exist").get())
                         };
 
                         if cnt >= to {
@@ -535,7 +564,7 @@ pub fn run(prog: AST) {
                         } else {
                             // loop continues
                             rt.get_var_mut(counter)
-                                .expect("counter should be there")
+                                .expect("counter must exist")
                                 .force_modify(Typed::Num(cnt + 1));
                             rt.push(ScopeKind::Loop, i);
                         }
@@ -549,23 +578,4 @@ pub fn run(prog: AST) {
         }
         i += 1;
     }
-}
-
-fn read_line_from_stdin() -> String {
-    use std::io::BufRead;
-    let stdin = std::io::stdin();
-    let mut it = stdin.lock().lines();
-    it.next().unwrap_or_else(|| Ok("".to_owned())).unwrap()
-}
-
-fn roll_dice(count: IntType, face: IntType) -> IntType {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let mut sum = 0;
-
-    for _ in 0..count {
-        sum += rng.gen_range(1..=face);
-    }
-
-    sum
 }

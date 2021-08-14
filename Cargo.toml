@@ -4,10 +4,6 @@ version = "0.1.0"
 authors = ["equal-l2 <eng.equall2@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-crossterm = "0.20.0"
-ctrlc = { version = "3.1.9", features = ["termination"] }
-structopt = "0.3.21"
-rand = "0.8.4"
+structopt = { version = "0.3.21", default-features = false }
+rand = { version = "0.8.4", default-features = false, features = ["getrandom", "small_rng"] }
