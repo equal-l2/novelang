@@ -86,6 +86,7 @@ pub enum Statement {
         to: Expr,
         offset_to_end: usize,
     },
+    Return,
 }
 
 #[derive(Debug, Clone)]
@@ -778,8 +779,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"From\" expected", Items::Key(Keyword::From), i, lexed);
 
-                        let from =
-                            parse_expr!(Items::Key(Keyword::To), i, tks, lexed, scope_stack);
+                        let from = parse_expr!(Items::Key(Keyword::To), i, tks, lexed, scope_stack);
 
                         {
                             let from_ty = match from.check_type(&scope_stack) {
@@ -828,6 +828,26 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                     } else {
                         die_cont!("Ident expected", i, lexed)
+                    }
+                }),
+                lex::Command::Return => parse_stmt!(i, stmts, {
+                    // "Return" ";"
+                    expects_semi!(i, lexed);
+                    let mut sub_found = false;
+                    for k in scope_stack.kinds() {
+                        match k {
+                            ScopeKind::Sub => {
+                                sub_found = true;
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    if sub_found {
+                        Statement::Return
+                    } else {
+                        die_cont!("Return must be in a sub", i, lexed);
                     }
                 }),
             }

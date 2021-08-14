@@ -571,10 +571,22 @@ pub fn run(prog: AST) {
                     }
                 }
             }
-            #[allow(unreachable_patterns)]
-            other => {
-                die!("Runtime error: unknown instruction: {:?}", other);
+            Statement::Return => {
+                i = loop {
+                    if let Some(scope) = rt.pop() {
+                        match scope.kind {
+                            ScopeKind::Sub => {
+                                break scope.ret_idx;
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        die!("Runtime error: scope stack is empty");
+                    }
+                };
+                continue;
             }
+            Statement::Ill => panic!("Unreachable statement"),
         }
         i += 1;
     }

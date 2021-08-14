@@ -206,8 +206,7 @@ impl<'a> TryFromTokens<'a> for MulDiv {
 impl<'a> TryFromTokens<'a> for Node {
     fn can_start_with(item: &Items) -> bool {
         use lex::{AddOps, Ops};
-        matches!(item, Items::Op(Ops::Add(AddOps::Add | AddOps::Sub)))
-            || Core::can_start_with(item)
+        matches!(item, Items::Op(Ops::Add(AddOps::Add | AddOps::Sub))) || Core::can_start_with(item)
     }
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>

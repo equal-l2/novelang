@@ -118,6 +118,7 @@ decl_reserved!(Command, {
     Assert => "assert",
     Continue => "continue",
     For => "for",
+    Return => "return",
 });
 
 decl_reserved!(Keyword, {
