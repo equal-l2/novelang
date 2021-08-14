@@ -245,7 +245,7 @@ impl<'a> TryFromTokens<'a> for Core {
                 | Items::Num(_, _)
                 | Items::Ident(_)
                 | Items::Key(Keyword::True | Keyword::False)
-                | Items::LParen
+                | Items::LPar
         )
     }
 
@@ -264,13 +264,12 @@ impl<'a> TryFromTokens<'a> for Core {
             Items::Ident(s) => Self::Ident(s.clone()),
             Items::Key(Keyword::True) => Self::True,
             Items::Key(Keyword::False) => Self::False,
-            Items::LParen => {
+            Items::LPar => {
                 let expr = TopItem::try_from_tokens(tks)?;
-
                 let next_tk = tks.next();
                 match next_tk {
                     Some(Token {
-                        item: Items::RParen,
+                        item: Items::RPar,
                         ..
                     }) => Self::Paren(Box::new(expr)),
                     _ => Err(ParseError::NoPairParen { lparen: tk.clone() })?,

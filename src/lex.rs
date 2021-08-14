@@ -210,8 +210,10 @@ pub enum Items {
     Str(String),
     Semi,
     Comma,
-    LParen,
-    RParen,
+    LPar,
+    RPar,
+    LBra,
+    RBra,
 }
 
 impl Items {
@@ -223,7 +225,7 @@ impl Items {
             Op(i) => i.len(),
             Num(_, l) => *l,
             Ident(i) | Str(i) => i.len(),
-            Semi | Comma | LParen | RParen => 1,
+            Semi | Comma | LPar | RPar | LBra | RBra => 1,
         }
     }
 }
@@ -372,11 +374,19 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         }
                         '(' => {
                             i += 1;
-                            Items::LParen
+                            Items::LPar
                         }
                         ')' => {
                             i += 1;
-                            Items::RParen
+                            Items::RPar
+                        }
+                        '[' => {
+                            i += 1;
+                            Items::LBra
+                        }
+                        ']' => {
+                            i += 1;
+                            Items::RBra
                         }
                         '"' => {
                             i += 1;
