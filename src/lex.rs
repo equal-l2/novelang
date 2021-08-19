@@ -89,7 +89,7 @@ macro_rules! decl_reserved {
                         if is_item(&i_chars, s) {
                             // For Reserved we need this check to separate Ident
                             // (example: "be" is Reserved but "bed" is Ident)
-                            if i_chars.len() == s.len() || is_sep(s[i_chars.len()]) {
+                            if i_chars.len() == s.len() || !is_ident_char(s[i_chars.len()]) {
                                 return true;
                             }
                         }
@@ -342,10 +342,6 @@ fn is_ident_char(c: char) -> bool {
     !c.is_whitespace() && !RESERVED_CHARS.contains(&c)
 }
 
-fn is_sep(c: char) -> bool {
-    c.is_whitespace() || c == ';'
-}
-
 pub fn lex(s: String) -> Result<Lexed, Error> {
     let mut tks = Vec::new();
     let lines: Vec<_> = s.lines().map(String::from).collect();
@@ -405,7 +401,7 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                         }
                         _ => {
                             let vs = &v[i..];
-                            let confirm_item = |len| len == vs.len() || is_sep(vs[len]);
+                            let confirm_item = |len| len == vs.len() || !is_ident_char(vs[len]);
                             if is_item(&"die".chars().collect::<Vec<_>>(), vs) && confirm_item(3) {
                                 // convert "die" to "dice"
                                 i += 3;

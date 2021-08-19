@@ -265,14 +265,14 @@ impl<'a> TryFromTokens<'a> for Core {
             Items::Key(Keyword::True) => Self::True,
             Items::Key(Keyword::False) => Self::False,
             Items::LParen => {
-                let equ = Equ::try_from_tokens(tks)?;
+                let expr = TopItem::try_from_tokens(tks)?;
 
                 let next_tk = tks.next();
                 match next_tk {
                     Some(Token {
                         item: Items::RParen,
                         ..
-                    }) => Self::Paren(Box::new(equ)),
+                    }) => Self::Paren(Box::new(expr)),
                     _ => Err(ParseError::NoPairParen { lparen: tk.clone() })?,
                 }
             }

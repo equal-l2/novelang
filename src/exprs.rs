@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct Expr {
-    pub content: items::Log,
+    pub content: items::TopItem,
 }
 
 impl Expr {
@@ -15,6 +15,8 @@ impl Expr {
 }
 
 pub mod items {
+    pub type TopItem = Log;
+
     #[derive(Debug, Clone)]
     pub enum Log {
         Single(Equ),
@@ -67,7 +69,7 @@ pub mod items {
         Ident(String),
         True,
         False,
-        Paren(Box<Equ>),
+        Paren(Box<TopItem>),
     }
 }
 
