@@ -8,7 +8,7 @@ impl Expr {
         use items::*;
         Self {
             content: Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
-                Node::Single(Core::Str(s)),
+                Node::Single(Value::Single(Core::Str(s))),
             ))))),
         }
     }
@@ -57,9 +57,15 @@ pub mod items {
 
     #[derive(Debug, Clone)]
     pub enum Node {
-        Single(Core),
+        Single(Value),
         Plus(Box<Self>),
         Minus(Box<Self>),
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum Value {
+        Single(Core),
+        ArrElem(Core, Box<AddSub>),
     }
 
     #[derive(Debug, Clone)]
@@ -149,6 +155,16 @@ pub mod display {
                 Single(i) => write!(f, "{}", i),
                 Plus(i) => write!(f, "+{}", i),
                 Minus(i) => write!(f, "-{}", i),
+            }
+        }
+    }
+
+    impl Display for Value {
+        fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            use Value::*;
+            match self {
+                Single(i) => write!(f, "{}", i),
+                ArrElem(l, r) => write!(f, "{}{}", l, r),
             }
         }
     }

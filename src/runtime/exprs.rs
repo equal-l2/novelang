@@ -3,8 +3,11 @@ pub use crate::exprs::Expr;
 use crate::exprs::items::*;
 use crate::types::Typed;
 
+pub type Result = std::result::Result<Typed, EvalError>;
+
 pub trait VarsMap {
     fn get(&self, name: &str) -> Option<&Typed>;
+    fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> Result;
 }
 
 #[derive(Debug)]
@@ -13,32 +16,33 @@ pub enum EvalError {
     OverFlow,
     ZeroDivision,
     TypeError(String),
+    IndexOutOfBounds(super::IntType),
 }
 
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to eval because ")?;
         match self {
             Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
-            Self::OverFlow => write!(f, "of overflow"),
-            Self::ZeroDivision => write!(f, "of zero division"),
-            Self::TypeError(s) => write!(f, "of type error: {}", s),
+            Self::OverFlow => write!(f, "overflow"),
+            Self::ZeroDivision => write!(f, "zero division"),
+            Self::TypeError(s) => write!(f, "type error: {}", s),
+            Self::IndexOutOfBounds(n) => write!(f, "index out of bounds: {}", n),
         }
     }
 }
 
 pub trait Eval {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError>;
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result;
 }
 
 impl Eval for Expr {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         self.content.eval(vmap)
     }
 }
 
 impl Eval for Log {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
             Self::And(l, r) => {
@@ -70,7 +74,7 @@ impl Eval for Log {
 }
 
 impl Eval for Equ {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
             Self::Equal(l, r) => {
@@ -120,7 +124,7 @@ macro_rules! def_cmp {
 }
 
 impl Eval for Rel {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         use std::cmp::Ordering;
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
@@ -152,7 +156,7 @@ macro_rules! def_ari {
 }
 
 impl Eval for AddSub {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
             Self::Add(l, r) => {
@@ -180,7 +184,7 @@ impl Eval for AddSub {
 }
 
 impl Eval for MulDiv {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
             Self::Mul(l, r) => {
@@ -211,7 +215,7 @@ impl Eval for MulDiv {
 }
 
 impl Eval for Node {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
             Self::Plus(l) => l.eval(vmap)?,
@@ -220,8 +224,17 @@ impl Eval for Node {
     }
 }
 
+impl Eval for Value {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
+        Ok(match self {
+            Self::Single(l) => l.eval(vmap)?,
+            Self::ArrElem(l, r) => vmap.get_arr_elem(l, &(**r))?,
+        })
+    }
+}
+
 impl Eval for Core {
-    fn eval<T: VarsMap>(&self, vmap: &T) -> Result<Typed, EvalError> {
+    fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Str(s) => Typed::Str(s.clone()),
             Self::Num(n) => Typed::Num(*n),

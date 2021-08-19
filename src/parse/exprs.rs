@@ -206,7 +206,8 @@ impl<'a> TryFromTokens<'a> for MulDiv {
 impl<'a> TryFromTokens<'a> for Node {
     fn can_start_with(item: &Items) -> bool {
         use lex::{AddOps, Ops};
-        matches!(item, Items::Op(Ops::Add(AddOps::Add | AddOps::Sub))) || Core::can_start_with(item)
+        matches!(item, Items::Op(Ops::Add(AddOps::Add | AddOps::Sub)))
+            || Value::can_start_with(item)
     }
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
@@ -229,10 +230,46 @@ impl<'a> TryFromTokens<'a> for Node {
                     AddOps::Sub => Self::Minus(Box::new(operand)),
                 }
             } else {
-                let operand = Core::try_from_tokens(tks)?;
+                let operand = Value::try_from_tokens(tks)?;
                 Self::Single(operand)
             },
         )
+    }
+}
+
+impl<'a> TryFromTokens<'a> for Value {
+    fn can_start_with(item: &Items) -> bool {
+        Core::can_start_with(item)
+    }
+
+    fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
+    where
+        T: Iterator<Item = &'a Token>,
+    {
+        ensure_start!(tks);
+
+        let l = Core::try_from_tokens(tks)?;
+
+        if let Some(Token {
+            item: Items::LBra, ..
+        }) = tks.peek()
+        {
+            let _ = tks.next().unwrap();
+            let r = AddSub::try_from_tokens(tks)?;
+            if let Some(Token {
+                item: Items::RBra, ..
+            }) = tks.peek()
+            {
+                let _ = tks.next().unwrap();
+                Ok(Self::ArrElem(l, Box::new(r)))
+            } else {
+                Err(tks.next().map_or(ParseError::TokenExhausted, |tk| {
+                    ParseError::InvalidToken(tk.clone())
+                }))
+            }
+        } else {
+            Ok(Self::Single(l))
+        }
     }
 }
 
@@ -269,8 +306,7 @@ impl<'a> TryFromTokens<'a> for Core {
                 let next_tk = tks.next();
                 match next_tk {
                     Some(Token {
-                        item: Items::RPar,
-                        ..
+                        item: Items::RPar, ..
                     }) => Self::Paren(Box::new(expr)),
                     _ => Err(ParseError::NoPairParen { lparen: tk.clone() })?,
                 }

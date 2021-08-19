@@ -47,6 +47,25 @@ impl exprs::VarsMap for Runtime {
     fn get(&self, name: &str) -> Option<&Typed> {
         self.get_var(name).map(Variable::get)
     }
+
+    fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> exprs::Result {
+        use exprs::EvalError;
+        let l = l.eval(self)?;
+        if let Typed::Str(s) = l {
+            let r = r.eval(self)?;
+            if let Typed::Num(n) = r {
+                if let Some(c) = s.chars().nth(n as usize) {
+                    Ok(Typed::Str(c.into()))
+                } else {
+                    Err(EvalError::IndexOutOfBounds(n))
+                }
+            } else {
+                panic!("non-Num index is not allowed");
+            }
+        } else {
+            panic!("Only Str can be indexed");
+        }
+    }
 }
 
 impl Runtime {

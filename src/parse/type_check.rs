@@ -148,6 +148,26 @@ impl TypeCheck for Node {
     }
 }
 
+impl TypeCheck for Value {
+    fn check_type(&self, stack: &ScopeStack) -> Result {
+        match self {
+            Self::Single(i) => i.check_type(stack),
+            Self::ArrElem(l, r) => {
+                let l_ty = l.check_type(stack)?;
+                let r_ty = r.check_type(stack)?;
+                if r_ty != Type::Num {
+                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                } else {
+                    match l_ty {
+                        Type::Str => Ok(Type::Str),
+                        _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl TypeCheck for Core {
     fn check_type(&self, stack: &ScopeStack) -> Result {
         match self {
