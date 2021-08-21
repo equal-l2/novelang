@@ -12,7 +12,6 @@ pub trait VarsMap {
 
 #[derive(Debug)]
 pub enum EvalError {
-    VariableNotFound(String),
     OverFlow,
     ZeroDivision,
     IndexOutOfBounds(super::IntType),
@@ -22,7 +21,6 @@ pub enum EvalError {
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
             Self::OverFlow => write!(f, "overflow"),
             Self::ZeroDivision => write!(f, "zero division"),
             Self::IndexOutOfBounds(n) => write!(f, "index out of bounds: {}", n),

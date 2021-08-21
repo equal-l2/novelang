@@ -1,14 +1,16 @@
 use crate::exprs::Expr;
 use crate::lex;
 
+mod expr_type;
 mod exprs;
-mod type_check;
+mod types;
 
 #[macro_use]
-mod macros;
+mod utils;
 
-use macros::*;
-use type_check::{TypeCheck, TypeError};
+use expr_type::{TypeCheck, TypeError};
+use types::Type;
+use utils::*;
 
 enum ParseError {
     UnexpectedToken(lex::Token),
@@ -91,33 +93,6 @@ pub enum Statement {
 #[derive(Debug, Clone)]
 pub struct AST {
     pub stmts: Vec<Statement>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Type {
-    Bool,
-    Num,
-    Str,
-    Sub,
-    Arr(Box<Type>),
-}
-
-impl std::fmt::Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}", self.typename())
-    }
-}
-
-impl Type {
-    fn typename(&self) -> String {
-        match self {
-            Self::Bool => "Bool".to_owned(),
-            Self::Num => "Num".to_owned(),
-            Self::Str => "Str".to_owned(),
-            Self::Sub => "Sub".to_owned(),
-            Self::Arr(i) => format!("Arr[{}]", i.typename()),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -220,6 +195,12 @@ impl ScopeStack {
     }
 }
 
+#[derive(Clone, Debug)]
+enum LVal {
+    Scalar(String),
+    Vector(Box<Self>, Expr),
+}
+
 pub fn parse(lexed: crate::lex::Lexed) -> AST {
     use lex::{Items, Keyword};
 
@@ -233,11 +214,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
         if let Items::Cmd(inst) = &tks[i].item {
             match inst {
                 lex::Command::Print => parse_stmt!(i, stmts, {
-                    // "Print" (expr {"," expr}) ";"
+                    // "Print" (<expr> {"," <expr>}) ";"
                     let mut args = Vec::new();
 
                     {
-                        let expr = parse_expr!(i, tks, lexed, scope_stack);
+                        let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                         match expr.check_type(&scope_stack) {
                             Ok(ty) => {
@@ -258,7 +239,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                                 if matches!(tks[i].item, Items::Semi) {
                                     break;
                                 } else {
-                                    let expr = parse_expr!(i, tks, lexed, scope_stack);
+                                    let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                                     match expr.check_type(&scope_stack) {
                                         Ok(ty) => {
@@ -285,7 +266,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Sub => parse_stmt!(i, stmts, {
-                    // "Sub" name ";"
+                    // "Sub" <name> ";"
 
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -317,7 +298,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Call => parse_stmt!(i, stmts, {
-                    // "Call" name ";"
+                    // "Call" <name> ";"
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
                         expects_semi!(i, lexed);
@@ -334,11 +315,11 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::While => parse_stmt!(i, stmts, {
-                    // "While" cond ";"
+                    // "While" <cond> ";"
 
                     scope_stack.push(ScopeKind::Loop, stmts.len());
 
-                    let expr = parse_expr!(i, tks, lexed, scope_stack);
+                    let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
                     expects_type!(expr, Type::Bool, scope_stack, i, lexed);
 
                     expects_semi!(i, lexed);
@@ -350,7 +331,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Let => parse_stmt!(i, stmts, {
-                    // "Let" name "Be" expr ("AsMut") ";"
+                    // "Let" <name> "Be" <expr> ("AsMut") ";"
 
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -359,7 +340,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"Be\" expected", Items::Key(Keyword::Be), i, lexed);
 
-                        let init = parse_expr!(i, tks, lexed, scope_stack);
+                        let init = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                         let init_ty = match init.check_type(&scope_stack) {
                             Ok(t) => t,
@@ -405,14 +386,14 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Modify => parse_stmt!(i, stmts, {
-                    // "Modify" name "To" expr ";"
+                    // "Modify" <lval> "To" <expr> ";"
 
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
 
                         expects!("To expected", Items::Key(Keyword::To), i, lexed);
 
-                        let expr = parse_expr!(i, tks, lexed, scope_stack);
+                        let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
                         expects_semi!(i, lexed);
 
                         let var_tinfo = scope_stack.get_type_info(name);
@@ -444,9 +425,9 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::If => parse_stmt!(i, stmts, {
-                    // "If" cond ";"
+                    // "If" <cond> ";"
 
-                    let cond = parse_expr!(i, tks, lexed, scope_stack);
+                    let cond = parse_expr(&mut i, &lexed, &mut scope_stack);
                     expects_semi!(i, lexed);
 
                     scope_stack.push(ScopeKind::Other, stmts.len());
@@ -458,10 +439,10 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Else => parse_stmt!(i, stmts, {
-                    // "Else" ("If" cond) ";"
+                    // "Else" ("If" <cond>) ";"
 
                     let inst_obj = if let Items::Cmd(lex::Command::If) = &tks[i].item {
-                        // "Else" "If" cond ";"
+                        // "Else" "If" <cond> ";"
                         i += 1;
 
                         let prev_idx = scope_stack.pop().unwrap_or_else(|| {
@@ -489,7 +470,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             }
                         };
 
-                        let cond = parse_expr!(i, tks, lexed, scope_stack);
+                        let cond = parse_expr(&mut i, &lexed, &mut scope_stack);
                         expects_semi!(i, lexed);
 
                         Statement::ElIf {
@@ -575,7 +556,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Input => parse_stmt!(i, stmts, {
-                    // "Input" (prompt) "To" name ";"
+                    // "Input" (<str>) "To" <lval> ";"
 
                     let prompt = if let Items::Str(prompt) = &tks[i].item {
                         i += 1;
@@ -615,9 +596,9 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::Roll => parse_stmt!(i, stmts, {
-                    // "Roll" n "Dice" "With" k "Face" "To" name ";"
+                    // "Roll" <expr> "Dice" "With" <expr> "Face" "To" <lval> ";"
 
-                    let count = parse_expr!(i, tks, lexed, scope_stack);
+                    let count = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                     let count_ty = match count.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -632,7 +613,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                     expects!("\"With\" expected", Items::Key(Keyword::With), i, lexed);
 
-                    let face = parse_expr!(i, tks, lexed, scope_stack);
+                    let face = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                     let face_ty = match count.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -700,7 +681,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                 lex::Command::Assert => parse_stmt!(i, stmts, {
                     // "Assert" (<str> "With") <cond> ";"
-                    let expr1 = parse_expr!(i, tks, lexed, scope_stack);
+                    let expr1 = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                     let expr1_ty = match expr1.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -720,7 +701,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                                 lexed
                             );
 
-                            let expr2 = parse_expr!(i, tks, lexed, scope_stack);
+                            let expr2 = parse_expr(&mut i, &lexed, &mut scope_stack);
                             let expr2_ty = match expr2.check_type(&scope_stack) {
                                 Ok(t) => t,
                                 Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
@@ -767,7 +748,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 }),
 
                 lex::Command::For => parse_stmt!(i, stmts, {
-                    // "For" name "from" expr "to" expr ";"
+                    // "For" <name> "from" <expr> "to" <expr> ";"
 
                     if let Items::Ident(name) = &tks[i].item {
                         i += 1;
@@ -776,7 +757,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"From\" expected", Items::Key(Keyword::From), i, lexed);
 
-                        let from = parse_expr!(i, tks, lexed, scope_stack);
+                        let from = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                         {
                             let from_ty = match from.check_type(&scope_stack) {
@@ -791,7 +772,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                         expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
 
-                        let to = parse_expr!(i, tks, lexed, scope_stack);
+                        let to = parse_expr(&mut i, &lexed, &mut scope_stack);
 
                         {
                             let to_ty = match to.check_type(&scope_stack) {

@@ -1,5 +1,5 @@
+use super::expr_type::{TypeCheck, TypeError};
 use super::exprs::TryFromTokens;
-use super::type_check::{TypeCheck, TypeError};
 use super::ParseError;
 use super::ScopeStack;
 pub use crate::die;
@@ -101,14 +101,13 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
 }
 
 // parse tokens into expression
-// parse_expr!(EndItemOfExpr | AnotherEndOfExpr, i, tks, lexed)
-macro_rules! parse_expr {
-    ($i: ident, $tks: ident, $lexed: ident, $stack: ident) => {{
-        let (advanced, expr) = parse_expr_from_tokens(&$tks[$i..], &$stack)
-            .unwrap_or_else(|e| die_by_expr_parse_error(e, $i, &$lexed));
-        $i += advanced;
-        expr
-    }};
+// parse_expr!(i, tks, lexed)
+pub(super) fn parse_expr(i: &mut usize, lexed: &lex::Lexed, stack: &ScopeStack) -> Expr {
+    let tks = &lexed.tokens;
+    let (advanced, expr) = parse_expr_from_tokens(&tks[*i..], &stack)
+        .unwrap_or_else(|e| die_by_expr_parse_error(e, *i, &lexed));
+    *i += advanced;
+    expr
 }
 
 // helper function for parse_expr!
