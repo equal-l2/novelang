@@ -5,6 +5,8 @@ pub(super) enum TypeError {
     VarNotFound(String),
     UnaryUndefined(Type),
     BinaryUndefined(Type, Type),
+    Unexpected { expected: Type, actual: Type },
+    ArrayTypeDiffer(Type),
 }
 
 type Result = std::result::Result<Type, TypeError>;
@@ -66,7 +68,7 @@ impl TypeCheck for Rel {
                 let l_ty = l.check_type(stack)?;
                 let r_ty = r.check_type(stack)?;
 
-                if l_ty == r_ty {
+                if l_ty == r_ty && !matches!(l_ty, Type::Sub | Type::Arr(_)) {
                     Ok(Type::Bool)
                 } else {
                     Err(TypeError::BinaryUndefined(l_ty, r_ty))
@@ -115,6 +117,9 @@ impl TypeCheck for MulDiv {
                 match (&l_ty, &r_ty) {
                     (Type::Num, Type::Num) => Ok(Type::Num),
                     (Type::Num, Type::Str) | (Type::Str, Type::Num) => Ok(Type::Str),
+                    (Type::Num, Type::Arr(t)) | (Type::Arr(t), Type::Num) => {
+                        Ok(Type::Arr(t.clone()))
+                    }
                     _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
                 }
             }
@@ -138,10 +143,10 @@ impl TypeCheck for Node {
             Self::Single(i) => i.check_type(stack),
             Self::Plus(i) | Self::Minus(i) => {
                 let ty = i.check_type(stack)?;
-                if matches!(ty, Type::Num | Type::Str) {
-                    Ok(ty)
-                } else {
+                if matches!(ty, Type::Sub) {
                     Err(TypeError::UnaryUndefined(ty))
+                } else {
+                    Ok(ty)
                 }
             }
         }
@@ -155,13 +160,14 @@ impl TypeCheck for Value {
             Self::ArrElem(l, r) => {
                 let l_ty = l.check_type(stack)?;
                 let r_ty = r.check_type(stack)?;
-                if r_ty != Type::Num {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
-                } else {
+                if r_ty == Type::Num {
                     match l_ty {
                         Type::Str => Ok(Type::Str),
+                        Type::Arr(t) => Ok(Type::Arr(t)),
                         _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
                     }
+                } else {
+                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
                 }
             }
         }
@@ -179,6 +185,18 @@ impl TypeCheck for Core {
                 .ok_or_else(|| TypeError::VarNotFound(name.clone())),
             Self::True | Self::False => Ok(Type::Bool),
             Self::Paren(i) => i.check_type(stack),
+            Self::Arr(i) => {
+                let v = i
+                    .iter()
+                    .map(|e| e.check_type(stack))
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                let first = &v[0];
+                if v.iter().all(|e| e == first) {
+                    Ok(Type::Arr(Box::new(first.clone())))
+                } else {
+                    Err(TypeError::ArrayTypeDiffer(first.clone()))
+                }
+            }
         }
     }
 }

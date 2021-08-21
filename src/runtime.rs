@@ -50,20 +50,28 @@ impl exprs::VarsMap for Runtime {
 
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> exprs::Result {
         use exprs::EvalError;
-        let l = l.eval(self)?;
-        if let Typed::Str(s) = l {
-            let r = r.eval(self)?;
-            if let Typed::Num(n) = r {
-                if let Some(c) = s.chars().nth(n as usize) {
-                    Ok(Typed::Str(c.into()))
-                } else {
-                    Err(EvalError::IndexOutOfBounds(n))
+        let r = r.eval(self)?;
+        if let Typed::Num(n) = r {
+            let l = l.eval(self)?;
+            match l {
+                Typed::Str(s) => {
+                    if let Some(c) = s.chars().nth(n as usize) {
+                        Ok(Typed::Str(c.into()))
+                    } else {
+                        Err(EvalError::IndexOutOfBounds(n))
+                    }
                 }
-            } else {
-                panic!("non-Num index is not allowed");
+                Typed::Arr(v) => {
+                    if let Some(i) = v.get(n as usize) {
+                        Ok(i.clone())
+                    } else {
+                        Err(EvalError::IndexOutOfBounds(n))
+                    }
+                }
+                _ => unreachable!("Type {} cannot be indexed", l.typename()),
             }
         } else {
-            panic!("Only Str can be indexed");
+            unreachable!("non-Num index is not allowed");
         }
     }
 }
@@ -190,50 +198,45 @@ impl Runtime {
     }
 
     pub fn exec_print(&mut self, args: &[Expr]) {
-        use std::io::Write;
-        let stdout = std::io::stdout();
-        let mut lock = stdout.lock();
+        let fun = || {
+            use std::io::Write;
+            let stdout = std::io::stdout();
+            let mut lock = stdout.lock();
 
-        if let Some(arg) = args.get(0) {
-            let val = arg.eval(self).unwrap_or_else(|e| {
-                die!("Runtime error: Failed to eval arg of Print: {:?}", e);
-            });
-            match val {
-                Typed::Num(n) => write!(lock, "{}", n),
-                Typed::Bool(b) => write!(lock, "{}", b),
-                Typed::Str(s) => write!(lock, "{}", s),
-                _ => unimplemented!(),
+            if !args.is_empty() {
+                let val = args[0].eval(self).unwrap_or_else(|e| {
+                    die!("Runtime error: Failed to eval arg of Print: {:?}", e);
+                });
+                write!(lock, "{}", val)?;
             }
-            .unwrap();
-        }
-        for arg in &args[1..] {
-            let val = arg.eval(self).unwrap_or_else(|e| {
-                die!("Runtime error: Failed to eval arg of Print: {:?}", e);
-            });
-            match val {
-                Typed::Num(n) => write!(lock, " {}", n),
-                Typed::Bool(b) => write!(lock, " {}", b),
-                Typed::Str(s) => write!(lock, " {}", s),
-                _ => unimplemented!(),
+            for arg in &args[1..] {
+                let val = arg.eval(self).unwrap_or_else(|e| {
+                    die!("Runtime error: Failed to eval arg of Print: {:?}", e);
+                });
+                write!(lock, " {}", val)?;
             }
-            .unwrap();
-        }
-        writeln!(lock).unwrap();
-        let _ = lock.flush();
+            writeln!(lock)?;
+            lock.flush()?;
 
-        let wait = unwrap_bool(
-            self.get_var("_wait")
-                .expect("internal variable \"_wait\" must exist")
-                .get(),
-        );
+            let wait = unwrap_bool(
+                self.get_var("_wait")
+                    .expect("internal variable \"_wait\" must exist")
+                    .get(),
+            );
 
-        if wait {
-            write!(lock, "[Proceed with Enter⏎ ]").unwrap();
-            let _ = lock.flush();
-            let _ = read_line_from_stdin();
-            // move to the prev line and erase the line
-            write!(lock, "\x1B[F\x1B[2K").unwrap();
-            let _ = lock.flush();
+            if wait {
+                write!(lock, "[Proceed with Enter⏎ ]")?;
+                let _ = lock.flush()?;
+                let _ = read_line_from_stdin();
+                // move to the prev line and erase the line
+                write!(lock, "\x1B[F\x1B[2K")?;
+                let _ = lock.flush()?;
+            }
+            Ok(())
+        };
+
+        if let std::io::Result::Err(e) = fun() {
+            die!("Error in print: {}", e);
         }
     }
 

@@ -4,7 +4,7 @@ pub struct Expr {
 }
 
 impl Expr {
-    pub fn new_str(s: String) -> Self {
+    pub const fn new_str(s: String) -> Self {
         use items::*;
         Self {
             content: Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
@@ -16,6 +16,7 @@ impl Expr {
 
 pub mod items {
     pub type TopItem = Log;
+    pub type TopNum = AddSub;
 
     #[derive(Debug, Clone)]
     pub enum Log {
@@ -65,7 +66,7 @@ pub mod items {
     #[derive(Debug, Clone)]
     pub enum Value {
         Single(Core),
-        ArrElem(Core, Box<AddSub>),
+        ArrElem(Box<Self>, Box<TopNum>),
     }
 
     #[derive(Debug, Clone)]
@@ -76,6 +77,7 @@ pub mod items {
         True,
         False,
         Paren(Box<TopItem>),
+        Arr(Vec<TopItem>),
     }
 }
 
@@ -179,6 +181,17 @@ pub mod display {
                 True => write!(f, "true"),
                 False => write!(f, "false"),
                 Paren(i) => write!(f, "{}", i),
+                Arr(v) => {
+                    write!(f, "[")?;
+                    if !v.is_empty() {
+                        write!(f, "{}", v[0])?;
+                    }
+                    for e in &v[1..] {
+                        write!(f, " {}", e)?;
+                    }
+                    write!(f, "]")?;
+                    Ok(())
+                }
             }
         }
     }

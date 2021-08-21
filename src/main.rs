@@ -1,13 +1,12 @@
+#![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
 #![warn(future_incompatible)]
 #![warn(rust_2018_compatibility)]
 #![warn(rust_2018_idioms)]
-#![warn(clippy::nursery)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::fallible_impl_from)]
-#![allow(clippy::future_not_send)]
-#![allow(clippy::match_wildcard_for_single_variants)]
-#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::enum_glob_use)]
+#![allow(clippy::wildcard_imports)]
 #![allow(clippy::similar_names)]
+#![allow(clippy::many_single_char_names)]
 
 mod exprs;
 mod lex;
@@ -33,6 +32,7 @@ struct Opt {
 }
 
 fn main() {
+    env_logger::init();
     let opt = Opt::from_args();
     let s = if opt.filename == "-" {
         use std::io::Read;

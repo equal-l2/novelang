@@ -11,10 +11,9 @@ use macros::*;
 use type_check::{TypeCheck, TypeError};
 
 enum ParseError {
-    InvalidToken(lex::Token),
+    UnexpectedToken(lex::Token),
     EmptyExpr,
     NoPairParen { lparen: lex::Token },
-    TrailingToken { from: lex::Token },
     TokenExhausted,
     TypeError(TypeError),
 }
@@ -100,6 +99,7 @@ enum Type {
     Num,
     Str,
     Sub,
+    Arr(Box<Type>),
 }
 
 impl std::fmt::Display for Type {
@@ -109,12 +109,13 @@ impl std::fmt::Display for Type {
 }
 
 impl Type {
-    const fn typename(&self) -> &str {
+    fn typename(&self) -> String {
         match self {
-            Self::Bool => "Bool",
-            Self::Num => "Num",
-            Self::Str => "Str",
-            Self::Sub => "Sub",
+            Self::Bool => "Bool".to_owned(),
+            Self::Num => "Num".to_owned(),
+            Self::Str => "Str".to_owned(),
+            Self::Sub => "Sub".to_owned(),
+            Self::Arr(i) => format!("Arr[{}]", i.typename()),
         }
     }
 }
@@ -234,34 +235,48 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Print => parse_stmt!(i, stmts, {
                     // "Print" (expr {"," expr}) ";"
                     let mut args = Vec::new();
+
+                    {
+                        let expr = parse_expr!(i, tks, lexed, scope_stack);
+
+                        match expr.check_type(&scope_stack) {
+                            Ok(ty) => {
+                                if ty == Type::Sub {
+                                    die_cont!("Value of type Sub cannot be printed", i, lexed)
+                                }
+                                args.push(expr);
+                            }
+                            Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                        }
+                    }
+
                     while i < tks.len() {
                         match &tks[i].item {
                             Items::Semi => break,
                             Items::Comma => {
                                 i += 1;
+                                if matches!(tks[i].item, Items::Semi) {
+                                    break;
+                                } else {
+                                    let expr = parse_expr!(i, tks, lexed, scope_stack);
+
+                                    match expr.check_type(&scope_stack) {
+                                        Ok(ty) => {
+                                            if ty == Type::Sub {
+                                                die_cont!(
+                                                    "Value of type Sub cannot be printed",
+                                                    i,
+                                                    lexed
+                                                )
+                                            }
+                                            args.push(expr);
+                                        }
+                                        Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                                    }
+                                }
                             }
                             _ => {
-                                let expr = parse_expr!(
-                                    Items::Comma | Items::Semi,
-                                    i,
-                                    tks,
-                                    lexed,
-                                    scope_stack
-                                );
-
-                                match expr.check_type(&scope_stack) {
-                                    Ok(ty) => {
-                                        if ty == Type::Sub {
-                                            die_cont!(
-                                                "Value of type Sub cannot be printed",
-                                                i,
-                                                lexed
-                                            )
-                                        }
-                                        args.push(expr);
-                                    }
-                                    Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
-                                }
+                                die_cont!("Unexpected token", i, lexed)
                             }
                         }
                     }
@@ -323,7 +338,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                     scope_stack.push(ScopeKind::Loop, stmts.len());
 
-                    let expr = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
+                    let expr = parse_expr!(i, tks, lexed, scope_stack);
                     expects_type!(expr, Type::Bool, scope_stack, i, lexed);
 
                     expects_semi!(i, lexed);
@@ -344,13 +359,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"Be\" expected", Items::Key(Keyword::Be), i, lexed);
 
-                        let init = parse_expr!(
-                            Items::Semi | Items::Key(Keyword::AsMut),
-                            i,
-                            tks,
-                            lexed,
-                            scope_stack
-                        );
+                        let init = parse_expr!(i, tks, lexed, scope_stack);
 
                         let init_ty = match init.check_type(&scope_stack) {
                             Ok(t) => t,
@@ -403,7 +412,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                         expects!("To expected", Items::Key(Keyword::To), i, lexed);
 
-                        let expr = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
+                        let expr = parse_expr!(i, tks, lexed, scope_stack);
                         expects_semi!(i, lexed);
 
                         let var_tinfo = scope_stack.get_type_info(name);
@@ -437,7 +446,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::If => parse_stmt!(i, stmts, {
                     // "If" cond ";"
 
-                    let cond = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
+                    let cond = parse_expr!(i, tks, lexed, scope_stack);
                     expects_semi!(i, lexed);
 
                     scope_stack.push(ScopeKind::Other, stmts.len());
@@ -480,7 +489,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             }
                         };
 
-                        let cond = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
+                        let cond = parse_expr!(i, tks, lexed, scope_stack);
                         expects_semi!(i, lexed);
 
                         Statement::ElIf {
@@ -608,7 +617,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Roll => parse_stmt!(i, stmts, {
                     // "Roll" n "Dice" "With" k "Face" "To" name ";"
 
-                    let count = parse_expr!(Items::Key(Keyword::Dice), i, tks, lexed, scope_stack);
+                    let count = parse_expr!(i, tks, lexed, scope_stack);
 
                     let count_ty = match count.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -623,7 +632,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                     expects!("\"With\" expected", Items::Key(Keyword::With), i, lexed);
 
-                    let face = parse_expr!(Items::Key(Keyword::Face), i, tks, lexed, scope_stack);
+                    let face = parse_expr!(i, tks, lexed, scope_stack);
 
                     let face_ty = match count.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -691,13 +700,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                 lex::Command::Assert => parse_stmt!(i, stmts, {
                     // "Assert" (<str> "With") <cond> ";"
-                    let expr1 = parse_expr!(
-                        Items::Semi | Items::Key(Keyword::With),
-                        i,
-                        tks,
-                        lexed,
-                        scope_stack
-                    );
+                    let expr1 = parse_expr!(i, tks, lexed, scope_stack);
 
                     let expr1_ty = match expr1.check_type(&scope_stack) {
                         Ok(t) => t,
@@ -717,13 +720,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                                 lexed
                             );
 
-                            let expr2 = parse_expr!(
-                                Items::Semi | Items::Key(Keyword::With),
-                                i,
-                                tks,
-                                lexed,
-                                scope_stack
-                            );
+                            let expr2 = parse_expr!(i, tks, lexed, scope_stack);
                             let expr2_ty = match expr2.check_type(&scope_stack) {
                                 Ok(t) => t,
                                 Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
@@ -779,7 +776,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"From\" expected", Items::Key(Keyword::From), i, lexed);
 
-                        let from = parse_expr!(Items::Key(Keyword::To), i, tks, lexed, scope_stack);
+                        let from = parse_expr!(i, tks, lexed, scope_stack);
 
                         {
                             let from_ty = match from.check_type(&scope_stack) {
@@ -794,7 +791,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                         expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
 
-                        let to = parse_expr!(Items::Semi, i, tks, lexed, scope_stack);
+                        let to = parse_expr!(i, tks, lexed, scope_stack);
 
                         {
                             let to_ty = match to.check_type(&scope_stack) {

@@ -49,7 +49,7 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
         ParseError::EmptyExpr => {
             die_cont!("Expr is empty", i, lexed);
         }
-        ParseError::InvalidToken(tk) => {
+        ParseError::UnexpectedToken(tk) => {
             die!(
                 "Error: {}\n{}",
                 "Failed to parse expr because of this token",
@@ -60,13 +60,6 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
             die!(
                 "Error: {}\n{}",
                 "Paren doesn't have its pair",
-                lexed.generate_loc_info(&tk.loc)
-            );
-        }
-        ParseError::TrailingToken { from: tk } => {
-            die!(
-                "Error: {}\n{}",
-                "Trailing token from here",
                 lexed.generate_loc_info(&tk.loc)
             );
         }
@@ -93,6 +86,16 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
                     lexed
                 );
             }
+            TypeError::Unexpected { expected, actual } => {
+                die_cont!(format!("Expected {}, found {}", expected, actual), i, lexed);
+            }
+            TypeError::ArrayTypeDiffer(ty) => {
+                die_cont!(
+                    format!("Unexpected element in array typed {}", ty),
+                    i,
+                    lexed
+                );
+            }
         },
     }
 }
@@ -100,40 +103,33 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
 // parse tokens into expression
 // parse_expr!(EndItemOfExpr | AnotherEndOfExpr, i, tks, lexed)
 macro_rules! parse_expr {
-    ($($end_pat: pat)|+, $i: ident, $tks: ident, $lexed: ident, $stack: ident) => {
-        {
-            let mut j = $i;
-            while j < $tks.len()
-                && !matches!(
-                    $tks[j].item,
-                    $($end_pat)|+
-                )
-            {
-                j += 1;
-            }
-            let expr = parse_expr_from_tokens(&$tks[$i..j], &$stack).unwrap_or_else(
-                |e| die_by_expr_parse_error(e, $i, &$lexed)
-            );
-            $i = j;
-            expr
-        }
-    }
+    ($i: ident, $tks: ident, $lexed: ident, $stack: ident) => {{
+        let (advanced, expr) = parse_expr_from_tokens(&$tks[$i..], &$stack)
+            .unwrap_or_else(|e| die_by_expr_parse_error(e, $i, &$lexed));
+        $i += advanced;
+        expr
+    }};
 }
 
 // helper function for parse_expr!
 pub(super) fn parse_expr_from_tokens(
     tks: &[lex::Token],
     stack: &ScopeStack,
-) -> Result<Expr, ParseError> {
+) -> Result<(usize, Expr), ParseError> {
     if tks.is_empty() {
         return Err(ParseError::EmptyExpr);
     }
 
-    let expr = Expr::try_from_tokens(&mut tks.iter().peekable())?;
+    let len = tks.len();
+
+    let mut it = tks.iter().enumerate().peekable();
+
+    let expr = Expr::try_from_tokens(&mut it)?;
+    let advanced = it.next().map(|e| e.0).unwrap_or(len);
 
     let _ = expr.check_type(stack)?;
 
-    Ok(expr)
+    Ok((advanced, expr))
 }
 
 macro_rules! parse_stmt {

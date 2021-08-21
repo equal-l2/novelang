@@ -15,8 +15,8 @@ pub enum EvalError {
     VariableNotFound(String),
     OverFlow,
     ZeroDivision,
-    TypeError(String),
     IndexOutOfBounds(super::IntType),
+    UnexpectedValue(super::IntType),
 }
 
 impl std::fmt::Display for EvalError {
@@ -25,8 +25,8 @@ impl std::fmt::Display for EvalError {
             Self::VariableNotFound(s) => write!(f, "variable {} was not found", s),
             Self::OverFlow => write!(f, "overflow"),
             Self::ZeroDivision => write!(f, "zero division"),
-            Self::TypeError(s) => write!(f, "type error: {}", s),
             Self::IndexOutOfBounds(n) => write!(f, "index out of bounds: {}", n),
+            Self::UnexpectedValue(n) => write!(f, "unexpected value: {}", n),
         }
     }
 }
@@ -50,11 +50,11 @@ impl Eval for Log {
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l && *r),
-                    _ => Err(EvalError::TypeError(format!(
+                    _ => panic!(
                         "cannot eval composite logic between {} with {}",
                         l.typename(),
                         r.typename()
-                    )))?,
+                    ),
                 }
             }
             Self::Or(l, r) => {
@@ -62,11 +62,11 @@ impl Eval for Log {
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l || *r),
-                    _ => Err(EvalError::TypeError(format!(
+                    _ => panic!(
                         "cannot eval composite logic between {} with {}",
                         l.typename(),
                         r.typename()
-                    )))?,
+                    ),
                 }
             }
         })
@@ -84,11 +84,8 @@ impl Eval for Equ {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l == r),
                     (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l == r),
                     (Typed::Str(l), Typed::Str(r)) => Typed::Bool(l == r),
-                    _ => Err(EvalError::TypeError(format!(
-                        "cannot compare {} with {}",
-                        l.typename(),
-                        r.typename()
-                    )))?,
+                    (Typed::Arr(l), Typed::Arr(r)) => Typed::Bool(l == r),
+                    _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
                 }
             }
             Self::NotEqual(l, r) => {
@@ -98,11 +95,8 @@ impl Eval for Equ {
                     (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l != r),
                     (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l != r),
                     (Typed::Str(l), Typed::Str(r)) => Typed::Bool(l != r),
-                    _ => Err(EvalError::TypeError(format!(
-                        "cannot compare {} with {}",
-                        l.typename(),
-                        r.typename()
-                    )))?,
+                    (Typed::Arr(l), Typed::Arr(r)) => Typed::Bool(l != r),
+                    _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
                 }
             }
         })
@@ -114,11 +108,8 @@ macro_rules! def_cmp {
         {
             let l = $l.eval($vmap)?;
             let r = $r.eval($vmap)?;
-            if let Some(o) = l.partial_cmp(&r) {
-                Ok(Typed::Bool(matches!(o, $($pat)|+)))
-            } else {
-                Err(EvalError::TypeError(format!("cannot compare {} with {}", l.typename(), r.typename())))
-            }
+            let ord = l.partial_cmp(&r).expect("Compare never fails as it is already checked");
+            Ok(Typed::Bool(matches!(ord, $($pat)|+)))
         }
     };
 }
@@ -145,12 +136,12 @@ macro_rules! def_ari {
                 Some(n) => Ok(Typed::Num(n)),
                 None => Err($err),
             },
-            _ => Err(EvalError::TypeError(format!(
+            _ => panic!(
                 "cannot perform {} between {} and {}",
                 $op,
                 l.typename(),
                 r.typename()
-            ))),
+            ),
         }
     }};
 }
@@ -168,12 +159,11 @@ impl Eval for AddSub {
                         None => Err(EvalError::OverFlow),
                     },
                     (Typed::Str(this), Typed::Str(that)) => Ok(Typed::Str(this.clone() + that)),
-                    _ => Err(EvalError::TypeError(format!(
-                        "cannot perform {} between {} and {}",
-                        "addition",
+                    _ => panic!(
+                        "cannot perform addition between {} and {}",
                         l.typename(),
                         r.typename()
-                    ))),
+                    ),
                 }
             }?,
             Self::Sub(l, r) => {
@@ -195,15 +185,41 @@ impl Eval for MulDiv {
                         Some(n) => Ok(Typed::Num(n)),
                         None => Err(EvalError::OverFlow),
                     },
-                    (Typed::Num(n), Typed::Str(s)) | (Typed::Str(s), Typed::Num(n)) => {
-                        Ok(Typed::Str(s.repeat(*n as usize)))
+                    (Typed::Num(n), t) | (t, Typed::Num(n)) => {
+                        let n = *n;
+                        if n == 0 {
+                            Err(EvalError::UnexpectedValue(n))
+                        } else {
+                            let (n, t) = {
+                                let t = t.clone();
+                                if n < 0 {
+                                    (-n, -t)
+                                } else {
+                                    (n, t)
+                                }
+                            };
+                            Ok(match t {
+                                Typed::Str(s) => Typed::Str(s.repeat(n as usize)),
+                                Typed::Arr(v) => {
+                                    let ret = std::iter::repeat(v.clone())
+                                        .take(n as usize)
+                                        .reduce(|mut v1, v2| {
+                                            v1.extend(v2);
+                                            v1
+                                        })
+                                        .expect("doesn't it work?");
+                                    Typed::Arr(ret)
+                                }
+                                _ => unreachable!(),
+                            })
+                        }
                     }
-                    _ => Err(EvalError::TypeError(format!(
+                    _ => panic!(
                         "cannot perform {} between {} and {}",
                         "multiplication",
                         l.typename(),
                         r.typename()
-                    ))),
+                    ),
                 }
             }?,
             Self::Div(l, r) => {
@@ -228,7 +244,7 @@ impl Eval for Value {
     fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
-            Self::ArrElem(l, r) => vmap.get_arr_elem(l, &(**r))?,
+            Self::ArrElem(l, r) => vmap.get_arr_elem(&(**l), &(**r))?,
         })
     }
 }
@@ -241,10 +257,17 @@ impl Eval for Core {
             Self::Ident(name) => vmap
                 .get(name)
                 .cloned()
-                .ok_or_else(|| EvalError::VariableNotFound(name.clone()))?,
+                .unwrap_or_else(|| panic!("variable {} must exist", name)),
             Self::True => Typed::Bool(true),
             Self::False => Typed::Bool(false),
             Self::Paren(expr) => expr.eval(vmap)?,
+            Self::Arr(i) => {
+                let v = i
+                    .iter()
+                    .map(|e| e.eval(vmap))
+                    .collect::<std::result::Result<_, _>>()?;
+                Typed::Arr(v)
+            }
         })
     }
 }

@@ -7,10 +7,12 @@ use super::ParseError;
 
 macro_rules! ensure_start {
     ($tks: ident) => {
-        match $tks.peek() {
-            Some(tk) => {
+        let front = $tks.peek();
+        log::trace!("parsing {}", std::any::type_name::<Self>(),);
+        match front {
+            Some((_, tk)) => {
                 if !Self::can_start_with(&tk.item) {
-                    return Err(ParseError::InvalidToken((*tk).clone()));
+                    return Err(ParseError::UnexpectedToken((*tk).clone()));
                 }
             }
             None => {
@@ -20,13 +22,29 @@ macro_rules! ensure_start {
     };
 }
 
+trait LookItem {
+    fn item(self) -> Option<Items>;
+}
+
+impl<T> LookItem for Option<&(T, &Token)> {
+    fn item(self) -> Option<Items> {
+        self.map(|t| t.1.item.clone())
+    }
+}
+
+impl<T> LookItem for Option<(T, &Token)> {
+    fn item(self) -> Option<Items> {
+        self.map(|t| t.1.item.clone())
+    }
+}
+
 type Result<T> = std::result::Result<T, ParseError>;
 
 pub(super) trait TryFromTokens<'a> {
     fn can_start_with(item: &Items) -> bool;
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
         Self: Sized;
 }
 
@@ -36,16 +54,14 @@ impl<'a> TryFromTokens<'a> for Expr {
     }
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
         Self: Sized,
     {
-        let expr = Log::try_from_tokens(tks)?;
+        ensure_start!(tks);
 
-        if let Some(tk) = tks.next() {
-            return Err(ParseError::TrailingToken { from: tk.clone() });
-        }
-
-        Ok(Self { content: expr })
+        Ok(Self {
+            content: TopItem::try_from_tokens(tks)?,
+        })
     }
 }
 
@@ -56,15 +72,13 @@ impl<'a> TryFromTokens<'a> for Log {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
+        ensure_start!(tks);
+
         let mut lop = Log::Single(Equ::try_from_tokens(tks)?);
         loop {
-            if let Some(Token {
-                item: Items::Op(lex::Ops::Log(op)),
-                ..
-            }) = tks.peek()
-            {
+            if let Some(Items::Op(lex::Ops::Log(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = Equ::try_from_tokens(tks)?;
                 match op {
@@ -85,15 +99,13 @@ impl<'a> TryFromTokens<'a> for Equ {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
+        ensure_start!(tks);
+
         let mut lop = Equ::Single(Rel::try_from_tokens(tks)?);
         loop {
-            if let Some(Token {
-                item: Items::Op(lex::Ops::Equ(op)),
-                ..
-            }) = tks.peek()
-            {
+            if let Some(Items::Op(lex::Ops::Equ(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = Rel::try_from_tokens(tks)?;
                 match op {
@@ -114,17 +126,13 @@ impl<'a> TryFromTokens<'a> for Rel {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
         ensure_start!(tks);
 
         let lop = AddSub::try_from_tokens(tks)?;
         Ok(
-            if let Some(Token {
-                item: Items::Op(lex::Ops::Rel(op)),
-                ..
-            }) = tks.peek()
-            {
+            if let Some(Items::Op(lex::Ops::Rel(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = AddSub::try_from_tokens(tks)?;
                 match op {
@@ -147,17 +155,13 @@ impl<'a> TryFromTokens<'a> for AddSub {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
         ensure_start!(tks);
 
         let mut lop = AddSub::Single(MulDiv::try_from_tokens(tks)?);
         loop {
-            if let Some(Token {
-                item: Items::Op(lex::Ops::Add(op)),
-                ..
-            }) = tks.peek()
-            {
+            if let Some(Items::Op(lex::Ops::Add(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = MulDiv::try_from_tokens(tks)?;
                 match op {
@@ -178,17 +182,13 @@ impl<'a> TryFromTokens<'a> for MulDiv {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
         ensure_start!(tks);
 
         let mut lop = MulDiv::Single(Node::try_from_tokens(tks)?);
         loop {
-            if let Some(Token {
-                item: Items::Op(lex::Ops::Mul(op)),
-                ..
-            }) = tks.peek()
-            {
+            if let Some(Items::Op(lex::Ops::Mul(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = Node::try_from_tokens(tks)?;
                 match op {
@@ -212,28 +212,23 @@ impl<'a> TryFromTokens<'a> for Node {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
         use lex::{AddOps, Ops};
 
         ensure_start!(tks);
 
-        Ok(
-            if let Some(Token {
-                item: Items::Op(Ops::Add(op)),
-                ..
-            }) = tks.peek()
-            {
-                let operand = Self::try_from_tokens(tks)?;
-                match op {
-                    AddOps::Add => Self::Plus(Box::new(operand)),
-                    AddOps::Sub => Self::Minus(Box::new(operand)),
-                }
-            } else {
-                let operand = Value::try_from_tokens(tks)?;
-                Self::Single(operand)
-            },
-        )
+        Ok(if let Some(Items::Op(Ops::Add(op))) = tks.peek().item() {
+            let _ = tks.next().unwrap();
+            let operand = Self::try_from_tokens(tks)?;
+            match op {
+                AddOps::Add => Self::Plus(Box::new(operand)),
+                AddOps::Sub => Self::Minus(Box::new(operand)),
+            }
+        } else {
+            let operand = Value::try_from_tokens(tks)?;
+            Self::Single(operand)
+        })
     }
 }
 
@@ -244,31 +239,26 @@ impl<'a> TryFromTokens<'a> for Value {
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
         ensure_start!(tks);
 
-        let l = Core::try_from_tokens(tks)?;
-
-        if let Some(Token {
-            item: Items::LBra, ..
-        }) = tks.peek()
-        {
-            let _ = tks.next().unwrap();
-            let r = AddSub::try_from_tokens(tks)?;
-            if let Some(Token {
-                item: Items::RBra, ..
-            }) = tks.peek()
-            {
+        let mut val = Self::Single(Core::try_from_tokens(tks)?);
+        loop {
+            if let Some(Items::LBra) = tks.peek().item() {
                 let _ = tks.next().unwrap();
-                Ok(Self::ArrElem(l, Box::new(r)))
+                let r = TopNum::try_from_tokens(tks)?;
+                if let Some(Items::RBra, ..) = tks.peek().item() {
+                    let _ = tks.next().unwrap();
+                    val = Self::ArrElem(Box::new(val), Box::new(r));
+                } else {
+                    return Err(tks.next().map_or(ParseError::TokenExhausted, |(_, tk)| {
+                        ParseError::UnexpectedToken(tk.clone())
+                    }));
+                }
             } else {
-                Err(tks.next().map_or(ParseError::TokenExhausted, |tk| {
-                    ParseError::InvalidToken(tk.clone())
-                }))
+                return Ok(val);
             }
-        } else {
-            Ok(Self::Single(l))
         }
     }
 }
@@ -283,19 +273,20 @@ impl<'a> TryFromTokens<'a> for Core {
                 | Items::Ident(_)
                 | Items::Key(Keyword::True | Keyword::False)
                 | Items::LPar
+                | Items::LBra
         )
     }
 
     fn try_from_tokens<T>(tks: &mut Peekable<T>) -> Result<Self>
     where
-        T: Iterator<Item = &'a Token>,
+        T: Iterator<Item = (usize, &'a Token)>,
     {
         use lex::Keyword;
 
         ensure_start!(tks);
 
-        let tk = tks.next().unwrap();
-        Ok(match &tk.item {
+        let tok = tks.next().unwrap().1;
+        Ok(match &tok.item {
             Items::Str(s) => Self::Str(s.clone()),
             Items::Num(n, _) => Self::Num(*n),
             Items::Ident(s) => Self::Ident(s.clone()),
@@ -304,14 +295,46 @@ impl<'a> TryFromTokens<'a> for Core {
             Items::LPar => {
                 let expr = TopItem::try_from_tokens(tks)?;
                 let next_tk = tks.next();
-                match next_tk {
-                    Some(Token {
-                        item: Items::RPar, ..
-                    }) => Self::Paren(Box::new(expr)),
-                    _ => Err(ParseError::NoPairParen { lparen: tk.clone() })?,
+                match next_tk.item() {
+                    Some(Items::RPar) => Self::Paren(Box::new(expr)),
+                    _ => {
+                        return Err(ParseError::NoPairParen {
+                            lparen: tok.clone(),
+                        })
+                    }
                 }
             }
-            _ => todo!("{:?}", &tk.item),
+            Items::LBra => {
+                // TODO: allow empty array
+                let mut v = vec![TopItem::try_from_tokens(tks)?];
+                let tk_opt = tks.next().clone();
+                if let Some((_, tk)) = tk_opt {
+                    match tk.item {
+                        Items::Comma => {
+                            loop {
+                                let next = TopItem::try_from_tokens(tks)?;
+                                v.push(next);
+                                if let Some((_, t)) = tks.next() {
+                                    match t.item {
+                                        Items::Comma => {
+                                            // continue
+                                        }
+                                        Items::RBra => break Self::Arr(v),
+                                        _ => return Err(ParseError::UnexpectedToken((*t).clone())),
+                                    }
+                                } else {
+                                    return Err(ParseError::TokenExhausted);
+                                }
+                            }
+                        }
+                        Items::RBra => Self::Arr(v),
+                        _ => return Err(ParseError::UnexpectedToken(tk.clone())),
+                    }
+                } else {
+                    return Err(ParseError::TokenExhausted);
+                }
+            }
+            _ => todo!("{:?}", &tok.item),
         })
     }
 }
