@@ -13,6 +13,7 @@ mod lex;
 mod parse;
 mod runtime;
 mod types;
+mod lval;
 
 use structopt::StructOpt;
 

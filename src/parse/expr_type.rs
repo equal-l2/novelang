@@ -163,7 +163,7 @@ impl TypeCheck for Value {
                 if r_ty == Type::Num {
                     match l_ty {
                         Type::Str => Ok(Type::Str),
-                        Type::Arr(t) => Ok(Type::Arr(t)),
+                        Type::Arr(t) => Ok(*t.clone()),
                         _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
                     }
                 } else {
@@ -180,7 +180,7 @@ impl TypeCheck for Core {
             Self::Str(_) => Ok(Type::Str),
             Self::Num(_) => Ok(Type::Num),
             Self::Ident(name) => stack
-                .get_type_info(name)
+                .get_type_info(&name.clone().into())
                 .map(|ti| ti.ty.clone())
                 .ok_or_else(|| TypeError::VarNotFound(name.clone())),
             Self::True | Self::False => Ok(Type::Bool),

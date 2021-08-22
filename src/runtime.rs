@@ -4,6 +4,7 @@ mod variable;
 use crate::die;
 use crate::parse::{Statement, AST};
 use crate::types::{IntType, Typed};
+use crate::lval::LVal;
 
 use exprs::{Eval, Expr};
 use variable::{ModifyError, Variable};
@@ -44,8 +45,8 @@ pub struct Runtime {
 }
 
 impl exprs::VarsMap for Runtime {
-    fn get(&self, name: &str) -> Option<&Typed> {
-        self.get_var(name).map(Variable::get)
+    fn get(&self, name: &str) -> &Typed {
+        self.get_var(name).get()
     }
 
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> exprs::Result {
@@ -72,6 +73,45 @@ impl exprs::VarsMap for Runtime {
             }
         } else {
             unreachable!("non-Num index is not allowed");
+        }
+    }
+}
+
+enum LValRef<'a> {
+    Scalar(&'a mut Variable),
+    Vector{
+        refer: &'a mut Typed,
+        is_mutable: bool
+    },
+}
+
+impl<'a> LValRef<'a> {
+    fn is_mutable(&self) -> bool {
+        match self {
+            Self::Scalar(var) => var.is_mutable(),
+            Self::Vector{is_mutable, ..} => *is_mutable
+        }
+    }
+
+    fn value(&mut self) -> &mut Typed {
+        match self {
+            Self::Scalar(var) => var.get_mut(),
+            Self::Vector{refer, ..} => refer
+        }
+    }
+
+    fn modify(&mut self, v: Typed) -> Result<(), variable::ModifyError> {
+        if self.is_mutable() {
+            let val = self.value();
+            match (&val, &v) {
+                (Typed::Num(_), Typed::Num(_)) | (Typed::Bool(_), Typed::Bool(_)) => {
+                    *val = v;
+                    Ok(())
+                }
+                _ => Err(ModifyError::TypeDiffers),
+            }
+        } else {
+            Err(ModifyError::Immutable)
         }
     }
 }
@@ -111,12 +151,51 @@ impl Runtime {
         }
     }
 
+    fn resolve_lval(&mut self, target: &LVal) -> Result<LValRef<'_>, exprs::EvalError> {
+        match target {
+            LVal::Scalar(s) => {
+                Ok(LValRef::Scalar(self.get_var_mut(s)))
+            }
+            LVal::Vector(l, r) => { // v[1][2] | [3]
+                let r = r.eval(self)?;
+                if let Typed::Num(n) = r {
+                    let resolved = self.resolve_lval(l)?;
+                    match resolved {
+                        LValRef::Scalar(var) => {
+                            let is_mutable = var.is_mutable();
+                            match var.get_mut() {
+                                Typed::Arr(v) => {
+                                    Ok(LValRef::Vector{
+                                        refer: v.get_mut(n as usize).expect("God said so"),
+                                        is_mutable,
+                                    })
+                                }
+                                _ => panic!(),
+                            }
+                        }
+                        LValRef::Vector{refer, is_mutable} => {
+                            match refer {
+                                Typed::Arr(v) => {
+                                    Ok(LValRef::Vector {
+                                        refer: v.get_mut(n as usize).expect("God said so!"),
+                                        is_mutable
+                                    })
+                                }
+                                _ => panic!(),
+                            }
+                        }
+                    }
+                } else {
+                    unreachable!("non-Num index is not allowed");
+                }
+            }
+        }
+    }
+
     /// Modify a variable
     /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
-    fn modify_var(&mut self, name: &str, val: Typed) {
-        // no check for internals as already done in the parse phase.
-
-        let var = self.get_var_mut(name).expect("variable must exist");
+    fn modify_var(&mut self, target: &LVal, val: Typed) {
+        let mut var = self.resolve_lval(target).expect("variable must exist");
 
         match var.modify(val) {
             Ok(_) => {}
@@ -124,7 +203,7 @@ impl Runtime {
                 die!("Runtime error: Type differs");
             }
             Err(ModifyError::Immutable) => {
-                die!("Runtime error: variable {} is immutable", name);
+                die!("Runtime error: variable {} is immutable", target);
             }
         }
     }
@@ -158,21 +237,23 @@ impl Runtime {
     }
 
     // get the highest variable in the stack with the specified name
-    pub fn get_var(&self, name: &str) -> Option<&Variable> {
+    pub fn get_var(&self, name: &str) -> &Variable {
         self.vars_iter() // Iterator<Item = &mut VarTable>
             .map(|t| t.get(name)) // Iterator<Item = Option<&Variable>>
             .find(Option::is_some) // Option<Option<&Variable>>
             .flatten() // Option<&Variable>
+            .expect("Variable must exist")
     }
 
-    fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
+    fn get_var_mut(&mut self, name: &String) -> &mut Variable {
         self.vars_iter_mut()
             .map(|t| t.get_mut(name))
             .find(Option::is_some)
             .flatten()
+            .expect("Variable must exist")
     }
 
-    pub fn exec_roll(&mut self, cnt: &Expr, face: &Expr, name: &String) {
+    pub fn exec_roll(&mut self, cnt: &Expr, face: &Expr, name: &LVal) {
         use rand::Rng;
 
         let cnt = unwrap_num(&cnt.eval(self).unwrap_or_else(|e| {
@@ -220,7 +301,6 @@ impl Runtime {
 
             let wait = unwrap_bool(
                 self.get_var("_wait")
-                    .expect("internal variable \"_wait\" must exist")
                     .get(),
             );
 
@@ -240,7 +320,7 @@ impl Runtime {
         }
     }
 
-    pub fn exec_input(&mut self, prompt: &Option<String>, name: &String, as_num: bool) {
+    pub fn exec_input(&mut self, prompt: &Option<String>, name: &LVal, as_num: bool) {
         if as_num {
             let input = get_input(prompt.as_deref());
             self.modify_var(name, Typed::Num(input));
@@ -325,17 +405,13 @@ pub fn run(prog: AST) {
                 i += offset_to_end;
             }
             Statement::Call { name } => {
-                if let Some(idx) = rt.get_var(name) {
-                    let idx = unwrap_sub(idx.get());
+                let idx = unwrap_sub(rt.get_var(name).get());
 
-                    // register address to return (the next line)
-                    rt.push(ScopeKind::Sub, i + 1);
+                // register address to return (the next line)
+                rt.push(ScopeKind::Sub, i + 1);
 
-                    // jump to the address of the sub
-                    i = idx;
-                } else {
-                    panic!("Runtime error: function \"{}\" was not found", name);
-                }
+                // jump to the address of the sub
+                i = idx;
             }
             Statement::While {
                 cond,
@@ -375,13 +451,13 @@ pub fn run(prog: AST) {
                     },
                 );
             }
-            Statement::Modify { name, expr } => {
+            Statement::Modify { target, expr } => {
                 // no check for internals, as already checked in the parse phase.
                 let to_value = expr.eval(&rt).unwrap_or_else(|e| {
                     // FIXME
                     die!("Runtime error: Failed to eval value of Modify: {}", e);
                 });
-                rt.modify_var(name, to_value);
+                rt.modify_var(target, to_value);
             }
             Statement::If {
                 cond,
@@ -461,13 +537,13 @@ pub fn run(prog: AST) {
             }
             Statement::Input {
                 prompt,
-                name,
+                target,
                 as_num,
             } => {
-                rt.exec_input(prompt, name, *as_num);
+                rt.exec_input(prompt, target, *as_num);
             }
-            Statement::Roll { count, face, name } => {
-                rt.exec_roll(count, face, name);
+            Statement::Roll { count, face, target} => {
+                rt.exec_roll(count, face, target);
             }
             Statement::Halt => {
                 return;
@@ -577,7 +653,7 @@ pub fn run(prog: AST) {
                         }
                     } else {
                         let cnt = {
-                            unwrap_num(&rt.get_var_mut(counter).expect("counter must exist").get())
+                            unwrap_num(&rt.get_var_mut(counter).get())
                         };
 
                         if cnt >= to {
@@ -586,7 +662,6 @@ pub fn run(prog: AST) {
                         } else {
                             // loop continues
                             rt.get_var_mut(counter)
-                                .expect("counter must exist")
                                 .force_modify(Typed::Num(cnt + 1));
                             rt.push(ScopeKind::Loop, i);
                         }

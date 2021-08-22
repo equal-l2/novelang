@@ -19,7 +19,7 @@ macro_rules! die_cont {
 
 // expects!("message here", SomeItem | AnotherItem, i, lexed);
 macro_rules! expects {
-    ($msg: expr, $($pat: pat)|+, $i: ident, $lexed: ident) => {
+    ($msg: expr, $($pat: pat)|+, $i: expr, $lexed: ident) => {
         {
             if $lexed.tokens.len() <= $i {
                 // tokens has been exhausted
@@ -81,7 +81,7 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
             TypeError::BinaryUndefined(l, r) => {
                 //TODO: show operator (such as '-' or '+')
                 die_cont!(
-                    format!("Unary operator is not defined for {} and {}", l, r),
+                    format!("Binary operator is not defined for {} and {}", l, r),
                     i,
                     lexed
                 );
@@ -139,17 +139,11 @@ macro_rules! parse_stmt {
     }};
 }
 
-macro_rules! expects_type {
-    ($expr: ident, $ty: path, $stack: ident, $i: ident, $lexed: ident) => {
+macro_rules! get_type {
+    ($expr: ident, $stack: ident, $i: expr, $lexed: ident) => {
         match $expr.check_type(&$stack) {
-            Ok(t) => {
-                if t != $ty {
-                    die_cont!(format!("Expected {}, found {}", $ty, t), $i, $lexed)
-                }
-            }
-            Err(e) => {
-                die_by_expr_parse_error(e.into(), $i, &$lexed);
-            }
+            Ok(t) => t,
+            Err(e) => die_by_expr_parse_error(e.into(), $i, &$lexed),
         }
-    };
+    }
 }

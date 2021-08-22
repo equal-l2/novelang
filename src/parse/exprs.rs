@@ -4,6 +4,7 @@ use crate::exprs::{items::*, Expr};
 use crate::lex::{self, Items, Token};
 
 use super::ParseError;
+use super::LookItem;
 
 macro_rules! ensure_start {
     ($tks: ident) => {
@@ -20,10 +21,6 @@ macro_rules! ensure_start {
             }
         }
     };
-}
-
-trait LookItem {
-    fn item(self) -> Option<Items>;
 }
 
 impl<T> LookItem for Option<&(T, &Token)> {

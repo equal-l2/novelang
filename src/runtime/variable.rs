@@ -52,4 +52,12 @@ impl Variable {
     pub const fn get(&self) -> &Typed {
         &self.value
     }
+
+    pub fn get_mut(&mut self) -> &mut Typed {
+        &mut self.value
+    }
+
+    pub const fn is_mutable(&self) -> bool {
+        self.is_mutable
+    }
 }

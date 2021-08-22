@@ -3,8 +3,8 @@ pub struct Expr {
     pub content: items::TopItem,
 }
 
-impl Expr {
-    pub const fn new_str(s: String) -> Self {
+impl From<String> for Expr {
+    fn from(s: String) -> Self {
         use items::*;
         Self {
             content: Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
