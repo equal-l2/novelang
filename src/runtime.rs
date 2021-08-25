@@ -7,16 +7,16 @@ use crate::types::{IntType, Typed};
 
 use exprs::{Eval, Expr};
 
-type VarTable = std::collections::HashMap<String, Typed>;
+type VarTable<'a> = std::collections::HashMap<&'a str, Typed>;
 
 /// Represents a scope
-struct Scope {
+struct Scope<'a> {
     kind: ScopeKind,
     ret_idx: usize,
-    vars: VarTable,
+    vars: VarTable<'a>,
 }
 
-impl Scope {
+impl<'a> Scope<'a> {
     fn new(kind: ScopeKind, ret_idx: usize) -> Self {
         Self {
             kind,
@@ -35,14 +35,14 @@ enum ScopeKind {
 }
 
 /// Represents the store for runtime state
-pub struct Runtime {
-    stack: Vec<Scope>,
-    globals: VarTable,
-    internals: VarTable,
+pub struct Runtime<'a> {
+    stack: Vec<Scope<'a>>,
+    globals: VarTable<'a>,
+    internals: VarTable<'a>,
     rng: rand::rngs::SmallRng,
 }
 
-impl exprs::VarsMap for Runtime {
+impl<'a> exprs::VarsMap for Runtime<'a> {
     fn get(&self, name: &str) -> Typed {
         self.get_var(name).clone()
     }
@@ -64,7 +64,7 @@ impl exprs::VarsMap for Runtime {
     }
 }
 
-impl Runtime {
+impl<'a> Runtime<'a> {
     fn new() -> Self {
         use rand::SeedableRng;
         // internal variables
@@ -72,7 +72,7 @@ impl Runtime {
 
         let internals = {
             let mut vt = VarTable::new();
-            vt.insert("_wait".to_owned(), Typed::Bool(false));
+            vt.insert("_wait", Typed::Bool(false));
             vt
         };
 
@@ -88,13 +88,13 @@ impl Runtime {
 
     /// Declare a variable
     /// Aborts when the variable is already declared in the scope
-    fn decl_var(&mut self, name: &str, val: Typed) {
+    fn decl_var(&mut self, name: &'a str, val: Typed) {
         let var_table = if self.stack.is_empty() {
             &mut self.globals
         } else {
             &mut self.stack.last_mut().unwrap().vars
         };
-        if var_table.insert(name.to_owned(), val).is_some() {
+        if var_table.insert(name, val).is_some() {
             die!("Runtime error: variable {} is already declared", name);
         }
     }
@@ -129,11 +129,11 @@ impl Runtime {
     }
 
     /// Pop the current scope
-    fn pop(&mut self) -> Option<Scope> {
+    fn pop(&mut self) -> Option<Scope<'a>> {
         self.stack.pop()
     }
 
-    fn peek(&self) -> Option<&Scope> {
+    fn peek(&self) -> Option<&Scope<'a>> {
         self.stack.last()
     }
 
@@ -142,14 +142,14 @@ impl Runtime {
         self.stack.push(Scope::new(kind, ret_idx));
     }
 
-    fn vars_iter(&self) -> impl Iterator<Item = &VarTable> {
+    fn vars_iter(&self) -> impl Iterator<Item = &VarTable<'a>> {
         use std::iter::once;
         once(&self.internals)
             .chain(self.stack.iter().map(|f| &f.vars).rev())
             .chain(once(&self.globals))
     }
 
-    fn vars_iter_mut(&mut self) -> impl Iterator<Item = &mut VarTable> {
+    fn vars_iter_mut(&mut self) -> impl Iterator<Item = &mut VarTable<'a>> {
         use std::iter::once;
         once(&mut self.internals)
             .chain(self.stack.iter_mut().map(|f| &mut f.vars).rev())
