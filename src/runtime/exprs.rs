@@ -6,7 +6,7 @@ use crate::types::Typed;
 pub type Result = std::result::Result<Typed, EvalError>;
 
 pub trait VarsMap {
-    fn get(&self, name: &str) -> &Typed;
+    fn get(&self, name: &str) -> Typed;
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> Result;
 }
 
@@ -252,7 +252,7 @@ impl Eval for Core {
         Ok(match self {
             Self::Str(s) => Typed::Str(s.clone()),
             Self::Num(n) => Typed::Num(*n),
-            Self::Ident(name) => vmap.get(name).clone(),
+            Self::Ident(name) => vmap.get(name),
             Self::True => Typed::Bool(true),
             Self::False => Typed::Bool(false),
             Self::Paren(expr) => expr.eval(vmap)?,

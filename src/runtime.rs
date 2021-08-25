@@ -1,5 +1,4 @@
 mod exprs;
-mod variable;
 
 use crate::die;
 use crate::lval::LVal;
@@ -7,9 +6,8 @@ use crate::parse::{Statement, AST};
 use crate::types::{IntType, Typed};
 
 use exprs::{Eval, Expr};
-use variable::{ModifyError, Variable};
 
-type VarTable = std::collections::HashMap<String, Variable>;
+type VarTable = std::collections::HashMap<String, Typed>;
 
 /// Represents a scope
 struct Scope {
@@ -45,8 +43,8 @@ pub struct Runtime {
 }
 
 impl exprs::VarsMap for Runtime {
-    fn get(&self, name: &str) -> &Typed {
-        self.get_var(name).get()
+    fn get(&self, name: &str) -> Typed {
+        self.get_var(name).clone()
     }
 
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> exprs::Result {
@@ -55,63 +53,13 @@ impl exprs::VarsMap for Runtime {
         if let Typed::Num(n) = r {
             let l = l.eval(self)?;
             match l {
-                Typed::Str(s) => {
-                    if let Some(c) = s.chars().nth(n as usize) {
-                        Ok(Typed::Str(c.into()))
-                    } else {
-                        Err(EvalError::IndexOutOfBounds(n))
-                    }
-                }
-                Typed::Arr(v) => {
-                    if let Some(i) = v.get(n as usize) {
-                        Ok(i.clone())
-                    } else {
-                        Err(EvalError::IndexOutOfBounds(n))
-                    }
-                }
+                Typed::Str(s) => s.chars().nth(n as usize).map(|c| Typed::Str(c.into())),
+                Typed::Arr(v) => v.get(n as usize).cloned(),
                 _ => unreachable!("Type {} cannot be indexed", l.typename()),
             }
+            .ok_or(EvalError::IndexOutOfBounds(n))
         } else {
             unreachable!("non-Num index is not allowed");
-        }
-    }
-}
-
-enum LValRef<'a> {
-    Scalar(&'a mut Variable),
-    Vector {
-        refer: &'a mut Typed,
-        is_mutable: bool,
-    },
-}
-
-impl<'a> LValRef<'a> {
-    fn is_mutable(&self) -> bool {
-        match self {
-            Self::Scalar(var) => var.is_mutable(),
-            Self::Vector { is_mutable, .. } => *is_mutable,
-        }
-    }
-
-    fn value(&mut self) -> &mut Typed {
-        match self {
-            Self::Scalar(var) => var.get_mut(),
-            Self::Vector { refer, .. } => refer,
-        }
-    }
-
-    fn modify(&mut self, v: Typed) -> Result<(), variable::ModifyError> {
-        if self.is_mutable() {
-            let val = self.value();
-            match (&val, &v) {
-                (Typed::Num(_), Typed::Num(_)) | (Typed::Bool(_), Typed::Bool(_)) => {
-                    *val = v;
-                    Ok(())
-                }
-                _ => Err(ModifyError::TypeDiffers),
-            }
-        } else {
-            Err(ModifyError::Immutable)
         }
     }
 }
@@ -124,7 +72,7 @@ impl Runtime {
 
         let internals = {
             let mut vt = VarTable::new();
-            vt.insert("_wait".to_owned(), Variable::new_mut(Typed::Bool(false)));
+            vt.insert("_wait".to_owned(), Typed::Bool(false));
             vt
         };
 
@@ -140,7 +88,7 @@ impl Runtime {
 
     /// Declare a variable
     /// Aborts when the variable is already declared in the scope
-    fn decl_var(&mut self, name: &str, val: Variable) {
+    fn decl_var(&mut self, name: &str, val: Typed) {
         let var_table = if self.stack.is_empty() {
             &mut self.globals
         } else {
@@ -151,32 +99,18 @@ impl Runtime {
         }
     }
 
-    fn resolve_lval(&mut self, target: &LVal) -> Result<LValRef<'_>, exprs::EvalError> {
+    fn resolve_lval(&mut self, target: &LVal) -> Result<&mut Typed, exprs::EvalError> {
         match target {
-            LVal::Scalar(s) => Ok(LValRef::Scalar(self.get_var_mut(s))),
+            LVal::Scalar(s) => Ok(self.get_var_mut(s)),
             LVal::Vector(l, r) => {
-                // v[1][2] | [3]
                 let r = r.eval(self)?;
                 if let Typed::Num(n) = r {
                     let resolved = self.resolve_lval(l)?;
-                    match resolved {
-                        LValRef::Scalar(var) => {
-                            let is_mutable = var.is_mutable();
-                            match var.get_mut() {
-                                Typed::Arr(v) => Ok(LValRef::Vector {
-                                    refer: v.get_mut(n as usize).expect("God said so"),
-                                    is_mutable,
-                                }),
-                                _ => panic!(),
-                            }
-                        }
-                        LValRef::Vector { refer, is_mutable } => match refer {
-                            Typed::Arr(v) => Ok(LValRef::Vector {
-                                refer: v.get_mut(n as usize).expect("God said so!"),
-                                is_mutable,
-                            }),
-                            _ => panic!(),
-                        },
+                    if let Typed::Arr(v) = resolved {
+                        v.get_mut(n as usize)
+                            .ok_or(exprs::EvalError::IndexOutOfBounds(n))
+                    } else {
+                        panic!("tried to index non-array var")
                     }
                 } else {
                     unreachable!("non-Num index is not allowed");
@@ -188,17 +122,10 @@ impl Runtime {
     /// Modify a variable
     /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
     fn modify_var(&mut self, target: &LVal, val: Typed) {
-        let mut var = self.resolve_lval(target).expect("variable must exist");
-
-        match var.modify(val) {
-            Ok(_) => {}
-            Err(ModifyError::TypeDiffers) => {
-                die!("Runtime error: Type differs");
-            }
-            Err(ModifyError::Immutable) => {
-                die!("Runtime error: variable {} is immutable", target);
-            }
-        }
+        let var = self
+            .resolve_lval(target)
+            .unwrap_or_else(|e| die!("Runtime error: cannot resolve {} because of: {}", target, e));
+        *var = val;
     }
 
     /// Pop the current scope
@@ -212,7 +139,7 @@ impl Runtime {
 
     /// Push a new scope
     fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
-        self.stack.push(Scope::new(kind, ret_idx))
+        self.stack.push(Scope::new(kind, ret_idx));
     }
 
     fn vars_iter(&self) -> impl Iterator<Item = &VarTable> {
@@ -230,15 +157,15 @@ impl Runtime {
     }
 
     // get the highest variable in the stack with the specified name
-    pub fn get_var(&self, name: &str) -> &Variable {
-        self.vars_iter() // Iterator<Item = &mut VarTable>
-            .map(|t| t.get(name)) // Iterator<Item = Option<&Variable>>
-            .find(Option::is_some) // Option<Option<&Variable>>
-            .flatten() // Option<&Variable>
+    pub fn get_var(&self, name: &str) -> &Typed {
+        self.vars_iter()
+            .map(|t| t.get(name))
+            .find(Option::is_some)
+            .flatten()
             .expect("Variable must exist")
     }
 
-    fn get_var_mut(&mut self, name: &String) -> &mut Variable {
+    fn get_var_mut(&mut self, name: &str) -> &mut Typed {
         self.vars_iter_mut()
             .map(|t| t.get_mut(name))
             .find(Option::is_some)
@@ -292,7 +219,7 @@ impl Runtime {
             writeln!(lock)?;
             lock.flush()?;
 
-            let wait = unwrap_bool(self.get_var("_wait").get());
+            let wait = unwrap_bool(self.get_var("_wait"));
 
             if wait {
                 write!(lock, "[Proceed with Enter⏎ ]")?;
@@ -391,11 +318,11 @@ pub fn run(prog: AST) {
                 name,
                 offset_to_end,
             } => {
-                rt.decl_var(name, Variable::new(Typed::Sub(i)));
+                rt.decl_var(name, Typed::Sub(i));
                 i += offset_to_end;
             }
             Statement::Call { name } => {
-                let idx = unwrap_sub(rt.get_var(name).get());
+                let idx = unwrap_sub(rt.get_var(name));
 
                 // register address to return (the next line)
                 rt.push(ScopeKind::Sub, i + 1);
@@ -427,22 +354,13 @@ pub fn run(prog: AST) {
                     }
                 }
             }
-            Statement::Let { name, init, is_mut } => {
-                // no check for internals, as already checked in the parse phase.
+            Statement::Let { name, init, .. } => {
                 let init_val = init.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval init value of Let: {}", e);
                 });
-                rt.decl_var(
-                    name,
-                    if *is_mut {
-                        Variable::new_mut(init_val)
-                    } else {
-                        Variable::new(init_val)
-                    },
-                );
+                rt.decl_var(name, init_val);
             }
             Statement::Modify { target, expr } => {
-                // no check for internals, as already checked in the parse phase.
                 let to_value = expr.eval(&rt).unwrap_or_else(|e| {
                     // FIXME
                     die!("Runtime error: Failed to eval value of Modify: {}", e);
@@ -644,18 +562,18 @@ pub fn run(prog: AST) {
                             // loop ended
                             i += offset_to_end;
                         } else {
-                            rt.decl_var(counter, Variable::new(Typed::Num(from)));
+                            rt.decl_var(counter, Typed::Num(from));
                             rt.push(ScopeKind::Loop, i);
                         }
                     } else {
-                        let cnt = { unwrap_num(&rt.get_var_mut(counter).get()) };
+                        let cnt = { unwrap_num(rt.get_var_mut(counter)) };
 
                         if cnt >= to {
                             // loop ended
                             i += offset_to_end;
                         } else {
                             // loop continues
-                            rt.get_var_mut(counter).force_modify(Typed::Num(cnt + 1));
+                            *rt.get_var_mut(counter) = Typed::Num(cnt + 1);
                             rt.push(ScopeKind::Loop, i);
                         }
                     }
@@ -664,11 +582,8 @@ pub fn run(prog: AST) {
             Statement::Return => {
                 i = loop {
                     if let Some(scope) = rt.pop() {
-                        match scope.kind {
-                            ScopeKind::Sub => {
-                                break scope.ret_idx;
-                            }
-                            _ => {}
+                        if let ScopeKind::Sub = scope.kind {
+                            break scope.ret_idx;
                         }
                     } else {
                         die!("Runtime error: scope stack is empty");

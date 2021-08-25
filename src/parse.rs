@@ -833,12 +833,9 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     expects_semi!(i, lexed);
                     let mut sub_found = false;
                     for k in scope_stack.kinds() {
-                        match k {
-                            ScopeKind::Sub => {
+                        if let ScopeKind::Sub = k {
                                 sub_found = true;
                                 break;
-                            }
-                            _ => {}
                         }
                     }
 
