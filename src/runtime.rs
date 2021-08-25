@@ -2,9 +2,9 @@ mod exprs;
 mod variable;
 
 use crate::die;
+use crate::lval::LVal;
 use crate::parse::{Statement, AST};
 use crate::types::{IntType, Typed};
-use crate::lval::LVal;
 
 use exprs::{Eval, Expr};
 use variable::{ModifyError, Variable};
@@ -79,9 +79,9 @@ impl exprs::VarsMap for Runtime {
 
 enum LValRef<'a> {
     Scalar(&'a mut Variable),
-    Vector{
+    Vector {
         refer: &'a mut Typed,
-        is_mutable: bool
+        is_mutable: bool,
     },
 }
 
@@ -89,14 +89,14 @@ impl<'a> LValRef<'a> {
     fn is_mutable(&self) -> bool {
         match self {
             Self::Scalar(var) => var.is_mutable(),
-            Self::Vector{is_mutable, ..} => *is_mutable
+            Self::Vector { is_mutable, .. } => *is_mutable,
         }
     }
 
     fn value(&mut self) -> &mut Typed {
         match self {
             Self::Scalar(var) => var.get_mut(),
-            Self::Vector{refer, ..} => refer
+            Self::Vector { refer, .. } => refer,
         }
     }
 
@@ -153,10 +153,9 @@ impl Runtime {
 
     fn resolve_lval(&mut self, target: &LVal) -> Result<LValRef<'_>, exprs::EvalError> {
         match target {
-            LVal::Scalar(s) => {
-                Ok(LValRef::Scalar(self.get_var_mut(s)))
-            }
-            LVal::Vector(l, r) => { // v[1][2] | [3]
+            LVal::Scalar(s) => Ok(LValRef::Scalar(self.get_var_mut(s))),
+            LVal::Vector(l, r) => {
+                // v[1][2] | [3]
                 let r = r.eval(self)?;
                 if let Typed::Num(n) = r {
                     let resolved = self.resolve_lval(l)?;
@@ -164,26 +163,20 @@ impl Runtime {
                         LValRef::Scalar(var) => {
                             let is_mutable = var.is_mutable();
                             match var.get_mut() {
-                                Typed::Arr(v) => {
-                                    Ok(LValRef::Vector{
-                                        refer: v.get_mut(n as usize).expect("God said so"),
-                                        is_mutable,
-                                    })
-                                }
+                                Typed::Arr(v) => Ok(LValRef::Vector {
+                                    refer: v.get_mut(n as usize).expect("God said so"),
+                                    is_mutable,
+                                }),
                                 _ => panic!(),
                             }
                         }
-                        LValRef::Vector{refer, is_mutable} => {
-                            match refer {
-                                Typed::Arr(v) => {
-                                    Ok(LValRef::Vector {
-                                        refer: v.get_mut(n as usize).expect("God said so!"),
-                                        is_mutable
-                                    })
-                                }
-                                _ => panic!(),
-                            }
-                        }
+                        LValRef::Vector { refer, is_mutable } => match refer {
+                            Typed::Arr(v) => Ok(LValRef::Vector {
+                                refer: v.get_mut(n as usize).expect("God said so!"),
+                                is_mutable,
+                            }),
+                            _ => panic!(),
+                        },
                     }
                 } else {
                     unreachable!("non-Num index is not allowed");
@@ -299,18 +292,15 @@ impl Runtime {
             writeln!(lock)?;
             lock.flush()?;
 
-            let wait = unwrap_bool(
-                self.get_var("_wait")
-                    .get(),
-            );
+            let wait = unwrap_bool(self.get_var("_wait").get());
 
             if wait {
                 write!(lock, "[Proceed with Enter⏎ ]")?;
-                let _ = lock.flush()?;
+                lock.flush()?;
                 let _ = read_line_from_stdin();
                 // move to the prev line and erase the line
                 write!(lock, "\x1B[F\x1B[2K")?;
-                let _ = lock.flush()?;
+                lock.flush()?;
             }
             Ok(())
         };
@@ -542,7 +532,11 @@ pub fn run(prog: AST) {
             } => {
                 rt.exec_input(prompt, target, *as_num);
             }
-            Statement::Roll { count, face, target} => {
+            Statement::Roll {
+                count,
+                face,
+                target,
+            } => {
                 rt.exec_roll(count, face, target);
             }
             Statement::Halt => {
@@ -576,9 +570,11 @@ pub fn run(prog: AST) {
                     die!("Runtime error: Failed to eval message in Assert: {}", e);
                 }));
 
-                if !unwrap_bool(&cond.eval(&rt).unwrap_or_else(|e| {
+                let success = unwrap_bool(&cond.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval condition in Assert: {}", e);
-                })) {
+                }));
+
+                if !success {
                     die!("Runtime error: Assert \"{}\" failed", mesg_str);
                 }
             }
@@ -652,17 +648,14 @@ pub fn run(prog: AST) {
                             rt.push(ScopeKind::Loop, i);
                         }
                     } else {
-                        let cnt = {
-                            unwrap_num(&rt.get_var_mut(counter).get())
-                        };
+                        let cnt = { unwrap_num(&rt.get_var_mut(counter).get()) };
 
                         if cnt >= to {
                             // loop ended
                             i += offset_to_end;
                         } else {
                             // loop continues
-                            rt.get_var_mut(counter)
-                                .force_modify(Typed::Num(cnt + 1));
+                            rt.get_var_mut(counter).force_modify(Typed::Num(cnt + 1));
                             rt.push(ScopeKind::Loop, i);
                         }
                     }

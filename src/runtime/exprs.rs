@@ -199,7 +199,7 @@ impl Eval for MulDiv {
                             Ok(match t {
                                 Typed::Str(s) => Typed::Str(s.repeat(n as usize)),
                                 Typed::Arr(v) => {
-                                    let ret = std::iter::repeat(v.clone())
+                                    let ret = std::iter::repeat(v)
                                         .take(n as usize)
                                         .reduce(|mut v1, v2| {
                                             v1.extend(v2);

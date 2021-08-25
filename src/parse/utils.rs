@@ -104,8 +104,8 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
 // parse_expr!(i, tks, lexed)
 pub(super) fn parse_expr(i: &mut usize, lexed: &lex::Lexed, stack: &ScopeStack) -> Expr {
     let tks = &lexed.tokens;
-    let (advanced, expr) = parse_expr_from_tokens(&tks[*i..], &stack)
-        .unwrap_or_else(|e| die_by_expr_parse_error(e, *i, &lexed));
+    let (advanced, expr) = parse_expr_from_tokens(&tks[*i..], stack)
+        .unwrap_or_else(|e| die_by_expr_parse_error(e, *i, lexed));
     *i += advanced;
     expr
 }
@@ -124,7 +124,7 @@ pub(super) fn parse_expr_from_tokens(
     let mut it = tks.iter().enumerate().peekable();
 
     let expr = Expr::try_from_tokens(&mut it)?;
-    let advanced = it.next().map(|e| e.0).unwrap_or(len);
+    let advanced = it.next().map_or(len, |e| e.0);
 
     let _ = expr.check_type(stack)?;
 
@@ -145,5 +145,5 @@ macro_rules! get_type {
             Ok(t) => t,
             Err(e) => die_by_expr_parse_error(e.into(), $i, &$lexed),
         }
-    }
+    };
 }

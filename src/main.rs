@@ -3,17 +3,20 @@
 #![warn(future_incompatible)]
 #![warn(rust_2018_compatibility)]
 #![warn(rust_2018_idioms)]
+#![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::enum_glob_use)]
-#![allow(clippy::wildcard_imports)]
-#![allow(clippy::similar_names)]
 #![allow(clippy::many_single_char_names)]
+#![allow(clippy::match_on_vec_items)]
+#![allow(clippy::non_ascii_literal)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::wildcard_imports)]
 
 mod exprs;
 mod lex;
+mod lval;
 mod parse;
 mod runtime;
 mod types;
-mod lval;
 
 use structopt::StructOpt;
 

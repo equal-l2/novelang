@@ -3,8 +3,8 @@ use std::iter::Peekable;
 use crate::exprs::{items::*, Expr};
 use crate::lex::{self, Items, Token};
 
-use super::ParseError;
 use super::LookItem;
+use super::ParseError;
 
 macro_rules! ensure_start {
     ($tks: ident) => {
@@ -73,7 +73,7 @@ impl<'a> TryFromTokens<'a> for Log {
     {
         ensure_start!(tks);
 
-        let mut lop = Log::Single(Equ::try_from_tokens(tks)?);
+        let mut lop = Self::Single(Equ::try_from_tokens(tks)?);
         loop {
             if let Some(Items::Op(lex::Ops::Log(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
@@ -100,7 +100,7 @@ impl<'a> TryFromTokens<'a> for Equ {
     {
         ensure_start!(tks);
 
-        let mut lop = Equ::Single(Rel::try_from_tokens(tks)?);
+        let mut lop = Self::Single(Rel::try_from_tokens(tks)?);
         loop {
             if let Some(Items::Op(lex::Ops::Equ(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
@@ -156,7 +156,7 @@ impl<'a> TryFromTokens<'a> for AddSub {
     {
         ensure_start!(tks);
 
-        let mut lop = AddSub::Single(MulDiv::try_from_tokens(tks)?);
+        let mut lop = Self::Single(MulDiv::try_from_tokens(tks)?);
         loop {
             if let Some(Items::Op(lex::Ops::Add(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
@@ -183,7 +183,7 @@ impl<'a> TryFromTokens<'a> for MulDiv {
     {
         ensure_start!(tks);
 
-        let mut lop = MulDiv::Single(Node::try_from_tokens(tks)?);
+        let mut lop = Self::Single(Node::try_from_tokens(tks)?);
         loop {
             if let Some(Items::Op(lex::Ops::Mul(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
@@ -304,7 +304,7 @@ impl<'a> TryFromTokens<'a> for Core {
             Items::LBra => {
                 // TODO: allow empty array
                 let mut v = vec![TopItem::try_from_tokens(tks)?];
-                let tk_opt = tks.next().clone();
+                let tk_opt = tks.next();
                 if let Some((_, tk)) = tk_opt {
                     match tk.item {
                         Items::Comma => {

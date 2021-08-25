@@ -165,7 +165,7 @@ impl ScopeStack {
     }
 
     fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
-        self.scopes.push(Scope::new(kind, ret_idx))
+        self.scopes.push(Scope::new(kind, ret_idx));
     }
 
     fn pop(&mut self) -> Option<usize> {
@@ -241,7 +241,7 @@ fn parse_lval(i: &mut usize, lexed: &lex::Lexed, stack: &ScopeStack) -> LVal {
                         format!("Only Num can be used as an index, got {}", expr_ty),
                         *i,
                         lexed
-                    )
+                    );
                 }
                 val = LVal::Vector(Box::new(val), expr);
             } else {
@@ -270,12 +270,12 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     let mut args = Vec::new();
 
                     {
-                        let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
+                        let expr = parse_expr(&mut i, &lexed, &scope_stack);
 
                         match expr.check_type(&scope_stack) {
                             Ok(ty) => {
                                 if ty == Type::Sub {
-                                    die_cont!("Value of type Sub cannot be printed", i, lexed)
+                                    die_cont!("Value of type Sub cannot be printed", i, lexed);
                                 }
                                 args.push(expr);
                             }
@@ -288,28 +288,29 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             Items::Semi => break,
                             Items::Comma => {
                                 i += 1;
+
                                 if matches!(tks[i].item, Items::Semi) {
                                     break;
-                                } else {
-                                    let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
+                                }
 
-                                    match expr.check_type(&scope_stack) {
-                                        Ok(ty) => {
-                                            if ty == Type::Sub {
-                                                die_cont!(
-                                                    "Value of type Sub cannot be printed",
-                                                    i,
-                                                    lexed
-                                                )
-                                            }
-                                            args.push(expr);
+                                let expr = parse_expr(&mut i, &lexed, &scope_stack);
+
+                                match expr.check_type(&scope_stack) {
+                                    Ok(ty) => {
+                                        if ty == Type::Sub {
+                                            die_cont!(
+                                                "Value of type Sub cannot be printed",
+                                                i,
+                                                lexed
+                                            );
                                         }
-                                        Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
+                                        args.push(expr);
                                     }
+                                    Err(e) => die_by_expr_parse_error(e.into(), i, &lexed),
                                 }
                             }
                             _ => {
-                                die_cont!("Unexpected token", i, lexed)
+                                die_cont!("Unexpected token", i, lexed);
                             }
                         }
                     }
@@ -371,7 +372,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                     scope_stack.push(ScopeKind::Loop, stmts.len());
 
-                    let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
+                    let expr = parse_expr(&mut i, &lexed, &scope_stack);
                     let expr_ty = get_type!(expr, scope_stack, i, lexed);
                     if expr_ty != Type::Bool {
                         die_cont!("Expected Bool", i, lexed);
@@ -395,7 +396,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"Be\" expected", Items::Key(Keyword::Be), i, lexed);
 
-                        let init = parse_expr(&mut i, &lexed, &mut scope_stack);
+                        let init = parse_expr(&mut i, &lexed, &scope_stack);
 
                         let init_ty = get_type!(init, scope_stack, i, lexed);
 
@@ -451,7 +452,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                     expects!("To expected", Items::Key(Keyword::To), i, lexed);
 
-                    let expr = parse_expr(&mut i, &lexed, &mut scope_stack);
+                    let expr = parse_expr(&mut i, &lexed, &scope_stack);
                     expects_semi!(i, lexed);
 
                     let expr_ty = get_type!(expr, scope_stack, i, lexed);
@@ -473,7 +474,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::If => parse_stmt!(i, stmts, {
                     // "If" <cond> ";"
 
-                    let cond = parse_expr(&mut i, &lexed, &mut scope_stack);
+                    let cond = parse_expr(&mut i, &lexed, &scope_stack);
                     expects_semi!(i, lexed);
 
                     scope_stack.push(ScopeKind::Other, stmts.len());
@@ -516,7 +517,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                             }
                         };
 
-                        let cond = parse_expr(&mut i, &lexed, &mut scope_stack);
+                        let cond = parse_expr(&mut i, &lexed, &scope_stack);
                         expects_semi!(i, lexed);
 
                         Statement::ElIf {
@@ -639,7 +640,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                 lex::Command::Roll => parse_stmt!(i, stmts, {
                     // "Roll" <expr> "Dice" "With" <expr> "Face" "To" <lval> ";"
 
-                    let count = parse_expr(&mut i, &lexed, &mut scope_stack);
+                    let count = parse_expr(&mut i, &lexed, &scope_stack);
                     let count_ty = get_type!(count, scope_stack, i, lexed);
                     if count_ty != Type::Num {
                         die_cont!("Expected Num Expr", i, lexed);
@@ -649,7 +650,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                     expects!("\"With\" expected", Items::Key(Keyword::With), i, lexed);
 
-                    let face = parse_expr(&mut i, &lexed, &mut scope_stack);
+                    let face = parse_expr(&mut i, &lexed, &scope_stack);
                     let face_ty = get_type!(face, scope_stack, i, lexed);
                     if face_ty != Type::Num {
                         die_cont!("Expected Num Expr", i, lexed);
@@ -662,7 +663,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                     let lval = parse_lval(&mut i, &lexed, &scope_stack);
                     if let Some(info) = scope_stack.get_type_info(&lval) {
                         if !matches!(info.ty, Type::Num) {
-                            die_cont!("Expected Num", i, lexed)
+                            die_cont!("Expected Num", i, lexed);
                         }
                         if !info.is_mut {
                             die_cont!("Variable is immutable", i, lexed);
@@ -710,7 +711,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                 lex::Command::Assert => parse_stmt!(i, stmts, {
                     // "Assert" (<str> "With") <cond> ";"
-                    let expr1 = parse_expr(&mut i, &lexed, &mut scope_stack);
+                    let expr1 = parse_expr(&mut i, &lexed, &scope_stack);
 
                     let expr1_ty = get_type!(expr1, scope_stack, i, lexed);
 
@@ -727,7 +728,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                                 lexed
                             );
 
-                            let expr2 = parse_expr(&mut i, &lexed, &mut scope_stack);
+                            let expr2 = parse_expr(&mut i, &lexed, &scope_stack);
                             let expr2_ty = get_type!(expr2, scope_stack, i, lexed);
 
                             if expr2_ty != Type::Bool {
@@ -780,7 +781,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
                         }
                         expects!("\"From\" expected", Items::Key(Keyword::From), i, lexed);
 
-                        let from = parse_expr(&mut i, &lexed, &mut scope_stack);
+                        let from = parse_expr(&mut i, &lexed, &scope_stack);
 
                         {
                             let from_ty = get_type!(from, scope_stack, i, lexed);
@@ -791,7 +792,7 @@ pub fn parse(lexed: crate::lex::Lexed) -> AST {
 
                         expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
 
-                        let to = parse_expr(&mut i, &lexed, &mut scope_stack);
+                        let to = parse_expr(&mut i, &lexed, &scope_stack);
 
                         {
                             let to_ty = match to.check_type(&scope_stack) {

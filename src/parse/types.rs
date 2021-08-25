@@ -4,7 +4,7 @@ pub enum Type {
     Num,
     Str,
     Sub,
-    Arr(Box<Type>),
+    Arr(Box<Self>),
 }
 
 impl std::fmt::Display for Type {
