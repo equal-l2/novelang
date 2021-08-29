@@ -2,7 +2,7 @@ mod exprs;
 
 use crate::die;
 use crate::lval::LVal;
-use crate::parse::{Statement, AST};
+use crate::semck::{Statement, AST};
 use crate::types::{IntType, Typed};
 
 use exprs::{Eval, Expr};

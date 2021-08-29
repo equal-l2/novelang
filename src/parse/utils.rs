@@ -1,7 +1,5 @@
-use super::expr_type::{TypeCheck, TypeError};
 use super::exprs::TryFromTokens;
 use super::ParseError;
-use super::ScopeStack;
 pub use crate::die;
 use crate::exprs::Expr;
 use crate::lex;
@@ -66,55 +64,21 @@ pub(super) fn die_by_expr_parse_error(e: ParseError, i: usize, lexed: &lex::Lexe
         ParseError::TokenExhausted => {
             die_cont!("Expression abruptly ended", i, lexed);
         }
-        ParseError::TypeError(te) => match te {
-            TypeError::VarNotFound(name) => {
-                die_cont!(format!("Variable {} was not found", name), i, lexed);
-            }
-            TypeError::UnaryUndefined(ty) => {
-                //TODO: show operator (such as '<=')
-                die_cont!(
-                    format!("Unary operator is not defined for {}", ty),
-                    i,
-                    lexed
-                );
-            }
-            TypeError::BinaryUndefined(l, r) => {
-                //TODO: show operator (such as '-' or '+')
-                die_cont!(
-                    format!("Binary operator is not defined for {} and {}", l, r),
-                    i,
-                    lexed
-                );
-            }
-            TypeError::Unexpected { expected, actual } => {
-                die_cont!(format!("Expected {}, found {}", expected, actual), i, lexed);
-            }
-            TypeError::ArrayTypeDiffer(ty) => {
-                die_cont!(
-                    format!("Unexpected element in array typed {}", ty),
-                    i,
-                    lexed
-                );
-            }
-        },
     }
 }
 
 // parse tokens into expression
 // parse_expr!(i, tks, lexed)
-pub(super) fn parse_expr(i: &mut usize, lexed: &lex::Lexed, stack: &ScopeStack) -> Expr {
+pub(super) fn parse_expr(i: &mut usize, lexed: &lex::Lexed) -> Expr {
     let tks = &lexed.tokens;
-    let (advanced, expr) = parse_expr_from_tokens(&tks[*i..], stack)
+    let (advanced, expr) = parse_expr_from_tokens(&tks[*i..])
         .unwrap_or_else(|e| die_by_expr_parse_error(e, *i, lexed));
     *i += advanced;
     expr
 }
 
 // helper function for parse_expr!
-pub(super) fn parse_expr_from_tokens(
-    tks: &[lex::Token],
-    stack: &ScopeStack,
-) -> Result<(usize, Expr), ParseError> {
+pub(super) fn parse_expr_from_tokens(tks: &[lex::Token]) -> Result<(usize, Expr), ParseError> {
     if tks.is_empty() {
         return Err(ParseError::EmptyExpr);
     }
@@ -126,8 +90,6 @@ pub(super) fn parse_expr_from_tokens(
     let expr = Expr::try_from_tokens(&mut it)?;
     let advanced = it.next().map_or(len, |e| e.0);
 
-    let _ = expr.check_type(stack)?;
-
     Ok((advanced, expr))
 }
 
@@ -137,13 +99,4 @@ macro_rules! parse_stmt {
         let inst_obj = $proc;
         $stmts.push(inst_obj);
     }};
-}
-
-macro_rules! get_type {
-    ($expr: ident, $stack: ident, $i: expr, $lexed: ident) => {
-        match $expr.check_type(&$stack) {
-            Ok(t) => t,
-            Err(e) => die_by_expr_parse_error(e.into(), $i, &$lexed),
-        }
-    };
 }

@@ -1,6 +1,8 @@
 use super::{ScopeStack, Type};
-use crate::exprs::{items::*, Expr};
+use crate::exprs::items::*;
+pub use crate::exprs::Expr;
 
+#[derive(Debug)]
 pub(super) enum TypeError {
     VarNotFound(String),
     UnaryUndefined(Type),

@@ -16,6 +16,7 @@ mod lex;
 mod lval;
 mod parse;
 mod runtime;
+mod semck;
 mod types;
 
 use structopt::StructOpt;
@@ -63,7 +64,9 @@ fn main() {
     eprintln!("Info: Parsing");
     let parsed = parse::parse(lexed);
     eprintln!("{:?}", parsed.stmts);
+    let ast = semck::check_semantics(parsed);
+    eprintln!("{:?}", ast.stmts);
     eprintln!("Info: Load completed");
 
-    runtime::run(parsed);
+    runtime::run(ast);
 }
