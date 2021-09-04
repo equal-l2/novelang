@@ -18,6 +18,7 @@ mod lval;
 mod parse;
 mod runtime;
 mod semck;
+mod span;
 mod types;
 
 use structopt::StructOpt;

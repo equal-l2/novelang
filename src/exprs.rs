@@ -1,24 +1,16 @@
+use crate::span::Span;
 #[derive(Clone, Debug)]
 pub struct Expr {
     pub content: Box<items::TopItem>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Span(pub usize, pub usize);
-
-impl From<usize> for Span {
-    fn from(i: usize) -> Self {
-        Self(i, i)
-    }
 }
 
 impl From<String> for Expr {
     fn from(s: String) -> Self {
         use items::*;
         Self {
-            content: Box::from(Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
-                Node::Single(Value::Single(Core::Str(s, Span(0, 0)))),
-            )))))),
+            content: Box::from(Log::Single(Equ::Single(Rel::Single(AddSub::Single(
+                MulDiv::Single(Node::Single(Value::Single(Core::Str(s, Span(0, 0))))),
+            ))))),
         }
     }
 }
@@ -94,7 +86,7 @@ pub mod items {
 pub mod span {
     use super::items::*;
     use super::Expr;
-    pub use super::Span;
+    pub use crate::span::Span;
 
     pub trait Spannable {
         fn get_span(&self) -> Span;

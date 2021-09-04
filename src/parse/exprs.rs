@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::exprs::{items::*, Expr, Span, span::Spannable};
+use crate::exprs::{items::*, span::*, Expr};
 use crate::lex::{self, Items, Token};
 
 use super::LookItem;
@@ -296,7 +296,9 @@ impl<'a> TryFromTokens<'a> for Core {
                 let expr = TopItem::try_from_tokens(tks)?;
                 let next_tk = tks.next();
                 match next_tk.item() {
-                    Some(Items::RPar) => Self::Paren(Box::from(expr), Span(from, next_tk.unwrap().0)),
+                    Some(Items::RPar) => {
+                        Self::Paren(Box::from(expr), Span(from, next_tk.unwrap().0))
+                    }
                     _ => {
                         return Err(ParseError::NoPairParen {
                             lparen: tok.clone(),
