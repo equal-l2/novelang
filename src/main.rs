@@ -38,6 +38,8 @@ struct Opt {
 }
 
 fn main() {
+    println!("{}", std::mem::size_of::<exprs::Expr>());
+    println!("{}", std::mem::size_of::<lval::LVal>());
     env_logger::init();
     let opt = Opt::from_args();
     let s = if opt.filename == "-" {

@@ -57,7 +57,7 @@ impl<'a> TryFromTokens<'a> for Expr {
         ensure_start!(tks);
 
         Ok(Self {
-            content: TopItem::try_from_tokens(tks)?,
+            content: Box::from(TopItem::try_from_tokens(tks)?),
         })
     }
 }
@@ -79,8 +79,8 @@ impl<'a> TryFromTokens<'a> for Log {
                 let _ = tks.next().unwrap();
                 let rop = Equ::try_from_tokens(tks)?;
                 match op {
-                    lex::LogOps::And => lop = Self::And(Box::new(lop), rop),
-                    lex::LogOps::Or => lop = Self::Or(Box::new(lop), rop),
+                    lex::LogOps::And => lop = Self::And(Box::from(lop), rop),
+                    lex::LogOps::Or => lop = Self::Or(Box::from(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -106,8 +106,8 @@ impl<'a> TryFromTokens<'a> for Equ {
                 let _ = tks.next().unwrap();
                 let rop = Rel::try_from_tokens(tks)?;
                 match op {
-                    lex::EquOps::Equal => lop = Self::Equal(Box::new(lop), rop),
-                    lex::EquOps::NotEqual => lop = Self::NotEqual(Box::new(lop), rop),
+                    lex::EquOps::Equal => lop = Self::Equal(Box::from(lop), rop),
+                    lex::EquOps::NotEqual => lop = Self::NotEqual(Box::from(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -162,8 +162,8 @@ impl<'a> TryFromTokens<'a> for AddSub {
                 let _ = tks.next().unwrap();
                 let rop = MulDiv::try_from_tokens(tks)?;
                 match op {
-                    lex::AddOps::Add => lop = Self::Add(Box::new(lop), rop),
-                    lex::AddOps::Sub => lop = Self::Sub(Box::new(lop), rop),
+                    lex::AddOps::Add => lop = Self::Add(Box::from(lop), rop),
+                    lex::AddOps::Sub => lop = Self::Sub(Box::from(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -189,9 +189,9 @@ impl<'a> TryFromTokens<'a> for MulDiv {
                 let _ = tks.next().unwrap();
                 let rop = Node::try_from_tokens(tks)?;
                 match op {
-                    lex::MulOps::Mul => lop = Self::Mul(Box::new(lop), rop),
-                    lex::MulOps::Div => lop = Self::Div(Box::new(lop), rop),
-                    lex::MulOps::Mod => lop = Self::Mod(Box::new(lop), rop),
+                    lex::MulOps::Mul => lop = Self::Mul(Box::from(lop), rop),
+                    lex::MulOps::Div => lop = Self::Div(Box::from(lop), rop),
+                    lex::MulOps::Mod => lop = Self::Mod(Box::from(lop), rop),
                 }
             } else {
                 return Ok(lop);
@@ -221,8 +221,8 @@ impl<'a> TryFromTokens<'a> for Node {
             let to = operand.get_span().1;
             let span = Span(from, to);
             match op {
-                AddOps::Add => Self::Plus(Box::new(operand), span),
-                AddOps::Sub => Self::Minus(Box::new(operand), span),
+                AddOps::Add => Self::Plus(Box::from(operand), span),
+                AddOps::Sub => Self::Minus(Box::from(operand), span),
             }
         } else {
             let operand = Value::try_from_tokens(tks)?;
@@ -250,7 +250,7 @@ impl<'a> TryFromTokens<'a> for Value {
                 let r = TopNum::try_from_tokens(tks)?;
                 if let Some(Items::RBra, ..) = tks.peek().item() {
                     let (idx, _) = tks.next().unwrap();
-                    val = Self::ArrElem(Box::new(val), Box::new(r), Span(from, idx));
+                    val = Self::ArrElem(Box::from(val), Box::from(r), Span(from, idx));
                 } else {
                     return Err(tks.next().map_or(ParseError::TokenExhausted, |(_, tk)| {
                         ParseError::UnexpectedToken(tk.clone())
@@ -296,7 +296,7 @@ impl<'a> TryFromTokens<'a> for Core {
                 let expr = TopItem::try_from_tokens(tks)?;
                 let next_tk = tks.next();
                 match next_tk.item() {
-                    Some(Items::RPar) => Self::Paren(Box::new(expr), Span(from, next_tk.unwrap().0)),
+                    Some(Items::RPar) => Self::Paren(Box::from(expr), Span(from, next_tk.unwrap().0)),
                     _ => {
                         return Err(ParseError::NoPairParen {
                             lparen: tok.clone(),

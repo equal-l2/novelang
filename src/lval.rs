@@ -3,7 +3,7 @@ use crate::exprs::Expr;
 #[derive(Clone, Debug)]
 pub enum LVal {
     Scalar(String),
-    Vector(Box<Self>, Expr),
+    Vector(Box<Self>, Box<Expr>),
 }
 
 impl From<String> for LVal {

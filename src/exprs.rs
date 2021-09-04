@@ -1,6 +1,6 @@
 #[derive(Clone, Debug)]
 pub struct Expr {
-    pub content: items::TopItem,
+    pub content: Box<items::TopItem>,
 }
 
 #[derive(Clone, Debug)]
@@ -16,9 +16,9 @@ impl From<String> for Expr {
     fn from(s: String) -> Self {
         use items::*;
         Self {
-            content: Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
+            content: Box::from(Log::Single(Equ::Single(Rel::Single(AddSub::Single(MulDiv::Single(
                 Node::Single(Value::Single(Core::Str(s, Span(0, 0)))),
-            ))))),
+            )))))),
         }
     }
 }

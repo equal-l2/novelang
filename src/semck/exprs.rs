@@ -194,7 +194,7 @@ impl TypeCheck for Core {
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                 let first = &v[0];
                 if v.iter().all(|e| e == first) {
-                    Ok(Type::Arr(Box::new(first.clone())))
+                    Ok(Type::Arr(Box::from(first.clone())))
                 } else {
                     Err(TypeError::ArrayTypeDiffer(first.clone()))
                 }

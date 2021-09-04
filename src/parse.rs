@@ -98,7 +98,7 @@ fn parse_lval(i: &mut usize, lexed: &lex::Lexed) -> LVal {
                 *i += 1;
                 let expr = parse_expr(i, lexed);
                 expects!("expected RBra", Items::RBra, *i, lexed);
-                val = LVal::Vector(Box::new(val), expr);
+                val = LVal::Vector(Box::from(val), Box::from(expr));
             } else {
                 return val;
             }
