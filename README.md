@@ -49,7 +49,6 @@
 - `<str> * <num>` or `<num> * <str>` : repeating string
 
 ## TODO
-- Add `for`
-- Add array type
 - add subroutine with return value
 - better type checking (i.e. better diagnostics)
+- add regex matching?
