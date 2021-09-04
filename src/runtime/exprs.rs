@@ -232,8 +232,8 @@ impl Eval for Node {
     fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
-            Self::Plus(l) => l.eval(vmap)?,
-            Self::Minus(l) => -l.eval(vmap)?,
+            Self::Plus(l, _) => l.eval(vmap)?,
+            Self::Minus(l, _) => -l.eval(vmap)?,
         })
     }
 }
@@ -242,7 +242,7 @@ impl Eval for Value {
     fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
-            Self::ArrElem(l, r) => vmap.get_arr_elem(&(**l), &(**r))?,
+            Self::ArrElem(l, r, _) => vmap.get_arr_elem(&(**l), &(**r))?,
         })
     }
 }
@@ -250,13 +250,13 @@ impl Eval for Value {
 impl Eval for Core {
     fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
-            Self::Str(s) => Typed::Str(s.clone()),
-            Self::Num(n) => Typed::Num(*n),
-            Self::Ident(name) => vmap.get(name),
-            Self::True => Typed::Bool(true),
-            Self::False => Typed::Bool(false),
-            Self::Paren(expr) => expr.eval(vmap)?,
-            Self::Arr(i) => {
+            Self::Str(s, _) => Typed::Str(s.clone()),
+            Self::Num(n, _) => Typed::Num(*n),
+            Self::Ident(name, _) => vmap.get(name),
+            Self::True(_) => Typed::Bool(true),
+            Self::False(_) => Typed::Bool(false),
+            Self::Paren(expr, _) => expr.eval(vmap)?,
+            Self::Arr(i, _) => {
                 let v = i
                     .iter()
                     .map(|e| e.eval(vmap))

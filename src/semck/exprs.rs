@@ -1,6 +1,6 @@
 use super::{ScopeStack, Type};
-use crate::exprs::items::*;
 pub use crate::exprs::Expr;
+use crate::exprs::{items::*, span::*};
 
 #[derive(Debug)]
 pub(super) enum TypeError {
@@ -143,7 +143,7 @@ impl TypeCheck for Node {
     fn check_type(&self, stack: &ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
-            Self::Plus(i) | Self::Minus(i) => {
+            Self::Plus(i, s) | Self::Minus(i, s) => {
                 let ty = i.check_type(stack)?;
                 if matches!(ty, Type::Sub) {
                     Err(TypeError::UnaryUndefined(ty))
@@ -159,7 +159,7 @@ impl TypeCheck for Value {
     fn check_type(&self, stack: &ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
-            Self::ArrElem(l, r) => {
+            Self::ArrElem(l, r, s) => {
                 let l_ty = l.check_type(stack)?;
                 let r_ty = r.check_type(stack)?;
                 if r_ty == Type::Num {
@@ -179,15 +179,15 @@ impl TypeCheck for Value {
 impl TypeCheck for Core {
     fn check_type(&self, stack: &ScopeStack) -> Result {
         match self {
-            Self::Str(_) => Ok(Type::Str),
-            Self::Num(_) => Ok(Type::Num),
-            Self::Ident(name) => stack
+            Self::Str(_, _) => Ok(Type::Str),
+            Self::Num(_, _) => Ok(Type::Num),
+            Self::Ident(name, s) => stack
                 .get_type_info(&name.clone().into())
                 .map(|ti| ti.ty)
                 .ok_or_else(|| TypeError::VarNotFound(name.clone())),
-            Self::True | Self::False => Ok(Type::Bool),
-            Self::Paren(i) => i.check_type(stack),
-            Self::Arr(i) => {
+            Self::True(_) | Self::False(_) => Ok(Type::Bool),
+            Self::Paren(i, _) => i.check_type(stack),
+            Self::Arr(i, s) => {
                 let v = i
                     .iter()
                     .map(|e| e.check_type(stack))

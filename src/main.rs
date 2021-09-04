@@ -9,6 +9,7 @@
 #![allow(clippy::match_on_vec_items)]
 #![allow(clippy::non_ascii_literal)]
 #![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
 #![allow(clippy::wildcard_imports)]
 
 mod exprs;

@@ -121,9 +121,7 @@ pub fn parse(lexed: lex::Lexed) -> Parsed {
             match inst {
                 lex::Command::Print => parse_stmt!(i, stmts, {
                     // "Print" (<expr> {"," <expr>}) ";"
-                    let mut args = Vec::new();
-
-                    args.push(parse_expr(&mut i, &lexed));
+                    let mut args = vec![parse_expr(&mut i, &lexed)];
 
                     while i < tks.len() {
                         match &tks[i].item {
@@ -266,6 +264,7 @@ pub fn parse(lexed: lex::Lexed) -> Parsed {
                 lex::Command::Input => parse_stmt!(i, stmts, {
                     // "Input" (<str>) "To" <lval> ";"
 
+                    // TODO: accept runtime prompt string
                     let prompt = if let Items::Str(prompt) = &tks[i].item {
                         i += 1;
                         Some(prompt.clone())
@@ -327,11 +326,13 @@ pub fn parse(lexed: lex::Lexed) -> Parsed {
                     let mesg;
                     let cond;
                     if let Items::Key(Keyword::With) = tks[i].item {
+                        // with string
                         i += 1;
                         mesg = expr1;
                         let expr2 = parse_expr(&mut i, &lexed);
                         cond = expr2;
                     } else {
+                        // without string
                         mesg = Expr::from(expr1.to_string());
                         cond = expr1;
                     }

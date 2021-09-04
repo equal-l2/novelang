@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::exprs::{items::*, Expr};
+use crate::exprs::{items::*, Expr, Span, span::Spannable};
 use crate::lex::{self, Items, Token};
 
 use super::LookItem;
@@ -216,11 +216,13 @@ impl<'a> TryFromTokens<'a> for Node {
         ensure_start!(tks);
 
         Ok(if let Some(Items::Op(Ops::Add(op))) = tks.peek().item() {
-            let _ = tks.next().unwrap();
+            let (from, _) = tks.next().unwrap();
             let operand = Self::try_from_tokens(tks)?;
+            let to = operand.get_span().1;
+            let span = Span(from, to);
             match op {
-                AddOps::Add => Self::Plus(Box::new(operand)),
-                AddOps::Sub => Self::Minus(Box::new(operand)),
+                AddOps::Add => Self::Plus(Box::new(operand), span),
+                AddOps::Sub => Self::Minus(Box::new(operand), span),
             }
         } else {
             let operand = Value::try_from_tokens(tks)?;
@@ -241,13 +243,14 @@ impl<'a> TryFromTokens<'a> for Value {
         ensure_start!(tks);
 
         let mut val = Self::Single(Core::try_from_tokens(tks)?);
+        let from = val.get_span().0;
         loop {
             if let Some(Items::LBra) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let r = TopNum::try_from_tokens(tks)?;
                 if let Some(Items::RBra, ..) = tks.peek().item() {
-                    let _ = tks.next().unwrap();
-                    val = Self::ArrElem(Box::new(val), Box::new(r));
+                    let (idx, _) = tks.next().unwrap();
+                    val = Self::ArrElem(Box::new(val), Box::new(r), Span(from, idx));
                 } else {
                     return Err(tks.next().map_or(ParseError::TokenExhausted, |(_, tk)| {
                         ParseError::UnexpectedToken(tk.clone())
@@ -282,18 +285,18 @@ impl<'a> TryFromTokens<'a> for Core {
 
         ensure_start!(tks);
 
-        let tok = tks.next().unwrap().1;
+        let (from, tok) = tks.next().unwrap();
         Ok(match &tok.item {
-            Items::Str(s) => Self::Str(s.clone()),
-            Items::Num(n, _) => Self::Num(*n),
-            Items::Ident(s) => Self::Ident(s.clone()),
-            Items::Key(Keyword::True) => Self::True,
-            Items::Key(Keyword::False) => Self::False,
+            Items::Str(s) => Self::Str(s.clone(), from.into()),
+            Items::Num(n, _) => Self::Num(*n, from.into()),
+            Items::Ident(s) => Self::Ident(s.clone(), from.into()),
+            Items::Key(Keyword::True) => Self::True(from.into()),
+            Items::Key(Keyword::False) => Self::False(from.into()),
             Items::LPar => {
                 let expr = TopItem::try_from_tokens(tks)?;
                 let next_tk = tks.next();
                 match next_tk.item() {
-                    Some(Items::RPar) => Self::Paren(Box::new(expr)),
+                    Some(Items::RPar) => Self::Paren(Box::new(expr), Span(from, next_tk.unwrap().0)),
                     _ => {
                         return Err(ParseError::NoPairParen {
                             lparen: tok.clone(),
@@ -305,18 +308,18 @@ impl<'a> TryFromTokens<'a> for Core {
                 // TODO: allow empty array
                 let mut v = vec![TopItem::try_from_tokens(tks)?];
                 let tk_opt = tks.next();
-                if let Some((_, tk)) = tk_opt {
+                if let Some((idx, tk)) = tk_opt {
                     match tk.item {
                         Items::Comma => {
                             loop {
                                 let next = TopItem::try_from_tokens(tks)?;
                                 v.push(next);
-                                if let Some((_, t)) = tks.next() {
+                                if let Some((idx, t)) = tks.next() {
                                     match t.item {
                                         Items::Comma => {
                                             // continue
                                         }
-                                        Items::RBra => break Self::Arr(v),
+                                        Items::RBra => break Self::Arr(v, Span(from, idx)),
                                         _ => return Err(ParseError::UnexpectedToken((*t).clone())),
                                     }
                                 } else {
@@ -324,7 +327,7 @@ impl<'a> TryFromTokens<'a> for Core {
                                 }
                             }
                         }
-                        Items::RBra => Self::Arr(v),
+                        Items::RBra => Self::Arr(v, Span(from, idx)),
                         _ => return Err(ParseError::UnexpectedToken(tk.clone())),
                     }
                 } else {
