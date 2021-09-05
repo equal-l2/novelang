@@ -31,7 +31,10 @@ macro_rules! expects_semi {
 
 // parse tokens into expression
 // parse_expr!(i, tks, lexed)
-pub(super) fn parse_expr<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Expr, ExprError>
+pub(super) fn parse_expr<'a, T>(
+    tks: &mut std::iter::Peekable<T>,
+    last: usize,
+) -> Result<Expr, ExprError>
 where
     T: Iterator<Item = (usize, &'a lex::Token)>,
 {

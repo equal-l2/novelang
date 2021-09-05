@@ -58,17 +58,33 @@ fn main() {
             eprintln!("Lexed:\n{}", i);
             i
         }
-        Err(e) => die!("Syntax Error: {}", e),
+        Err(e) => {
+            eprintln!("Syntax Error: {}", e);
+            die!("A syntax error was found, quitting...")
+        }
     };
 
     eprintln!("Info: Parsing");
     let parsed = parse::parse(&lexed).unwrap_or_else(|e| {
-        let info = lexed.generate_error_mesg(e.1.0);
-        die!("Error: {}\n{}", e.0, info)
+        let info = lexed.generate_error_mesg(e.1 .0);
+        eprintln!("Error: {}\n{}", e.0, info);
+        die!("A syntax error was found, quitting...")
     });
     eprintln!("{:?}", parsed.stmts);
 
-    let ast = semck::check_semantics(parsed);
+    eprintln!("Info: Checking semantics");
+    let ast = semck::check_semantics(parsed).unwrap_or_else(|es| {
+        let len = es.len();
+        for e in es {
+            let info = lexed.generate_error_mesg(e.1 .0);
+            eprintln!("Error: {}\n{}", e.0, info);
+        }
+        if len == 1 {
+            die!("A semantic error was found, quitting...")
+        } else {
+            die!("{} semantic errors was found, quitting...", len)
+        }
+    });
     eprintln!("{:?}", ast.stmts);
     eprintln!("Info: Load completed");
 

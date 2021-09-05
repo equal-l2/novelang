@@ -188,7 +188,10 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
                     if let Items::Ident(name) = &tk.item {
                         if name.starts_with('_') {
-                            return Err(Error("Identifier starts with _ is reserved".into(), i.into()));
+                            return Err(Error(
+                                "Identifier starts with _ is reserved".into(),
+                                i.into(),
+                            ));
                         }
                         expects!("\"Be\" expected", Items::Key(Keyword::Be), tks, last);
 
@@ -211,10 +214,18 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                                     init,
                                     is_mut: false,
                                 },
-                                _ => return Err(Error("expected Semicolon or AsMut".into(), (i+1).into())),
+                                _ => {
+                                    return Err(Error(
+                                        "expected Semicolon or AsMut".into(),
+                                        (i + 1).into(),
+                                    ))
+                                }
                             },
                             None => {
-                                return Err(Error("expected Semicolon or AsMut".into(), (i+1).into()));
+                                return Err(Error(
+                                    "expected Semicolon or AsMut".into(),
+                                    (i + 1).into(),
+                                ));
                             }
                         }
                     } else {
@@ -376,7 +387,10 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     if let Items::Ident(name) = &tk.item {
                         if name.starts_with('_') {
-                            return Err(Error("Identifier starts with _ is reserved".into(), i.into()));
+                            return Err(Error(
+                                "Identifier starts with _ is reserved".into(),
+                                i.into(),
+                            ));
                         }
                         expects!("\"From\" expected", Items::Key(Keyword::From), tks, last);
 

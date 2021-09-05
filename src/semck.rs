@@ -6,6 +6,7 @@ mod types;
 #[macro_use]
 mod utils;
 
+use crate::exprs::span::*;
 use exprs::{Expr, TypeError};
 use types::Type;
 use utils::*;
@@ -207,17 +208,23 @@ impl ScopeStack {
     }
 }
 
-pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
+pub struct Error(pub String, pub Span);
+
+pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> {
     use crate::parse::PreStmt;
     let mut stmts = Vec::<Statement>::new();
     let mut scope_stack = ScopeStack::new();
+    let mut errors = vec![];
 
     for pre_s in parsed.stmts {
         let stmt = match pre_s {
             PreStmt::Print { args } => {
                 for a in &args {
                     if Type::Sub == get_type(a, &scope_stack) {
-                        die!("Value of type Sub cannot be printed");
+                        errors.push(Error(
+                            "Value of type Sub cannot be printed".into(),
+                            a.get_span(),
+                        ));
                     }
                 }
                 Statement::Print { args: args.clone() }
@@ -233,7 +240,10 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                 );
 
                 if !success {
-                    die!("Conflicting subroutine name \"{}\"", name);
+                    errors.push(Error(
+                        format!("Conflicting subroutine name \"{}\"", name),
+                        todo!(),
+                    ));
                 }
 
                 // create new scope
@@ -247,7 +257,10 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             PreStmt::Call { name } => {
                 let info = scope_stack.get_type_info(&LVal::Scalar(name.clone()));
                 if info.is_none() || info.unwrap().ty != Type::Sub {
-                    die!("Subroutine \"{}\" was not found", name);
+                    errors.push(Error(
+                        format!("Subroutine \"{}\" was not found", name),
+                        todo!(),
+                    ));
                 }
 
                 Statement::Call { name: name.clone() }
@@ -256,7 +269,10 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                 scope_stack.push(ScopeKind::Loop, stmts.len());
                 let cond_ty = get_type(&cond, &scope_stack);
                 if Type::Bool != cond_ty {
-                    die!("Expected Bool, found {}", cond_ty);
+                    errors.push(Error(
+                        format!("Expected Bool, found {}", cond_ty),
+                        cond.get_span(),
+                    ));
                 }
 
                 Statement::While {
@@ -275,7 +291,10 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                 );
 
                 if !success {
-                    die!("Conflicting variable name \"{}\"", name);
+                    errors.push(Error(
+                        format!("Conflicting variable name \"{}\"", name),
+                        todo!(),
+                    ));
                 }
 
                 Statement::Let {
@@ -287,17 +306,20 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             PreStmt::Modify { target, expr } => {
                 let lval_tinfo = if let Some(info) = scope_stack.get_type_info(&target) {
                     if !info.is_mut {
-                        die!("LVal \"{}\" is immutable", target);
+                        errors.push(Error(format!("LVal \"{}\" is immutable", target), todo!()));
                     }
                     info
                 } else {
-                    die!("LVal \"{}\" is invalid", target);
+                    errors.push(Error(format!("LVal \"{}\" is invalid", target), todo!()));
                 };
 
                 let expr_ty = get_type(&expr, &scope_stack);
 
                 if lval_tinfo.ty != expr_ty {
-                    die!("Type mismatch, expected {}, got {}", lval_tinfo.ty, expr_ty);
+                    errors.push(Error(
+                        format!("Type mismatch, expected {}, got {}", lval_tinfo.ty, expr_ty),
+                        todo!(),
+                    ));
                 }
 
                 Statement::Modify { target, expr }
@@ -312,7 +334,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             }
             PreStmt::ElIf { cond } => {
                 let prev_idx = scope_stack.pop().unwrap_or_else(|| {
-                    die!("A stray Else-If detected");
+                    errors.push(Error(format!("A stray Else-If detected"), todo!()));
                 });
 
                 let offset_to_next = stmts.len() - prev_idx;
@@ -328,7 +350,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                         offset_to_next,
                     },
                     _ => {
-                        die!("Cannot find corresponding Element for Else-If");
+                        panic!("Invalid statement was finding Else-If");
                     }
                 };
 
@@ -340,7 +362,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             }
             PreStmt::Else => {
                 let prev_idx = scope_stack.pop().unwrap_or_else(|| {
-                    die!("A stray Else detected");
+                    errors.push(Error(format!("A stray Else detected"), todo!()));
                 });
 
                 let offset_to_next = stmts.len() - prev_idx;
@@ -356,7 +378,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                         offset_to_next,
                     },
                     _ => {
-                        die!("corresponding Element for Else is not found");
+                        panic!("Invalid statement was finding Else");
                     }
                 };
                 scope_stack.push(ScopeKind::Other, stmts.len());
@@ -365,7 +387,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             PreStmt::End => {
                 // Pop stack and assign end index
                 let prev_idx = scope_stack.pop().unwrap_or_else(|| {
-                    die!("A stray End detected.");
+                    errors.push(Error(format!("A stray End detected."), todo!()));
                 });
 
                 let offset_to_end = stmts.len() - prev_idx;
@@ -398,7 +420,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                         offset_to_end,
                     },
                     _ => {
-                        die!("Cannot find corresponding Element for End");
+                        panic!("Invalid statement was finding End");
                     }
                 };
 
@@ -407,7 +429,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             PreStmt::Input { prompt, target } => {
                 let as_num = if let Some(info) = scope_stack.get_type_info(&target) {
                     if !info.is_mut {
-                        die!("LVal \"{}\" is immutable", target);
+                        errors.push(Error(format!("LVal \"{}\" is immutable", target), todo!()));
                     }
                     match info.ty {
                         Type::Num => true,
@@ -415,7 +437,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                         _ => die!("Expected Num or Str, found {}", info.ty),
                     }
                 } else {
-                    die!("LVal \"{}\" is invalid", target);
+                    errors.push(Error(format!("LVal \"{}\" is invalid", target), todo!()));
                 };
 
                 Statement::Input {
@@ -431,23 +453,29 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
             } => {
                 let count_ty = get_type(&count, &scope_stack);
                 if count_ty != Type::Num {
-                    die!("Expected Num, found {}", count_ty);
+                    errors.push(Error(
+                        format!("Expected Num, found {}", count_ty),
+                        count.get_span(),
+                    ));
                 }
 
                 let face_ty = get_type(&face, &scope_stack);
                 if face_ty != Type::Num {
-                    die!("Expected Num, found {}", face_ty);
+                    errors.push(Error(
+                        format!("Expected Num, found {}", face_ty),
+                        face.get_span(),
+                    ));
                 }
 
                 if let Some(info) = scope_stack.get_type_info(&target) {
                     if info.ty != Type::Num {
-                        die!("Expected Num, found {}", info.ty);
+                        errors.push(Error(format!("Expected Num, found {}", info.ty), todo!()));
                     }
                     if !info.is_mut {
-                        die!("LVal \"{}\" is immutable", target);
+                        errors.push(Error(format!("LVal \"{}\" is immutable", target), todo!()));
                     }
                 } else {
-                    die!("LVal \"{}\" is invalid", target);
+                    errors.push(Error(format!("LVal \"{}\" is invalid", target), todo!()));
                 };
 
                 Statement::Roll {
@@ -474,18 +502,18 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                 if loop_found {
                     Statement::Break
                 } else {
-                    die!("Break must be in a loop");
+                    errors.push(Error(format!("Break must be in a loop"), todo!()));
                 }
             }
             PreStmt::Assert { mesg, cond } => {
                 let mesg_ty = get_type(&mesg, &scope_stack);
                 if mesg_ty != Type::Str {
-                    die!("Expected Str");
+                    errors.push(Error(format!("Expected Str"), mesg.get_span()));
                 }
 
                 let cond_ty = get_type(&cond, &scope_stack);
                 if cond_ty != Type::Bool {
-                    die!("Expected Bool");
+                    errors.push(Error(format!("Expected Bool"), cond.get_span()));
                 }
 
                 Statement::Assert { mesg, cond }
@@ -507,19 +535,25 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                 if loop_found {
                     Statement::Continue
                 } else {
-                    die!("Break must be in a loop");
+                    errors.push(Error(format!("Break must be in a loop"), todo!()));
                 }
             }
             PreStmt::For { counter, from, to } => {
                 // "For" <name> "from" <expr> "to" <expr> ";"
                 let from_ty = get_type(&from, &scope_stack);
                 if from_ty != Type::Num {
-                    die!("Expected Num, found {}", from_ty);
+                    errors.push(Error(
+                        format!("Expected Num, found {}", from_ty),
+                        from.get_span(),
+                    ));
                 }
 
                 let to_ty = get_type(&to, &scope_stack);
                 if to_ty != Type::Num {
-                    die!("Expected Num, found {}", to_ty);
+                    errors.push(Error(
+                        format!("Expected Num, found {}", to_ty),
+                        to.get_span(),
+                    ));
                 }
 
                 scope_stack.push(ScopeKind::Loop, stmts.len());
@@ -553,12 +587,16 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> AST {
                 if sub_found {
                     Statement::Return
                 } else {
-                    die!("Return must be in a sub");
+                    errors.push(Error(format!("Return must be in a sub"), todo!()));
                 }
             }
         };
         stmts.push(stmt);
     }
 
-    AST { stmts }
+    if errors.is_empty() {
+        Ok(AST { stmts })
+    } else {
+        Err(errors)
+    }
 }

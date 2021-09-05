@@ -327,6 +327,7 @@ impl std::error::Error for Error {}
 enum ErrorKind {
     UnterminatedStr,
     UnexpectedChar(char),
+    TooLongNum,
 }
 
 impl std::fmt::Display for Error {
@@ -334,6 +335,11 @@ impl std::fmt::Display for Error {
         match &self.kind {
             ErrorKind::UnterminatedStr => write!(f, "String is not terminated")?,
             ErrorKind::UnexpectedChar(c) => write!(f, "Unexpected character '{}'", c)?,
+            ErrorKind::TooLongNum => write!(
+                f,
+                "Number is too long for {}-bit integer",
+                std::mem::size_of::<crate::types::IntType>() * 8
+            )?,
         };
         let l = &self.loc_info;
         writeln!(f, " ({}:{})\n{}", l.loc.row, l.loc.col, l)?;
@@ -442,7 +448,18 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                                     s.push(v[i]);
                                     i += 1;
                                 }
-                                Items::Num(s.parse().unwrap(), s.len())
+                                match s.parse() {
+                                    Ok(i) => Items::Num(i, s.len()),
+                                    Err(_) => {
+                                        return Err(Error {
+                                            loc_info: LocInfo {
+                                                line: l.clone(),
+                                                loc,
+                                            },
+                                            kind: ErrorKind::TooLongNum,
+                                        })
+                                    }
+                                }
                             } else if is_ident_char(v[i]) {
                                 let mut s = String::new();
                                 while i < v.len() && is_ident_char(v[i]) {
