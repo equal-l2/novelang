@@ -1,6 +1,7 @@
-use crate::exprs::Expr;
+use crate::exprs::{span::*, Expr};
 use crate::lex;
 use crate::lval::LVal;
+use crate::span::Span;
 
 mod exprs;
 
@@ -9,12 +10,8 @@ mod utils;
 
 use utils::*;
 
-enum ParseError {
-    UnexpectedToken(lex::Token),
-    EmptyExpr,
-    NoPairParen { lparen: lex::Token },
-    TokenExhausted,
-}
+#[derive(Debug)]
+pub struct Error(pub String, pub Span);
 
 #[derive(Debug, Clone)]
 pub enum PreStmt {
@@ -87,138 +84,151 @@ impl LookItem for Option<&lex::Token> {
     }
 }
 
-fn parse_lval(i: &mut usize, lexed: &lex::Lexed) -> LVal {
+fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<LVal, Error>
+where
+    T: Iterator<Item = (usize, &'a lex::Token)>,
+{
     use lex::Items;
-    let tks = &lexed.tokens;
-    if let Some(Items::Ident(name)) = &tks.get(*i).item() {
-        *i += 1;
+
+    let (i, tk) = tks
+        .peek()
+        .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
+    if let Items::Ident(name) = &tk.item {
         let mut val = LVal::Scalar(name.clone());
+        let _ = tks.next().unwrap();
         loop {
-            if let Some(Items::LBra) = &tks.get(*i).item() {
-                *i += 1;
-                let expr = parse_expr(i, lexed);
-                expects!("expected RBra", Items::RBra, *i, lexed);
+            if let Some(Items::LBra) = tks.peek().item() {
+                let _ = tks.next().unwrap();
+                let expr = parse_expr(tks, last)?;
+                expects!("expected RBra", Items::RBra, tks, last);
                 val = LVal::Vector(Box::from(val), Box::from(expr));
             } else {
-                return val;
+                return Ok(val);
             }
         }
     } else {
-        die_cont!("expected Ident", *i, lexed)
+        Err(Error("expected Ident".into(), (*i).into()))
     }
 }
 
-pub fn parse(lexed: lex::Lexed) -> Parsed {
+pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
     use lex::{Items, Keyword};
 
     let mut stmts = vec![PreStmt::Ill];
 
-    let tks = &lexed.tokens;
+    let last = lexed.tokens.len();
+    let mut tks = lexed.tokens.iter().enumerate().peekable();
 
-    let mut i = 0;
-    while i < tks.len() {
-        if let Items::Cmd(inst) = &tks[i].item {
+    while let Some((idx, tok)) = tks.next() {
+        if let Items::Cmd(inst) = &tok.item {
             match inst {
-                lex::Command::Print => parse_stmt!(i, stmts, {
+                lex::Command::Print => parse_stmt!(stmts, {
                     // "Print" (<expr> {"," <expr>}) ";"
-                    let mut args = vec![parse_expr(&mut i, &lexed)];
+                    let mut args = vec![parse_expr(&mut tks, last)?];
 
-                    while i < tks.len() {
-                        match &tks[i].item {
+                    while let Some((i, tk)) = tks.peek() {
+                        match tk.item {
                             Items::Semi => break,
                             Items::Comma => {
-                                i += 1;
+                                let _ = tks.next().unwrap();
 
-                                if matches!(tks[i].item, Items::Semi) {
+                                if matches!(tks.peek().item(), Some(Items::Semi)) {
                                     break;
                                 }
 
-                                args.push(parse_expr(&mut i, &lexed));
+                                args.push(parse_expr(&mut tks, last)?);
                             }
                             _ => {
-                                die_cont!("Unexpected token", i, lexed);
+                                return Err(Error("Unexpected token".into(), (*i).into()));
                             }
                         }
                     }
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::Print { args }
                 }),
 
-                lex::Command::Sub => parse_stmt!(i, stmts, {
+                lex::Command::Sub => parse_stmt!(stmts, {
                     // "Sub" <name> ";"
-
-                    if let Items::Ident(name) = &tks[i].item {
-                        i += 1;
-                        expects_semi!(i, lexed);
+                    let (i, tk) = tks
+                        .next()
+                        .ok_or_else(|| Error("expected subrountine name".into(), last.into()))?;
+                    if let Items::Ident(name) = &tk.item {
+                        expects_semi!(tks, last);
                         PreStmt::Sub { name: name.clone() }
                     } else {
-                        die_cont!("Expected subroutine name", i, lexed)
+                        return Err(Error("Expected subroutine name".into(), i.into()));
                     }
                 }),
 
-                lex::Command::Call => parse_stmt!(i, stmts, {
+                lex::Command::Call => parse_stmt!(stmts, {
                     // "Call" <name> ";"
-                    if let Items::Ident(name) = &tks[i].item {
-                        i += 1;
-                        expects_semi!(i, lexed);
+                    let (i, tk) = tks
+                        .next()
+                        .ok_or_else(|| Error("expected subrountine name".into(), last.into()))?;
+                    if let Items::Ident(name) = &tk.item {
+                        expects_semi!(tks, last);
                         PreStmt::Call { name: name.clone() }
                     } else {
-                        die_cont!("Expected subroutine name", i, lexed)
+                        return Err(Error("Expected subroutine name".into(), i.into()));
                     }
                 }),
 
-                lex::Command::While => parse_stmt!(i, stmts, {
+                lex::Command::While => parse_stmt!(stmts, {
                     // "While" <cond> ";"
-                    let expr = parse_expr(&mut i, &lexed);
-                    expects_semi!(i, lexed);
+                    let expr = parse_expr(&mut tks, last)?;
+                    expects_semi!(tks, last);
                     PreStmt::While { cond: expr }
                 }),
 
-                lex::Command::Let => parse_stmt!(i, stmts, {
+                lex::Command::Let => parse_stmt!(stmts, {
                     // "Let" <name> "Be" <expr> ("AsMut") ";"
 
-                    if let Items::Ident(name) = &tks[i].item {
-                        i += 1;
+                    let (i, tk) = tks
+                        .next()
+                        .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
+                    if let Items::Ident(name) = &tk.item {
                         if name.starts_with('_') {
-                            die_cont!("Identifier starts with _ is reserved", i, lexed);
+                            return Err(Error("Identifier starts with _ is reserved".into(), i.into()));
                         }
-                        expects!("\"Be\" expected", Items::Key(Keyword::Be), i, lexed);
+                        expects!("\"Be\" expected", Items::Key(Keyword::Be), tks, last);
 
-                        let init = parse_expr(&mut i, &lexed);
+                        let init = parse_expr(&mut tks, last)?;
 
-                        expects!(
-                            "\"AsMut\" or semicolon expected",
-                            Items::Semi | Items::Key(Keyword::AsMut),
-                            i,
-                            lexed
-                        );
+                        let i = init.get_span().1;
 
-                        let is_mut = {
-                            if tks[i - 1].item == Items::Key(Keyword::AsMut) {
-                                expects_semi!(i, lexed);
-                                true
-                            } else {
-                                false
+                        match tks.next() {
+                            Some((_, tk)) => match tk.item {
+                                Items::Key(Keyword::AsMut) => {
+                                    expects_semi!(tks, last);
+                                    PreStmt::Let {
+                                        name: name.clone(),
+                                        init,
+                                        is_mut: true,
+                                    }
+                                }
+                                Items::Semi => PreStmt::Let {
+                                    name: name.clone(),
+                                    init,
+                                    is_mut: false,
+                                },
+                                _ => return Err(Error("expected Semicolon or AsMut".into(), (i+1).into())),
+                            },
+                            None => {
+                                return Err(Error("expected Semicolon or AsMut".into(), (i+1).into()));
                             }
-                        };
-
-                        PreStmt::Let {
-                            name: name.clone(),
-                            init,
-                            is_mut,
                         }
                     } else {
-                        die_cont!("Ident expected", i, lexed)
+                        return Err(Error("Ident expected".into(), i.into()));
                     }
                 }),
 
-                lex::Command::Modify => parse_stmt!(i, stmts, {
+                lex::Command::Modify => parse_stmt!(stmts, {
                     // "Modify" <lval> "To" <expr> ";"
-                    let lval = parse_lval(&mut i, &lexed);
-                    expects!("To expected", Items::Key(Keyword::To), i, lexed);
+                    let lval = parse_lval(&mut tks, last)?;
+                    expects!("To expected", Items::Key(Keyword::To), tks, last);
 
-                    let expr = parse_expr(&mut i, &lexed);
-                    expects_semi!(i, lexed);
+                    let expr = parse_expr(&mut tks, last)?;
+                    expects_semi!(tks, last);
 
                     PreStmt::Modify {
                         target: lval.clone(),
@@ -226,79 +236,85 @@ pub fn parse(lexed: lex::Lexed) -> Parsed {
                     }
                 }),
 
-                lex::Command::If => parse_stmt!(i, stmts, {
+                lex::Command::If => parse_stmt!(stmts, {
                     // "If" <cond> ";"
 
-                    let cond = parse_expr(&mut i, &lexed);
-                    expects_semi!(i, lexed);
+                    let cond = parse_expr(&mut tks, last)?;
+                    expects_semi!(tks, last);
 
                     PreStmt::If { cond }
                 }),
 
-                lex::Command::Else => parse_stmt!(i, stmts, {
+                lex::Command::Else => parse_stmt!(stmts, {
                     // "Else" ("If" <cond>) ";"
 
-                    let inst_obj = if let Items::Cmd(lex::Command::If) = &tks[i].item {
-                        // "Else" "If" <cond> ";"
-                        i += 1;
+                    let (_, tk) = tks
+                        .peek()
+                        .ok_or_else(|| Error("expected Semicolon or If".into(), last.into()))?;
 
-                        let cond = parse_expr(&mut i, &lexed);
-                        expects_semi!(i, lexed);
+                    if let Items::Cmd(lex::Command::If) = tk.item {
+                        // "Else" "If" <cond> ";"
+                        let _ = tks.next().unwrap();
+
+                        let cond = parse_expr(&mut tks, last)?;
+                        expects_semi!(tks, last);
 
                         PreStmt::ElIf { cond }
                     } else {
                         // "Else" ";"
-                        expects_semi!(i, lexed);
+                        expects_semi!(tks, last);
                         PreStmt::Else
-                    };
-
-                    inst_obj
+                    }
                 }),
 
-                lex::Command::End => parse_stmt!(i, stmts, {
+                lex::Command::End => parse_stmt!(stmts, {
                     // "End" ";"
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::End
                 }),
 
-                lex::Command::Input => parse_stmt!(i, stmts, {
+                lex::Command::Input => parse_stmt!(stmts, {
                     // "Input" (<str>) "To" <lval> ";"
 
                     // TODO: accept runtime prompt string
-                    let prompt = if let Items::Str(prompt) = &tks[i].item {
-                        i += 1;
+                    let (_, tk) = tks
+                        .peek()
+                        .ok_or_else(|| Error("expected To".into(), last.into()))?;
+
+                    let prompt = if let Items::Str(prompt) = &tk.item {
+                        let _ = tks.next().unwrap();
                         Some(prompt.clone())
                     } else {
                         None
                     };
 
-                    expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
+                    expects!("\"To\" expected", Items::Key(Keyword::To), tks, last);
 
-                    let lval = parse_lval(&mut i, &lexed);
+                    let lval = parse_lval(&mut tks, last)?;
 
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::Input {
                         prompt,
                         target: lval,
                     }
                 }),
 
-                lex::Command::Roll => parse_stmt!(i, stmts, {
+                lex::Command::Roll => parse_stmt!(stmts, {
                     // "Roll" <expr> "Dice" "With" <expr> "Face" "To" <lval> ";"
 
-                    let count = parse_expr(&mut i, &lexed);
+                    let count = parse_expr(&mut tks, last)?;
 
-                    expects!("\"Dice\" expected", Items::Key(Keyword::Dice), i, lexed);
-                    expects!("\"With\" expected", Items::Key(Keyword::With), i, lexed);
+                    expects!("\"Dice\" expected", Items::Key(Keyword::Dice), tks, last);
+                    expects!("\"With\" expected", Items::Key(Keyword::With), tks, last);
 
-                    let face = parse_expr(&mut i, &lexed);
+                    let face = parse_expr(&mut tks, last)?;
 
-                    expects!("\"Face\" expected", Items::Key(Keyword::Face), i, lexed);
-                    expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
+                    expects!("\"Face\" expected", Items::Key(Keyword::Face), tks, last);
+                    expects!("\"To\" expected", Items::Key(Keyword::To), tks, last);
 
-                    let lval = parse_lval(&mut i, &lexed);
+                    let lval = parse_lval(&mut tks, last)?;
 
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::Roll {
                         count,
                         face,
@@ -306,64 +322,71 @@ pub fn parse(lexed: lex::Lexed) -> Parsed {
                     }
                 }),
 
-                lex::Command::Halt => parse_stmt!(i, stmts, {
+                lex::Command::Halt => parse_stmt!(stmts, {
                     // "Halt" ";"
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::Halt
                 }),
 
-                lex::Command::Break => parse_stmt!(i, stmts, {
+                lex::Command::Break => parse_stmt!(stmts, {
                     // "Break" ";"
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
 
                     PreStmt::Break
                 }),
 
-                lex::Command::Assert => parse_stmt!(i, stmts, {
+                lex::Command::Assert => parse_stmt!(stmts, {
                     // "Assert" (<str> "With") <cond> ";"
-                    let expr1 = parse_expr(&mut i, &lexed);
+                    let expr1 = parse_expr(&mut tks, last)?;
+
+                    let (_, tk) = tks
+                        .peek()
+                        .ok_or_else(|| Error("expected With or Semicolon".into(), last.into()))?;
 
                     let mesg;
                     let cond;
-                    if let Items::Key(Keyword::With) = tks[i].item {
+                    if let Items::Key(Keyword::With) = tk.item {
                         // with string
-                        i += 1;
+                        let _ = tks.next().unwrap();
                         mesg = expr1;
-                        let expr2 = parse_expr(&mut i, &lexed);
+                        let expr2 = parse_expr(&mut tks, last)?;
                         cond = expr2;
                     } else {
                         // without string
                         mesg = Expr::from(expr1.to_string());
                         cond = expr1;
                     }
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
 
                     PreStmt::Assert { mesg, cond }
                 }),
 
-                lex::Command::Continue => parse_stmt!(i, stmts, {
+                lex::Command::Continue => parse_stmt!(stmts, {
                     // "Continue" ";"
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::Continue
                 }),
 
-                lex::Command::For => parse_stmt!(i, stmts, {
+                lex::Command::For => parse_stmt!(stmts, {
                     // "For" <name> "from" <expr> "to" <expr> ";"
 
-                    if let Items::Ident(name) = &tks[i].item {
-                        i += 1;
+                    let (i, tk) = tks
+                        .next()
+                        .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
+
+                    if let Items::Ident(name) = &tk.item {
                         if name.starts_with('_') {
-                            die_cont!("Identifier starts with _ is reserved", i, lexed);
+                            return Err(Error("Identifier starts with _ is reserved".into(), i.into()));
                         }
-                        expects!("\"From\" expected", Items::Key(Keyword::From), i, lexed);
+                        expects!("\"From\" expected", Items::Key(Keyword::From), tks, last);
 
-                        let from = parse_expr(&mut i, &lexed);
+                        let from = parse_expr(&mut tks, last)?;
 
-                        expects!("\"To\" expected", Items::Key(Keyword::To), i, lexed);
+                        expects!("\"To\" expected", Items::Key(Keyword::To), tks, last);
 
-                        let to = parse_expr(&mut i, &lexed);
+                        let to = parse_expr(&mut tks, last)?;
 
-                        expects_semi!(i, lexed);
+                        expects_semi!(tks, last);
 
                         PreStmt::For {
                             counter: name.clone(),
@@ -371,18 +394,18 @@ pub fn parse(lexed: lex::Lexed) -> Parsed {
                             to,
                         }
                     } else {
-                        die_cont!("Ident expected", i, lexed)
+                        return Err(Error("Ident expected".into(), i.into()));
                     }
                 }),
-                lex::Command::Return => parse_stmt!(i, stmts, {
+                lex::Command::Return => parse_stmt!(stmts, {
                     // "Return" ";"
-                    expects_semi!(i, lexed);
+                    expects_semi!(tks, last);
                     PreStmt::Return
                 }),
             }
         } else {
-            die_cont!("Line must begin with Command", i, lexed);
+            return Err(Error("Line must begin with Command".into(), idx.into()));
         }
     }
-    Parsed { stmts }
+    Ok(Parsed { stmts })
 }

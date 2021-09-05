@@ -39,15 +39,11 @@ struct Opt {
 }
 
 fn main() {
-    println!("{}", std::mem::size_of::<exprs::Expr>());
-    println!("{}", std::mem::size_of::<lval::LVal>());
     env_logger::init();
     let opt = Opt::from_args();
     let s = if opt.filename == "-" {
-        use std::io::Read;
         let mut s = String::new();
-        std::io::stdin()
-            .read_to_string(&mut s)
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)
             .unwrap_or_else(|e| die!("Read error: failed to read stdin : {}", e));
         s
     } else {
@@ -66,8 +62,12 @@ fn main() {
     };
 
     eprintln!("Info: Parsing");
-    let parsed = parse::parse(lexed);
+    let parsed = parse::parse(&lexed).unwrap_or_else(|e| {
+        let info = lexed.generate_error_mesg(e.1.0);
+        die!("Error: {}\n{}", e.0, info)
+    });
     eprintln!("{:?}", parsed.stmts);
+
     let ast = semck::check_semantics(parsed);
     eprintln!("{:?}", ast.stmts);
     eprintln!("Info: Load completed");

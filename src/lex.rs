@@ -287,10 +287,15 @@ impl std::fmt::Display for LocInfo {
 }
 
 impl Lexed {
-    pub fn generate_loc_info(&self, loc: &Location) -> LocInfo {
+    pub fn generate_error_mesg(&self, idx: usize) -> LocInfo {
+        let loc = self.tokens.get(idx).map_or_else(
+            || self.tokens.last().unwrap().next_col_loc(),
+            |tk| tk.loc.clone(),
+        );
+
         LocInfo {
             line: self.lines[loc.row - 1].clone(),
-            loc: loc.clone(),
+            loc,
         }
     }
 }
