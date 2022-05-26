@@ -3,6 +3,7 @@
 #![warn(future_incompatible)]
 #![warn(rust_2018_compatibility)]
 #![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::enum_glob_use)]
 #![allow(clippy::many_single_char_names)]
@@ -21,8 +22,6 @@ mod semck;
 mod span;
 mod types;
 
-use structopt::StructOpt;
-
 #[macro_export]
 macro_rules! die {
     ($( $x:expr ),*) => {
@@ -33,36 +32,51 @@ macro_rules! die {
     }
 }
 
-#[derive(StructOpt)]
+use clap::Parser;
+
+#[derive(clap::Parser)]
 struct Opt {
     filename: String,
 }
 
+#[derive(Debug)]
+enum InputError<'a> {
+    Stdin(std::io::Error),
+    File(&'a str, std::io::Error),
+}
+
+impl<'a> std::fmt::Display for InputError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stdin(e) => write!(f, "failed to read stdin ({})", e),
+            Self::File(name, e) => write!(f, "failed to read \"{}\" ({})", name, e),
+        }
+    }
+}
+
+impl<'a> std::error::Error for InputError<'a> {}
+
+fn read_input(filename: &str) -> Result<String, InputError<'_>> {
+    if filename == "-" {
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut s).map_err(InputError::Stdin)?;
+        Ok(s)
+    } else {
+        std::fs::read_to_string(filename).map_err(|e| InputError::File(filename, e))
+    }
+}
+
 fn main() {
     env_logger::init();
-    let opt = Opt::from_args();
-    let s = if opt.filename == "-" {
-        let mut s = String::new();
-        std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)
-            .unwrap_or_else(|e| die!("Read error: failed to read stdin : {}", e));
-        s
-    } else {
-        let name = &opt.filename;
-        std::fs::read_to_string(name)
-            .unwrap_or_else(|e| die!("Read error: failed to read file \"{}\" : {}", name, e))
-    };
+    let opt = Opt::parse();
+    let s = read_input(&opt.filename).unwrap_or_else(|e| die!("Input error: {}", e));
 
     eprintln!("Info: Lexing");
-    let lexed = match lex::lex(s) {
-        Ok(i) => {
-            eprintln!("Lexed:\n{}", i);
-            i
-        }
-        Err(e) => {
-            eprintln!("Syntax Error: {}", e);
-            die!("A syntax error was found, quitting...")
-        }
-    };
+    let lexed = lex::lex(s).unwrap_or_else(|e| {
+        eprintln!("Syntax Error: {}", e);
+        die!("A syntax error was found, quitting...")
+    });
+    eprintln!("Lexed:\n{}", lexed);
 
     eprintln!("Info: Parsing");
     let parsed = parse::parse(&lexed).unwrap_or_else(|e| {

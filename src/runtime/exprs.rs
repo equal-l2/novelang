@@ -102,7 +102,7 @@ impl Eval for Equ {
 }
 
 macro_rules! def_cmp {
-    ($vmap: expr, $l: expr, $r: expr, $( $pat:pat )|+) => {
+    ($vmap: expr, $l: expr, $r: expr, $( $pat:pat_param )|+) => {
         {
             let l = $l.eval($vmap)?;
             let r = $r.eval($vmap)?;

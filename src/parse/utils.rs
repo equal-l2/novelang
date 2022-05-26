@@ -5,7 +5,7 @@ use crate::lex;
 
 // expects!("message here", SomeItem | AnotherItem, i, lexed);
 macro_rules! expects {
-    ($msg: expr, $($pat: pat)|+, $tks: ident, $last: ident) => {
+    ($msg: expr, $($pat: pat_param)|+, $tks: ident, $last: ident) => {
         {
             let _ret = $tks.next();
             match _ret {

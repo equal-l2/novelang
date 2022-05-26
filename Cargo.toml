@@ -2,10 +2,17 @@
 name = "novelang"
 version = "0.1.0"
 authors = ["equal-l2 <eng.equall2@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-structopt = { version = "0.3.22", default-features = false }
-rand = { version = "0.8.4", default-features = false, features = ["getrandom", "small_rng"] }
+# TODO: replace own implementation
+rand = { version = "0.8.4", default-features = false, features = [
+  "getrandom",
+  "small_rng",
+] }
 env_logger = { version = "0.9.0", default-features = false }
 log = { version = "0.4.14", default-features = false }
+clap = { version = "3.1.18", default-features = false, features = [
+  "derive",
+  "std",
+] }
