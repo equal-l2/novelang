@@ -1,13 +1,17 @@
 mod exprs;
+mod val;
+
+use super::IntType;
 
 use crate::die;
+use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::semck::{Statement, AST};
-use crate::types::{IntType, Typed};
 
-use exprs::{Eval, Expr};
+use exprs::Eval;
+use val::Val;
 
-type VarTable<'a> = std::collections::HashMap<&'a str, Typed>;
+type VarTable<'a> = std::collections::HashMap<&'a str, Val>;
 
 /// Represents a scope
 struct Scope<'a> {
@@ -43,18 +47,18 @@ pub struct Runtime<'a> {
 }
 
 impl<'a> exprs::VarsMap for Runtime<'a> {
-    fn get(&self, name: &str) -> Typed {
+    fn get(&self, name: &str) -> Val {
         self.get_var(name).clone()
     }
 
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> exprs::Result {
         use exprs::EvalError;
         let r = r.eval(self)?;
-        if let Typed::Num(n) = r {
+        if let Val::Num(n) = r {
             let l = l.eval(self)?;
             match l {
-                Typed::Str(s) => s.chars().nth(n as usize).map(|c| Typed::Str(c.into())),
-                Typed::Arr(v) => v.get(n as usize).cloned(),
+                Val::Str(s) => s.chars().nth(n as usize).map(|c| Val::Str(c.into())),
+                Val::Arr(v) => v.get(n as usize).cloned(),
                 _ => unreachable!("Type {} cannot be indexed", l.typename()),
             }
             .ok_or(EvalError::IndexOutOfBounds(n))
@@ -72,7 +76,7 @@ impl<'a> Runtime<'a> {
 
         let internals = {
             let mut vt = VarTable::new();
-            vt.insert("_wait", Typed::Bool(false));
+            vt.insert("_wait", Val::Bool(false));
             vt
         };
 
@@ -88,7 +92,7 @@ impl<'a> Runtime<'a> {
 
     /// Declare a variable
     /// Aborts when the variable is already declared in the scope
-    fn decl_var(&mut self, name: &'a str, val: Typed) {
+    fn decl_var(&mut self, name: &'a str, val: Val) {
         let var_table = if self.stack.is_empty() {
             &mut self.globals
         } else {
@@ -99,14 +103,14 @@ impl<'a> Runtime<'a> {
         }
     }
 
-    fn resolve_lval(&mut self, target: &LVal) -> Result<&mut Typed, exprs::EvalError> {
+    fn resolve_lval(&mut self, target: &LVal) -> Result<&mut Val, exprs::EvalError> {
         match target {
             LVal::Scalar(s) => Ok(self.get_var_mut(s)),
             LVal::Vector(l, r) => {
                 let r = r.eval(self)?;
-                if let Typed::Num(n) = r {
+                if let Val::Num(n) = r {
                     let resolved = self.resolve_lval(l)?;
-                    if let Typed::Arr(v) = resolved {
+                    if let Val::Arr(v) = resolved {
                         v.get_mut(n as usize)
                             .ok_or(exprs::EvalError::IndexOutOfBounds(n))
                     } else {
@@ -121,7 +125,7 @@ impl<'a> Runtime<'a> {
 
     /// Modify a variable
     /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
-    fn modify_var(&mut self, target: &LVal, val: Typed) {
+    fn modify_var(&mut self, target: &LVal, val: Val) {
         let var = self
             .resolve_lval(target)
             .unwrap_or_else(|e| die!("Runtime error: cannot resolve {} because of: {}", target, e));
@@ -157,7 +161,7 @@ impl<'a> Runtime<'a> {
     }
 
     // get the highest variable in the stack with the specified name
-    pub fn get_var(&self, name: &str) -> &Typed {
+    pub fn get_var(&self, name: &str) -> &Val {
         self.vars_iter()
             .map(|t| t.get(name))
             .find(Option::is_some)
@@ -165,7 +169,7 @@ impl<'a> Runtime<'a> {
             .expect("Variable must exist")
     }
 
-    fn get_var_mut(&mut self, name: &str) -> &mut Typed {
+    fn get_var_mut(&mut self, name: &str) -> &mut Val {
         self.vars_iter_mut()
             .map(|t| t.get_mut(name))
             .find(Option::is_some)
@@ -195,7 +199,7 @@ impl<'a> Runtime<'a> {
             .take(cnt as usize)
             .sum();
 
-        self.modify_var(name, Typed::Num(val));
+        self.modify_var(name, Val::Num(val));
     }
 
     pub fn exec_print(&mut self, args: &[Expr]) {
@@ -240,10 +244,10 @@ impl<'a> Runtime<'a> {
     pub fn exec_input(&mut self, prompt: &Option<String>, name: &LVal, as_num: bool) {
         if as_num {
             let input = get_input(prompt.as_deref());
-            self.modify_var(name, Typed::Num(input));
+            self.modify_var(name, Val::Num(input));
         } else {
             let input = get_input(prompt.as_deref());
-            self.modify_var(name, Typed::Str(input));
+            self.modify_var(name, Val::Str(input));
         }
     }
 }
@@ -270,32 +274,32 @@ fn get_input<T: std::str::FromStr>(prompt: Option<&str>) -> T {
     }
 }
 
-fn unwrap_bool(val: &Typed) -> bool {
-    if let Typed::Bool(b) = val {
+fn unwrap_bool(val: &Val) -> bool {
+    if let Val::Bool(b) = val {
         *b
     } else {
         panic!("Runtime error: Bool expected, got {}", val.typename());
     }
 }
 
-fn unwrap_num(val: &Typed) -> IntType {
-    if let Typed::Num(n) = val {
+fn unwrap_num(val: &Val) -> IntType {
+    if let Val::Num(n) = val {
         *n
     } else {
         panic!("Runtime error: Num expected, got {}", val.typename());
     }
 }
 
-fn unwrap_sub(val: &Typed) -> usize {
-    if let Typed::Sub(n) = val {
+fn unwrap_sub(val: &Val) -> usize {
+    if let Val::Sub(n) = val {
         *n
     } else {
         panic!("Runtime error: Sub expected, got {}", val.typename());
     }
 }
 
-fn unwrap_str(val: &Typed) -> String {
-    if let Typed::Str(s) = val {
+fn unwrap_str(val: &Val) -> String {
+    if let Val::Str(s) = val {
         s.clone()
     } else {
         panic!("Runtime error: Str expected, got {}", val.typename());
@@ -318,7 +322,7 @@ pub fn run(prog: AST) {
                 name,
                 offset_to_end,
             } => {
-                rt.decl_var(name, Typed::Sub(i));
+                rt.decl_var(name, Val::Sub(i));
                 i += offset_to_end;
             }
             Statement::Call { name } => {
@@ -562,7 +566,7 @@ pub fn run(prog: AST) {
                             // loop ended
                             i += offset_to_end;
                         } else {
-                            rt.decl_var(counter, Typed::Num(from));
+                            rt.decl_var(counter, Val::Num(from));
                             rt.push(ScopeKind::Loop, i);
                         }
                     } else {
@@ -573,7 +577,7 @@ pub fn run(prog: AST) {
                             i += offset_to_end;
                         } else {
                             // loop continues
-                            *rt.get_var_mut(counter) = Typed::Num(cnt + 1);
+                            *rt.get_var_mut(counter) = Val::Num(cnt + 1);
                             rt.push(ScopeKind::Loop, i);
                         }
                     }

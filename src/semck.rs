@@ -1,4 +1,6 @@
+use crate::exprs::Expr;
 use crate::lval::LVal;
+use crate::span::*;
 
 mod exprs;
 mod types;
@@ -6,8 +8,7 @@ mod types;
 #[macro_use]
 mod utils;
 
-use crate::exprs::span::*;
-use exprs::{Expr, TypeError};
+use exprs::TypeError;
 use types::Type;
 use utils::*;
 

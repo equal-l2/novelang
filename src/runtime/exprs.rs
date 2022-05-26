@@ -1,12 +1,10 @@
-pub use crate::exprs::Expr;
-
+use super::{Expr, Val};
 use crate::exprs::items::*;
-use crate::types::Typed;
 
-pub type Result = std::result::Result<Typed, EvalError>;
+pub type Result = std::result::Result<Val, EvalError>;
 
 pub trait VarsMap {
-    fn get(&self, name: &str) -> Typed;
+    fn get(&self, name: &str) -> Val;
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> Result;
 }
 
@@ -47,7 +45,7 @@ impl Eval for Log {
                 let l = l.eval(vmap)?;
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
-                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l && *r),
+                    (Val::Bool(l), Val::Bool(r)) => Val::Bool(*l && *r),
                     _ => panic!(
                         "cannot eval composite logic between {} with {}",
                         l.typename(),
@@ -59,7 +57,7 @@ impl Eval for Log {
                 let l = l.eval(vmap)?;
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
-                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(*l || *r),
+                    (Val::Bool(l), Val::Bool(r)) => Val::Bool(*l || *r),
                     _ => panic!(
                         "cannot eval composite logic between {} with {}",
                         l.typename(),
@@ -79,10 +77,10 @@ impl Eval for Equ {
                 let l = l.eval(vmap)?;
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
-                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l == r),
-                    (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l == r),
-                    (Typed::Str(l), Typed::Str(r)) => Typed::Bool(l == r),
-                    (Typed::Arr(l), Typed::Arr(r)) => Typed::Bool(l == r),
+                    (Val::Bool(l), Val::Bool(r)) => Val::Bool(l == r),
+                    (Val::Num(l), Val::Num(r)) => Val::Bool(l == r),
+                    (Val::Str(l), Val::Str(r)) => Val::Bool(l == r),
+                    (Val::Arr(l), Val::Arr(r)) => Val::Bool(l == r),
                     _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
                 }
             }
@@ -90,10 +88,10 @@ impl Eval for Equ {
                 let l = l.eval(vmap)?;
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
-                    (Typed::Bool(l), Typed::Bool(r)) => Typed::Bool(l != r),
-                    (Typed::Num(l), Typed::Num(r)) => Typed::Bool(l != r),
-                    (Typed::Str(l), Typed::Str(r)) => Typed::Bool(l != r),
-                    (Typed::Arr(l), Typed::Arr(r)) => Typed::Bool(l != r),
+                    (Val::Bool(l), Val::Bool(r)) => Val::Bool(l != r),
+                    (Val::Num(l), Val::Num(r)) => Val::Bool(l != r),
+                    (Val::Str(l), Val::Str(r)) => Val::Bool(l != r),
+                    (Val::Arr(l), Val::Arr(r)) => Val::Bool(l != r),
                     _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
                 }
             }
@@ -107,7 +105,7 @@ macro_rules! def_cmp {
             let l = $l.eval($vmap)?;
             let r = $r.eval($vmap)?;
             let ord = l.partial_cmp(&r).expect("Compare never fails as it is already checked");
-            Ok(Typed::Bool(matches!(ord, $($pat)|+)))
+            Ok(Val::Bool(matches!(ord, $($pat)|+)))
         }
     };
 }
@@ -130,8 +128,8 @@ macro_rules! def_ari {
         let l = $l.eval($vmap)?;
         let r = $r.eval($vmap)?;
         match (&l, &r) {
-            (Typed::Num(this), Typed::Num(that)) => match this.$method(*that) {
-                Some(n) => Ok(Typed::Num(n)),
+            (Val::Num(this), Val::Num(that)) => match this.$method(*that) {
+                Some(n) => Ok(Val::Num(n)),
                 None => Err($err),
             },
             _ => panic!(
@@ -152,11 +150,11 @@ impl Eval for AddSub {
                 let l = l.eval(vmap)?;
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
-                    (Typed::Num(this), Typed::Num(that)) => match this.checked_add(*that) {
-                        Some(n) => Ok(Typed::Num(n)),
+                    (Val::Num(this), Val::Num(that)) => match this.checked_add(*that) {
+                        Some(n) => Ok(Val::Num(n)),
                         None => Err(EvalError::OverFlow),
                     },
-                    (Typed::Str(this), Typed::Str(that)) => Ok(Typed::Str(this.clone() + that)),
+                    (Val::Str(this), Val::Str(that)) => Ok(Val::Str(this.clone() + that)),
                     _ => panic!(
                         "cannot perform addition between {} and {}",
                         l.typename(),
@@ -179,11 +177,11 @@ impl Eval for MulDiv {
                 let l = l.eval(vmap)?;
                 let r = r.eval(vmap)?;
                 match (&l, &r) {
-                    (Typed::Num(this), Typed::Num(that)) => match this.checked_mul(*that) {
-                        Some(n) => Ok(Typed::Num(n)),
+                    (Val::Num(this), Val::Num(that)) => match this.checked_mul(*that) {
+                        Some(n) => Ok(Val::Num(n)),
                         None => Err(EvalError::OverFlow),
                     },
-                    (Typed::Num(n), t) | (t, Typed::Num(n)) => {
+                    (Val::Num(n), t) | (t, Val::Num(n)) => {
                         let n = *n;
                         if n == 0 {
                             Err(EvalError::UnexpectedValue(n))
@@ -197,8 +195,8 @@ impl Eval for MulDiv {
                                 }
                             };
                             Ok(match t {
-                                Typed::Str(s) => Typed::Str(s.repeat(n as usize)),
-                                Typed::Arr(v) => {
+                                Val::Str(s) => Val::Str(s.repeat(n as usize)),
+                                Val::Arr(v) => {
                                     let ret = std::iter::repeat(v)
                                         .take(n as usize)
                                         .reduce(|mut v1, v2| {
@@ -206,7 +204,7 @@ impl Eval for MulDiv {
                                             v1
                                         })
                                         .expect("doesn't it work?");
-                                    Typed::Arr(ret)
+                                    Val::Arr(ret)
                                 }
                                 _ => unreachable!(),
                             })
@@ -250,18 +248,18 @@ impl Eval for Value {
 impl Eval for Core {
     fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
-            Self::Str(s, _) => Typed::Str(s.clone()),
-            Self::Num(n, _) => Typed::Num(*n),
+            Self::Str(s, _) => Val::Str(s.clone()),
+            Self::Num(n, _) => Val::Num(*n),
             Self::Ident(name, _) => vmap.get(name),
-            Self::True(_) => Typed::Bool(true),
-            Self::False(_) => Typed::Bool(false),
+            Self::True(_) => Val::Bool(true),
+            Self::False(_) => Val::Bool(false),
             Self::Paren(expr, _) => expr.eval(vmap)?,
             Self::Arr(i, _) => {
                 let v = i
                     .iter()
                     .map(|e| e.eval(vmap))
                     .collect::<std::result::Result<_, _>>()?;
-                Typed::Arr(v)
+                Val::Arr(v)
             }
         })
     }

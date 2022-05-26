@@ -1,7 +1,7 @@
-use crate::exprs::{span::*, Expr};
+use crate::exprs::Expr;
 use crate::lex;
 use crate::lval::LVal;
-use crate::span::Span;
+use crate::span::{Span, Spannable};
 
 mod exprs;
 

@@ -1,7 +1,8 @@
-use super::exprs::{ExprError, TryFromTokens};
+use super::{
+    exprs::{ExprError, TryFromTokens},
+    lex, Expr,
+};
 pub use crate::die;
-use crate::exprs::Expr;
-use crate::lex;
 
 // expects!("message here", SomeItem | AnotherItem, i, lexed);
 macro_rules! expects {

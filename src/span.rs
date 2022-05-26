@@ -6,3 +6,7 @@ impl From<usize> for Span {
         Self(i, i)
     }
 }
+
+pub trait Spannable {
+    fn get_span(&self) -> Span;
+}

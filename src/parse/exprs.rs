@@ -1,9 +1,11 @@
 use std::iter::Peekable;
 
-use crate::exprs::{items::*, span::*, Expr};
-use crate::lex::{self, Items, Token};
+use super::{
+    lex::{self, Items, Token},
+    Expr, LookItem, Span, Spannable,
+};
 
-use super::LookItem;
+use crate::exprs::items::*;
 
 #[derive(Debug)]
 enum ExprErrorKind {

@@ -1,6 +1,5 @@
-use super::{ScopeStack, Type};
-pub use crate::exprs::Expr;
-use crate::exprs::{items::*, span::*};
+use super::{Expr, ScopeStack, Type};
+use crate::exprs::items::*;
 
 #[derive(Debug)]
 pub(super) enum TypeError {

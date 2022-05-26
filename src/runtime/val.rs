@@ -1,17 +1,16 @@
-/// The type used to represent integer type
-pub type IntType = i64;
+use crate::IntType;
 
 /// The typed content of a variable
 #[derive(Debug, Clone)]
-pub enum Typed {
+pub enum Val {
     Bool(bool),
     Num(IntType),
     Str(String),
     Sub(usize),
-    Arr(Vec<Typed>),
+    Arr(Vec<Val>),
 }
 
-impl Typed {
+impl Val {
     pub const fn typename(&self) -> &'static str {
         match self {
             Self::Bool(_) => "Bool",
@@ -23,7 +22,7 @@ impl Typed {
     }
 }
 
-impl std::ops::Neg for Typed {
+impl std::ops::Neg for Val {
     type Output = Self;
     fn neg(self) -> Self {
         match self {
@@ -36,35 +35,36 @@ impl std::ops::Neg for Typed {
     }
 }
 
-impl PartialEq for Typed {
+impl PartialEq for Val {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Typed::Bool(this), Typed::Bool(that)) => this.eq(that),
-            (Typed::Num(this), Typed::Num(that)) => this.eq(that),
-            (Typed::Str(this), Typed::Str(that)) => this.eq(that),
-            (Typed::Arr(this), Typed::Arr(that)) => this.eq(that),
+            (Val::Bool(this), Val::Bool(that)) => this.eq(that),
+            (Val::Num(this), Val::Num(that)) => this.eq(that),
+            (Val::Str(this), Val::Str(that)) => this.eq(that),
+            (Val::Arr(this), Val::Arr(that)) => this.eq(that),
             _ => unimplemented!(),
         }
     }
 }
 
-impl PartialOrd for Typed {
+impl PartialOrd for Val {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
-            (Typed::Num(this), Typed::Num(that)) => Some(this.cmp(that)),
-            (Typed::Str(this), Typed::Str(that)) => Some(this.cmp(that)),
+            (Val::Num(this), Val::Num(that)) => Some(this.cmp(that)),
+            (Val::Str(this), Val::Str(that)) => Some(this.cmp(that)),
             _ => None,
         }
     }
 }
 
-impl std::fmt::Display for Typed {
+impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Typed::Num(n) => write!(f, "{}", n),
-            Typed::Bool(b) => write!(f, "{}", b),
-            Typed::Str(s) => write!(f, "{}", s),
-            Typed::Arr(v) => {
+            Val::Bool(b) => write!(f, "{}", b),
+            Val::Num(n) => write!(f, "{}", n),
+            Val::Str(s) => write!(f, "{}", s),
+            Val::Sub(_) => unreachable!("must be denied at compile time"),
+            Val::Arr(v) => {
                 write!(f, "[")?;
                 if !v.is_empty() {
                     write!(f, "{}", v[0])?;
@@ -75,7 +75,6 @@ impl std::fmt::Display for Typed {
                 write!(f, "]")?;
                 Ok(())
             }
-            _ => unimplemented!("unexpected type for print"),
         }
     }
 }
