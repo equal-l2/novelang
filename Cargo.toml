@@ -6,13 +6,13 @@ edition = "2021"
 
 [dependencies]
 # TODO: replace own implementation
-rand = { version = "0.8.4", default-features = false, features = [
+rand = { version = "0.8.5", default-features = false, features = [
   "getrandom",
   "small_rng",
 ] }
 env_logger = { version = "0.9.0", default-features = false }
-log = { version = "0.4.14", default-features = false }
-clap = { version = "3.1.18", default-features = false, features = [
+log = { version = "0.4.17", default-features = false }
+clap = { version = "3.2.17", default-features = false, features = [
   "derive",
   "std",
 ] }

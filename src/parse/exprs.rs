@@ -389,6 +389,7 @@ impl<'a> TryFromTokens<'a> for Core {
                     return Err(ExprError::exhausted(from, last));
                 }
             }
+            // I'm not sure if this arm would catch anything
             _ => todo!("{:?}", &tok.item),
         })
     }

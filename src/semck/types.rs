@@ -23,4 +23,12 @@ impl Type {
             Self::Arr(i) => format!("Arr[{}]", i.typename()),
         }
     }
+
+    pub fn is_printable(&self) -> bool {
+        match self {
+            Self::Bool | Self::Num | Self::Str => true,
+            Self::Arr(i) => i.is_printable(),
+            _ => false,
+        }
+    }
 }

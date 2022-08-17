@@ -1,17 +1,24 @@
-#![warn(clippy::nursery)]
-#![warn(clippy::pedantic)]
-#![warn(future_incompatible)]
-#![warn(rust_2018_compatibility)]
-#![warn(rust_2018_idioms)]
-#![warn(rust_2021_compatibility)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::enum_glob_use)]
-#![allow(clippy::many_single_char_names)]
-#![allow(clippy::match_on_vec_items)]
-#![allow(clippy::non_ascii_literal)]
-#![allow(clippy::similar_names)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::wildcard_imports)]
+#![warn(
+    future_incompatible,
+    nonstandard_style,
+    rust_2018_idioms,
+    rust_2018_compatibility,
+    rust_2021_compatibility,
+    unused,
+    clippy::pedantic,
+    clippy::nursery
+)]
+#![allow(
+    clippy::enum_glob_use,
+    clippy::similar_names,
+    clippy::use_self,
+    clippy::wildcard_imports,
+    clippy::cast_possible_truncation,
+    clippy::many_single_char_names,
+    clippy::match_on_vec_items,
+    clippy::non_ascii_literal,
+    clippy::too_many_lines
+)]
 
 mod exprs;
 mod lex;

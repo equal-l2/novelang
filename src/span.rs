@@ -1,4 +1,4 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Span(pub usize, pub usize);
 
 impl From<usize> for Span {
