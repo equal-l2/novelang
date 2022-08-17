@@ -3,18 +3,18 @@ use super::Expr;
 pub use crate::span::{Span, Spannable};
 
 impl Spannable for Expr {
-    fn get_span(&self) -> Span {
-        self.content.get_span()
+    fn span(&self) -> Span {
+        self.content.span()
     }
 }
 
 impl Spannable for Log {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            Log::Single(i) => i.get_span(),
+            Log::Single(i) => i.span(),
             Log::And(l, r) | Log::Or(l, r) => {
-                let from = l.get_span().0;
-                let to = r.get_span().1;
+                let from = l.span().0;
+                let to = r.span().1;
                 Span(from, to)
             }
         }
@@ -22,12 +22,12 @@ impl Spannable for Log {
 }
 
 impl Spannable for Equ {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            Equ::Single(i) => i.get_span(),
+            Equ::Single(i) => i.span(),
             Equ::Equal(l, r) | Equ::NotEqual(l, r) => {
-                let from = l.get_span().0;
-                let to = r.get_span().1;
+                let from = l.span().0;
+                let to = r.span().1;
                 Span(from, to)
             }
         }
@@ -35,15 +35,15 @@ impl Spannable for Equ {
 }
 
 impl Spannable for Rel {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            Rel::Single(i) => i.get_span(),
+            Rel::Single(i) => i.span(),
             Rel::LessEqual(l, r)
             | Rel::GreaterEqual(l, r)
             | Rel::LessThan(l, r)
             | Rel::GreaterThan(l, r) => {
-                let from = l.get_span().0;
-                let to = r.get_span().1;
+                let from = l.span().0;
+                let to = r.span().1;
                 Span(from, to)
             }
         }
@@ -51,12 +51,12 @@ impl Spannable for Rel {
 }
 
 impl Spannable for AddSub {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            AddSub::Single(i) => i.get_span(),
+            AddSub::Single(i) => i.span(),
             AddSub::Add(l, r) | AddSub::Sub(l, r) => {
-                let from = l.get_span().0;
-                let to = r.get_span().1;
+                let from = l.span().0;
+                let to = r.span().1;
                 Span(from, to)
             }
         }
@@ -64,12 +64,12 @@ impl Spannable for AddSub {
 }
 
 impl Spannable for MulDiv {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            MulDiv::Single(i) => i.get_span(),
+            MulDiv::Single(i) => i.span(),
             MulDiv::Mul(l, r) | MulDiv::Div(l, r) | MulDiv::Mod(l, r) => {
-                let from = l.get_span().0;
-                let to = r.get_span().1;
+                let from = l.span().0;
+                let to = r.span().1;
                 Span(from, to)
             }
         }
@@ -77,25 +77,25 @@ impl Spannable for MulDiv {
 }
 
 impl Spannable for Node {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            Node::Single(i) => i.get_span(),
+            Node::Single(i) => i.span(),
             Node::Plus(_, s) | Node::Minus(_, s) => s.clone(),
         }
     }
 }
 
 impl Spannable for Value {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
-            Value::Single(i) => i.get_span(),
+            Value::Single(i) => i.span(),
             Value::ArrElem(_, _, s) => s.clone(),
         }
     }
 }
 
 impl Spannable for Core {
-    fn get_span(&self) -> Span {
+    fn span(&self) -> Span {
         match self {
             Core::Str(_, s)
             | Core::Num(_, s)

@@ -231,7 +231,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                     if !ty.is_printable() {
                         errors.push(Error(
                             format!("Value of type {} cannot be printed", ty).into(),
-                            a.get_span(),
+                            a.span(),
                         ));
                         failure = true;
                     }
@@ -287,7 +287,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 if Type::Bool != cond_ty {
                     errors.push(Error(
                         format!("Expected Bool, found {}", cond_ty),
-                        cond.get_span(),
+                        cond.span(),
                     ));
                     None
                 } else {
@@ -527,7 +527,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 if count_ty != Type::Num {
                     errors.push(Error(
                         format!("Expected Num, found {}", count_ty),
-                        count.get_span(),
+                        count.span(),
                     ));
                     failure = true;
                 }
@@ -536,7 +536,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 if face_ty != Type::Num {
                     errors.push(Error(
                         format!("Expected Num, found {}", face_ty),
-                        face.get_span(),
+                        face.span(),
                     ));
                     failure = true;
                 }
@@ -603,13 +603,13 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 let mut failure = false;
                 let mesg_ty = get_type(&mesg, &scope_stack);
                 if mesg_ty != Type::Str {
-                    errors.push(Error(format!("Expected Str"), mesg.get_span()));
+                    errors.push(Error(format!("Expected Str"), mesg.span()));
                     failure = true;
                 }
 
                 let cond_ty = get_type(&cond, &scope_stack);
                 if cond_ty != Type::Bool {
-                    errors.push(Error(format!("Expected Bool"), cond.get_span()));
+                    errors.push(Error(format!("Expected Bool"), cond.span()));
                     failure = true;
                 }
 
@@ -651,7 +651,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 if from_ty != Type::Num {
                     errors.push(Error(
                         format!("Expected Num, found {}", from_ty),
-                        from.get_span(),
+                        from.span(),
                     ));
                     failure = true;
                 }
@@ -660,7 +660,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 if to_ty != Type::Num {
                     errors.push(Error(
                         format!("Expected Num, found {}", to_ty),
-                        to.get_span(),
+                        to.span(),
                     ));
                     failure = true;
                 }

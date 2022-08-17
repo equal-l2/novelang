@@ -8,5 +8,5 @@ impl From<usize> for Span {
 }
 
 pub trait Spannable {
-    fn get_span(&self) -> Span;
+    fn span(&self) -> Span;
 }

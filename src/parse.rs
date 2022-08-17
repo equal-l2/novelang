@@ -197,7 +197,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                         let init = parse_expr(&mut tks, last)?;
 
-                        let i = init.get_span().1;
+                        let i = init.span().1;
 
                         match tks.next() {
                             Some((_, tk)) => match tk.item {

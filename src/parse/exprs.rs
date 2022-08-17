@@ -269,7 +269,7 @@ impl<'a> TryFromTokens<'a> for Node {
         Ok(if let Some(Items::Op(Ops::Add(op))) = tks.peek().item() {
             let (from, _) = tks.next().unwrap();
             let operand = Self::try_from_tokens(tks, last)?;
-            let to = operand.get_span().1;
+            let to = operand.span().1;
             let span = Span(from, to);
             match op {
                 AddOps::Add => Self::Plus(Box::from(operand), span),
@@ -294,7 +294,7 @@ impl<'a> TryFromTokens<'a> for Value {
         ensure_start!(tks, last);
 
         let mut val = Self::Single(Core::try_from_tokens(tks, last)?);
-        let from = val.get_span().0;
+        let from = val.span().0;
         loop {
             if let Some(Items::LBra) = tks.peek().item() {
                 let _ = tks.next().unwrap();
