@@ -216,6 +216,7 @@ impl ScopeStack {
 
 pub struct Error(pub String, pub Span);
 
+// TODO: move block analysis (while, for, if&else, sub) to the separate module `parse_block` (after parse, before semck)
 pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> {
     use crate::parse::PreStmt;
     let mut stmts = Vec::<Statement>::new();
