@@ -17,7 +17,9 @@
     clippy::many_single_char_names,
     clippy::match_on_vec_items,
     clippy::non_ascii_literal,
-    clippy::too_many_lines
+    clippy::cast_sign_loss,
+    clippy::default_trait_access,
+    clippy::clippy::option_if_let_else
 )]
 
 mod exprs;

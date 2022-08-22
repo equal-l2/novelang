@@ -75,11 +75,11 @@ pub struct Parsed {
 }
 
 trait LookItem {
-    fn item(self) -> Option<lex::Items>;
+    fn item(self) -> Option<lex::LangItem>;
 }
 
 impl LookItem for Option<&lex::Token> {
-    fn item(self) -> Option<lex::Items> {
+    fn item(self) -> Option<lex::LangItem> {
         self.map(|t| t.item.clone())
     }
 }
@@ -88,19 +88,19 @@ fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<LV
 where
     T: Iterator<Item = (usize, &'a lex::Token)>,
 {
-    use lex::Items;
+    use lex::LangItem;
 
     let (i, tk) = tks
         .peek()
         .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
-    if let Items::Ident(name) = &tk.item {
+    if let LangItem::Ident(name) = &tk.item {
         let mut val = LVal::Scalar(name.clone());
         let _ = tks.next().unwrap();
         loop {
-            if let Some(Items::LBra) = tks.peek().item() {
+            if tks.peek().item() == Some(LangItem::LBra) {
                 let _ = tks.next().unwrap();
                 let expr = parse_expr(tks, last)?;
-                expects!("expected RBra", Items::RBra, tks, last);
+                expects!("expected RBra", LangItem::RBra, tks, last);
                 val = LVal::Vector(Box::from(val), Box::from(expr));
             } else {
                 return Ok(val);
@@ -112,7 +112,7 @@ where
 }
 
 pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
-    use lex::{Items, Keyword};
+    use lex::{LangItem, Keyword};
 
     let mut stmts = vec![PreStmt::Ill];
 
@@ -120,7 +120,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
     let mut tks = lexed.tokens.iter().enumerate().peekable();
 
     while let Some((idx, tok)) = tks.next() {
-        if let Items::Cmd(inst) = &tok.item {
+        if let LangItem::Cmd(inst) = &tok.item {
             match inst {
                 lex::Command::Print => parse_stmt!(stmts, {
                     // "Print" (<expr> {"," <expr>}) ";"
@@ -128,11 +128,11 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     while let Some((i, tk)) = tks.peek() {
                         match tk.item {
-                            Items::Semi => break,
-                            Items::Comma => {
+                            LangItem::Semi => break,
+                            LangItem::Comma => {
                                 let _ = tks.next().unwrap();
 
-                                if matches!(tks.peek().item(), Some(Items::Semi)) {
+                                if matches!(tks.peek().item(), Some(LangItem::Semi)) {
                                     break;
                                 }
 
@@ -152,7 +152,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                     let (i, tk) = tks
                         .next()
                         .ok_or_else(|| Error("expected subrountine name".into(), last.into()))?;
-                    if let Items::Ident(name) = &tk.item {
+                    if let LangItem::Ident(name) = &tk.item {
                         expects_semi!(tks, last);
                         PreStmt::Sub { name: name.clone() }
                     } else {
@@ -165,7 +165,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                     let (i, tk) = tks
                         .next()
                         .ok_or_else(|| Error("expected subrountine name".into(), last.into()))?;
-                    if let Items::Ident(name) = &tk.item {
+                    if let LangItem::Ident(name) = &tk.item {
                         expects_semi!(tks, last);
                         PreStmt::Call { name: name.clone() }
                     } else {
@@ -186,14 +186,14 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                     let (i, tk) = tks
                         .next()
                         .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
-                    if let Items::Ident(name) = &tk.item {
+                    if let LangItem::Ident(name) = &tk.item {
                         if name.starts_with('_') {
                             return Err(Error(
                                 "Identifier starts with _ is reserved".into(),
                                 i.into(),
                             ));
                         }
-                        expects!("\"Be\" expected", Items::Key(Keyword::Be), tks, last);
+                        expects!("\"Be\" expected", LangItem::Key(Keyword::Be), tks, last);
 
                         let init = parse_expr(&mut tks, last)?;
 
@@ -201,7 +201,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                         match tks.next() {
                             Some((_, tk)) => match tk.item {
-                                Items::Key(Keyword::AsMut) => {
+                                LangItem::Key(Keyword::AsMut) => {
                                     expects_semi!(tks, last);
                                     PreStmt::Let {
                                         name: name.clone(),
@@ -209,7 +209,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                                         is_mut: true,
                                     }
                                 }
-                                Items::Semi => PreStmt::Let {
+                                LangItem::Semi => PreStmt::Let {
                                     name: name.clone(),
                                     init,
                                     is_mut: false,
@@ -236,7 +236,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                 lex::Command::Modify => parse_stmt!(stmts, {
                     // "Modify" <lval> "To" <expr> ";"
                     let lval = parse_lval(&mut tks, last)?;
-                    expects!("To expected", Items::Key(Keyword::To), tks, last);
+                    expects!("To expected", LangItem::Key(Keyword::To), tks, last);
 
                     let expr = parse_expr(&mut tks, last)?;
                     expects_semi!(tks, last);
@@ -263,7 +263,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .peek()
                         .ok_or_else(|| Error("expected Semicolon or If".into(), last.into()))?;
 
-                    if let Items::Cmd(lex::Command::If) = tk.item {
+                    if tk.item == LangItem::Cmd(lex::Command::If) {
                         // "Else" "If" <cond> ";"
                         let _ = tks.next().unwrap();
 
@@ -292,14 +292,14 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .peek()
                         .ok_or_else(|| Error("expected To".into(), last.into()))?;
 
-                    let prompt = if let Items::Str(prompt) = &tk.item {
+                    let prompt = if let LangItem::Str(prompt) = &tk.item {
                         let _ = tks.next().unwrap();
                         Some(prompt.clone())
                     } else {
                         None
                     };
 
-                    expects!("\"To\" expected", Items::Key(Keyword::To), tks, last);
+                    expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
                     let lval = parse_lval(&mut tks, last)?;
 
@@ -311,17 +311,17 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                 }),
 
                 lex::Command::Roll => parse_stmt!(stmts, {
-                    // "Roll" <expr> "Dice" "With" <expr> "Face" "To" <lval> ";"
+                    // "Roll" <expr> "Dice" "With" <expr> "Faces" "To" <lval> ";"
 
                     let count = parse_expr(&mut tks, last)?;
 
-                    expects!("\"Dice\" expected", Items::Key(Keyword::Dice), tks, last);
-                    expects!("\"With\" expected", Items::Key(Keyword::With), tks, last);
+                    expects!("\"Dice\" expected", LangItem::Key(Keyword::Dice), tks, last);
+                    expects!("\"With\" expected", LangItem::Key(Keyword::With), tks, last);
 
                     let face = parse_expr(&mut tks, last)?;
 
-                    expects!("\"Face\" expected", Items::Key(Keyword::Face), tks, last);
-                    expects!("\"To\" expected", Items::Key(Keyword::To), tks, last);
+                    expects!("\"Faces\" expected", LangItem::Key(Keyword::Faces), tks, last);
+                    expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
                     let lval = parse_lval(&mut tks, last)?;
 
@@ -356,7 +356,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     let mesg;
                     let cond;
-                    if let Items::Key(Keyword::With) = tk.item {
+                    if tk.item == LangItem::Key(Keyword::With) {
                         // with string
                         let _ = tks.next().unwrap();
                         mesg = expr1;
@@ -385,18 +385,18 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .next()
                         .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
 
-                    if let Items::Ident(name) = &tk.item {
+                    if let LangItem::Ident(name) = &tk.item {
                         if name.starts_with('_') {
                             return Err(Error(
                                 "Identifier starts with _ is reserved".into(),
                                 i.into(),
                             ));
                         }
-                        expects!("\"From\" expected", Items::Key(Keyword::From), tks, last);
+                        expects!("\"From\" expected", LangItem::Key(Keyword::From), tks, last);
 
                         let from = parse_expr(&mut tks, last)?;
 
-                        expects!("\"To\" expected", Items::Key(Keyword::To), tks, last);
+                        expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
                         let to = parse_expr(&mut tks, last)?;
 

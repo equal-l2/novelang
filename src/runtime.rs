@@ -6,7 +6,7 @@ use super::IntType;
 use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
-use crate::semck::{Statement, AST};
+use crate::semck::{Statement, Ast};
 
 use exprs::Eval;
 use val::Val;
@@ -306,7 +306,7 @@ fn unwrap_str(val: &Val) -> String {
     }
 }
 
-pub fn run(prog: AST) {
+pub fn run(prog: Ast) {
     let mut rt = Runtime::new();
 
     let mut i = 1; // index 0 is reserved (unreachable)
@@ -586,7 +586,7 @@ pub fn run(prog: AST) {
             Statement::Return => {
                 i = loop {
                     if let Some(scope) = rt.pop() {
-                        if let ScopeKind::Sub = scope.kind {
+                        if scope.kind == ScopeKind::Sub {
                             break scope.ret_idx;
                         }
                     } else {

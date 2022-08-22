@@ -1,20 +1,23 @@
+mod fragments;
 mod items;
 mod macros;
 mod utils;
 
-pub use items::*;
-use utils::*;
+#[cfg(test)]
+mod test;
 
-#[derive(Debug, Clone)]
+pub use items::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Location {
     pub row: usize,
     pub col: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
     pub loc: Location,
-    pub item: Items,
+    pub item: LangItem,
 }
 
 impl Token {
@@ -37,19 +40,19 @@ impl std::fmt::Display for Token {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lexed {
     pub lines: Vec<String>,
     pub tokens: Vec<Token>,
 }
 
 #[derive(Debug, Clone)]
-pub struct LocInfo {
+pub struct LocWithLine {
     line: String,
     loc: Location,
 }
 
-impl std::fmt::Display for LocInfo {
+impl std::fmt::Display for LocWithLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let row = self.loc.row;
         let col = self.loc.col;
@@ -62,13 +65,13 @@ impl std::fmt::Display for LocInfo {
 }
 
 impl Lexed {
-    pub fn generate_error_mesg(&self, idx: usize) -> LocInfo {
+    pub fn generate_error_mesg(&self, idx: usize) -> LocWithLine {
         let loc = self.tokens.get(idx).map_or_else(
             || self.tokens.last().unwrap().next_col_loc(),
             |tk| tk.loc.clone(),
         );
 
-        LocInfo {
+        LocWithLine {
             line: self.lines[loc.row - 1].clone(),
             loc,
         }
@@ -92,7 +95,7 @@ impl std::fmt::Display for Lexed {
 
 #[derive(Debug, Clone)]
 pub struct Error {
-    loc_info: LocInfo,
+    loc_info: LocWithLine,
     kind: ErrorKind,
 }
 
@@ -122,9 +125,9 @@ impl std::fmt::Display for Error {
     }
 }
 
-pub fn lex(s: String) -> Result<Lexed, Error> {
+pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
     let mut tks = Vec::new();
-    let lines: Vec<_> = s.lines().map(String::from).collect();
+    let lines: Vec<_> = s.as_ref().lines().map(String::from).collect();
     for (idx, l) in lines.iter().enumerate() {
         let v: Vec<_> = l.chars().collect();
         let mut i = 0;
@@ -140,111 +143,69 @@ pub fn lex(s: String) -> Result<Lexed, Error> {
                     loc: loc.clone(),
                     item: match v[i] {
                         '#' => {
+                            // Indicates a line comment
+                            // Discard the rest of the line
                             break;
                         }
                         ';' => {
                             i += 1;
-                            Items::Semi
+                            LangItem::Semi
                         }
                         ',' => {
                             i += 1;
-                            Items::Comma
+                            LangItem::Comma
                         }
                         '(' => {
                             i += 1;
-                            Items::LPar
+                            LangItem::LPar
                         }
                         ')' => {
                             i += 1;
-                            Items::RPar
+                            LangItem::RPar
                         }
                         '[' => {
                             i += 1;
-                            Items::LBra
+                            LangItem::LBra
                         }
                         ']' => {
                             i += 1;
-                            Items::RBra
+                            LangItem::RBra
                         }
                         '"' => {
                             i += 1;
-                            let mut s = String::new();
-                            loop {
-                                if i >= v.len() {
+                            match fragments::handle_string(&v[i..]) {
+                                Ok((item, len)) => {
+                                    i += len + 1; // Note end quote of the string
+                                    item
+                                }
+                                Err(kind) => {
+                                    eprintln!("{:?}", tks);
                                     return Err(Error {
-                                        loc_info: LocInfo {
+                                        loc_info: LocWithLine {
                                             line: l.clone(),
                                             loc,
                                         },
-                                        kind: ErrorKind::UnterminatedStr,
+                                        kind,
                                     });
                                 }
-                                if v[i] == '"' {
-                                    i += 1;
-                                    break Items::Str(s);
-                                }
-                                s.push(v[i]);
-                                i += 1;
                             }
                         }
-                        _ => {
-                            let vs = &v[i..];
-                            let confirm_item = |len| len == vs.len() || !is_ident_char(vs[len]);
-                            if is_item(&"die".chars().collect::<Vec<_>>(), vs) && confirm_item(3) {
-                                // convert "die" to "dice"
-                                i += 3;
-                                Items::Key(Keyword::Dice)
-                            } else if is_item(&"faces".chars().collect::<Vec<_>>(), vs)
-                                && confirm_item(5)
-                            {
-                                // convert "faces" to "face"
-                                i += 5;
-                                Items::Key(Keyword::Face)
-                            } else if let Some(res) = Keyword::parse_slice(vs) {
-                                i += res.len();
-                                Items::Key(res)
-                            } else if let Some(res) = Command::parse_slice(vs) {
-                                i += res.len();
-                                Items::Cmd(res)
-                            } else if let Some(res) = Ops::parse_slice(vs) {
-                                i += res.len();
-                                Items::Op(res)
-                            } else if v[i].is_numeric() {
-                                let mut s = String::new();
-                                while i < v.len() && v[i].is_numeric() {
-                                    s.push(v[i]);
-                                    i += 1;
-                                }
-                                match s.parse() {
-                                    Ok(i) => Items::Num(i, s.len()),
-                                    Err(_) => {
-                                        return Err(Error {
-                                            loc_info: LocInfo {
-                                                line: l.clone(),
-                                                loc,
-                                            },
-                                            kind: ErrorKind::TooLongNum,
-                                        })
-                                    }
-                                }
-                            } else if is_ident_char(v[i]) {
-                                let mut s = String::new();
-                                while i < v.len() && is_ident_char(v[i]) {
-                                    s.push(v[i]);
-                                    i += 1;
-                                }
-                                Items::Ident(s)
-                            } else {
+                        _ => match fragments::handle_multichars(&v[i..]) {
+                            Ok((item, len)) => {
+                                i += len;
+                                item
+                            }
+                            Err(kind) => {
                                 eprintln!("{:?}", tks);
                                 return Err(Error {
-                                    loc_info: LocInfo {
+                                    loc_info: LocWithLine {
                                         line: l.clone(),
                                         loc,
                                     },
-                                    kind: ErrorKind::UnexpectedChar(v[i]),
+                                    kind,
                                 });
                             }
-                        }
+                        },
                     },
                 });
             }

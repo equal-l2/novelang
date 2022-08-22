@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 
 use super::{
-    lex::{self, Items, Token},
+    lex::{self, LangItem, Token},
     Expr, LookItem, Span, Spannable,
 };
 
@@ -75,13 +75,13 @@ macro_rules! ensure_start {
 }
 
 impl<T> LookItem for Option<&(T, &Token)> {
-    fn item(self) -> Option<Items> {
+    fn item(self) -> Option<LangItem> {
         self.map(|t| t.1.item.clone())
     }
 }
 
 impl<T> LookItem for Option<(T, &Token)> {
-    fn item(self) -> Option<Items> {
+    fn item(self) -> Option<LangItem> {
         self.map(|t| t.1.item.clone())
     }
 }
@@ -89,7 +89,7 @@ impl<T> LookItem for Option<(T, &Token)> {
 type Result<T> = std::result::Result<T, ExprError>;
 
 pub(super) trait TryFromTokens<'a> {
-    fn can_start_with(item: &Items) -> bool;
+    fn can_start_with(item: &LangItem) -> bool;
     fn try_from_tokens<T>(tks: &mut Peekable<T>, last: usize) -> Result<Self>
     where
         T: Iterator<Item = (usize, &'a Token)>,
@@ -97,7 +97,7 @@ pub(super) trait TryFromTokens<'a> {
 }
 
 impl<'a> TryFromTokens<'a> for Expr {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         Log::can_start_with(item)
     }
     fn try_from_tokens<T>(tks: &mut Peekable<T>, last: usize) -> Result<Self>
@@ -114,7 +114,7 @@ impl<'a> TryFromTokens<'a> for Expr {
 }
 
 impl<'a> TryFromTokens<'a> for Log {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         Equ::can_start_with(item)
     }
 
@@ -126,7 +126,7 @@ impl<'a> TryFromTokens<'a> for Log {
 
         let mut lop = Self::Single(Equ::try_from_tokens(tks, last)?);
         loop {
-            if let Some(Items::Op(lex::Ops::Log(op))) = tks.peek().item() {
+            if let Some(LangItem::Op(lex::Ops::Log(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = Equ::try_from_tokens(tks, last)?;
                 match op {
@@ -141,7 +141,7 @@ impl<'a> TryFromTokens<'a> for Log {
 }
 
 impl<'a> TryFromTokens<'a> for Equ {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         Rel::can_start_with(item)
     }
 
@@ -153,7 +153,7 @@ impl<'a> TryFromTokens<'a> for Equ {
 
         let mut lop = Self::Single(Rel::try_from_tokens(tks, last)?);
         loop {
-            if let Some(Items::Op(lex::Ops::Equ(op))) = tks.peek().item() {
+            if let Some(LangItem::Op(lex::Ops::Equ(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = Rel::try_from_tokens(tks, last)?;
                 match op {
@@ -168,7 +168,7 @@ impl<'a> TryFromTokens<'a> for Equ {
 }
 
 impl<'a> TryFromTokens<'a> for Rel {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         AddSub::can_start_with(item)
     }
 
@@ -180,7 +180,7 @@ impl<'a> TryFromTokens<'a> for Rel {
 
         let lop = AddSub::try_from_tokens(tks, last)?;
         Ok(
-            if let Some(Items::Op(lex::Ops::Rel(op))) = tks.peek().item() {
+            if let Some(LangItem::Op(lex::Ops::Rel(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = AddSub::try_from_tokens(tks, last)?;
                 match op {
@@ -197,7 +197,7 @@ impl<'a> TryFromTokens<'a> for Rel {
 }
 
 impl<'a> TryFromTokens<'a> for AddSub {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         MulDiv::can_start_with(item)
     }
 
@@ -209,7 +209,7 @@ impl<'a> TryFromTokens<'a> for AddSub {
 
         let mut lop = Self::Single(MulDiv::try_from_tokens(tks, last)?);
         loop {
-            if let Some(Items::Op(lex::Ops::Add(op))) = tks.peek().item() {
+            if let Some(LangItem::Op(lex::Ops::Add(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = MulDiv::try_from_tokens(tks, last)?;
                 match op {
@@ -224,7 +224,7 @@ impl<'a> TryFromTokens<'a> for AddSub {
 }
 
 impl<'a> TryFromTokens<'a> for MulDiv {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         Node::can_start_with(item)
     }
 
@@ -236,7 +236,7 @@ impl<'a> TryFromTokens<'a> for MulDiv {
 
         let mut lop = Self::Single(Node::try_from_tokens(tks, last)?);
         loop {
-            if let Some(Items::Op(lex::Ops::Mul(op))) = tks.peek().item() {
+            if let Some(LangItem::Op(lex::Ops::Mul(op))) = tks.peek().item() {
                 let _ = tks.next().unwrap();
                 let rop = Node::try_from_tokens(tks, last)?;
                 match op {
@@ -252,9 +252,9 @@ impl<'a> TryFromTokens<'a> for MulDiv {
 }
 
 impl<'a> TryFromTokens<'a> for Node {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         use lex::{AddOps, Ops};
-        matches!(item, Items::Op(Ops::Add(AddOps::Add | AddOps::Sub)))
+        matches!(item, LangItem::Op(Ops::Add(AddOps::Add | AddOps::Sub)))
             || Value::can_start_with(item)
     }
 
@@ -266,7 +266,7 @@ impl<'a> TryFromTokens<'a> for Node {
 
         ensure_start!(tks, last);
 
-        Ok(if let Some(Items::Op(Ops::Add(op))) = tks.peek().item() {
+        Ok(if let Some(LangItem::Op(Ops::Add(op))) = tks.peek().item() {
             let (from, _) = tks.next().unwrap();
             let operand = Self::try_from_tokens(tks, last)?;
             let to = operand.span().1;
@@ -283,7 +283,7 @@ impl<'a> TryFromTokens<'a> for Node {
 }
 
 impl<'a> TryFromTokens<'a> for Value {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         Core::can_start_with(item)
     }
 
@@ -296,10 +296,10 @@ impl<'a> TryFromTokens<'a> for Value {
         let mut val = Self::Single(Core::try_from_tokens(tks, last)?);
         let from = val.span().0;
         loop {
-            if let Some(Items::LBra) = tks.peek().item() {
+            if tks.peek().item() == Some(LangItem::LBra) {
                 let _ = tks.next().unwrap();
                 let r = TopNum::try_from_tokens(tks, last)?;
-                if let Some(Items::RBra, ..) = tks.peek().item() {
+                if let Some(LangItem::RBra, ..) = tks.peek().item() {
                     let (idx, _) = tks.next().unwrap();
                     val = Self::ArrElem(Box::from(val), Box::from(r), Span(from, idx));
                 } else {
@@ -317,16 +317,16 @@ impl<'a> TryFromTokens<'a> for Value {
 }
 
 impl<'a> TryFromTokens<'a> for Core {
-    fn can_start_with(item: &Items) -> bool {
+    fn can_start_with(item: &LangItem) -> bool {
         use lex::Keyword;
         matches!(
             item,
-            Items::Str(_)
-                | Items::Num(_, _)
-                | Items::Ident(_)
-                | Items::Key(Keyword::True | Keyword::False)
-                | Items::LPar
-                | Items::LBra
+            LangItem::Str(_)
+                | LangItem::Num(_, _)
+                | LangItem::Ident(_)
+                | LangItem::Key(Keyword::True | Keyword::False)
+                | LangItem::LPar
+                | LangItem::LBra
         )
     }
 
@@ -340,16 +340,16 @@ impl<'a> TryFromTokens<'a> for Core {
 
         let (from, tok) = tks.next().unwrap();
         Ok(match &tok.item {
-            Items::Str(s) => Self::Str(s.clone(), from.into()),
-            Items::Num(n, _) => Self::Num(*n, from.into()),
-            Items::Ident(s) => Self::Ident(s.clone(), from.into()),
-            Items::Key(Keyword::True) => Self::True(from.into()),
-            Items::Key(Keyword::False) => Self::False(from.into()),
-            Items::LPar => {
+            LangItem::Str(s) => Self::Str(s.clone(), from.into()),
+            LangItem::Num(n, _) => Self::Num(*n, from.into()),
+            LangItem::Ident(s) => Self::Ident(s.clone(), from.into()),
+            LangItem::Key(Keyword::True) => Self::True(from.into()),
+            LangItem::Key(Keyword::False) => Self::False(from.into()),
+            LangItem::LPar => {
                 let expr = TopItem::try_from_tokens(tks, last)?;
                 let next_tk = tks.next();
                 match next_tk.item() {
-                    Some(Items::RPar) => {
+                    Some(LangItem::RPar) => {
                         Self::Paren(Box::from(expr), Span(from, next_tk.unwrap().0))
                     }
                     Some(_) => {
@@ -359,22 +359,22 @@ impl<'a> TryFromTokens<'a> for Core {
                     None => return Err(ExprError::exhausted(from, last)),
                 }
             }
-            Items::LBra => {
+            LangItem::LBra => {
                 // TODO: allow empty array
                 let mut v = vec![TopItem::try_from_tokens(tks, last)?];
                 let tk_opt = tks.next();
                 if let Some((idx, tk)) = tk_opt {
                     match tk.item {
-                        Items::Comma => {
+                        LangItem::Comma => {
                             loop {
                                 let next = TopItem::try_from_tokens(tks, last)?;
                                 v.push(next);
                                 if let Some((i, t)) = tks.next() {
                                     match t.item {
-                                        Items::Comma => {
+                                        LangItem::Comma => {
                                             // continue
                                         }
-                                        Items::RBra => break Self::Arr(v, Span(from, i)),
+                                        LangItem::RBra => break Self::Arr(v, Span(from, i)),
                                         _ => return Err(ExprError::unexpected(i)),
                                     }
                                 } else {
@@ -382,7 +382,7 @@ impl<'a> TryFromTokens<'a> for Core {
                                 }
                             }
                         }
-                        Items::RBra => Self::Arr(v, Span(from, idx)),
+                        LangItem::RBra => Self::Arr(v, Span(from, idx)),
                         _ => return Err(ExprError::unexpected(idx)),
                     }
                 } else {

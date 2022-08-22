@@ -88,7 +88,7 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone)]
-pub struct AST {
+pub struct Ast {
     pub stmts: Vec<Statement>,
 }
 
@@ -217,7 +217,7 @@ impl ScopeStack {
 pub struct Error(pub String, pub Span);
 
 // TODO: move block analysis (while, for, if&else, sub) to the separate module `parse_block` (after parse, before semck)
-pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> {
+pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> {
     use crate::parse::PreStmt;
     let mut stmts = Vec::<Statement>::new();
     let mut scope_stack = ScopeStack::new();
@@ -231,7 +231,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                     let ty = get_type(a, &scope_stack);
                     if !ty.is_printable() {
                         errors.push(Error(
-                            format!("Value of type {} cannot be printed", ty).into(),
+                            format!("Value of type {} cannot be printed", ty),
                             a.span(),
                         ));
                         failure = true;
@@ -370,7 +370,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
 
                 if prev_idx.is_none() {
                     errors.push(Error(
-                        format!("A stray Else-If detected."),
+                        "A stray Else-If detected.".to_string(),
                         Default::default(), // TODO: implement span retrieval
                     ));
                     None
@@ -407,7 +407,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
 
                 if prev_idx.is_none() {
                     errors.push(Error(
-                        format!("A stray Else detected."),
+                        "A stray Else detected.".to_string(),
                         Default::default(), // TODO: implement span retrieval
                     ));
                     None
@@ -441,7 +441,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
 
                 if prev_idx.is_none() {
                     errors.push(Error(
-                        format!("A stray End detected."),
+                        "A stray End detected.".to_string(),
                         Default::default(), // TODO: implement span retrieval
                     ));
                     None
@@ -508,15 +508,11 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                     None
                 };
 
-                if let Some(as_num) = as_num_opt {
-                    Some(Statement::Input {
+                as_num_opt.map(|as_num| Statement::Input {
                         prompt,
                         target,
                         as_num,
                     })
-                } else {
-                    None
-                }
             }
             PreStmt::Roll {
                 count,
@@ -594,7 +590,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                     Some(Statement::Break)
                 } else {
                     errors.push(Error(
-                        format!("Break must be in a loop"),
+                        "Break must be in a loop".to_string(),
                         Default::default(), // TODO: implement span retrieval
                     ));
                     None
@@ -604,13 +600,13 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                 let mut failure = false;
                 let mesg_ty = get_type(&mesg, &scope_stack);
                 if mesg_ty != Type::Str {
-                    errors.push(Error(format!("Expected Str"), mesg.span()));
+                    errors.push(Error("Expected Str".to_string(), mesg.span()));
                     failure = true;
                 }
 
                 let cond_ty = get_type(&cond, &scope_stack);
                 if cond_ty != Type::Bool {
-                    errors.push(Error(format!("Expected Bool"), cond.span()));
+                    errors.push(Error("Expected Bool".to_string(), cond.span()));
                     failure = true;
                 }
 
@@ -638,7 +634,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                     Some(Statement::Continue)
                 } else {
                     errors.push(Error(
-                        format!("Break must be in a loop"),
+                        "Break must be in a loop".to_string(),
                         Default::default(), // TODO: implement span retrieval
                     ));
                     None
@@ -702,7 +698,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
                     Some(Statement::Return)
                 } else {
                     errors.push(Error(
-                        format!("Return must be in a sub"),
+                        "Return must be in a sub".to_string(),
                         Default::default(), // TODO: implement span retrieval
                     ));
                     None
@@ -721,6 +717,6 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<AST, Vec<Error>> 
         // TODO: replace with proper handler when scopes have their starting stmt
         todo!("scope_stack is not empty")
     } else {
-        Ok(AST { stmts })
+        Ok(Ast { stmts })
     }
 }

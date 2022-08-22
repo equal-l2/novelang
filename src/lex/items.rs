@@ -1,7 +1,7 @@
 use super::{macros::*, utils::*};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Items {
+pub enum LangItem {
     Key(Keyword),
     Cmd(Command),
     Op(Ops),
@@ -22,7 +22,7 @@ decl_reserved!(Keyword, {
     To => "to",
     Dice => "dice",
     With => "with",
-    Face => "face",
+    Faces => "faces",
     True => "true",
     False => "false",
     From => "from",
@@ -85,9 +85,9 @@ decl_ops!(MulOps,{
     Mod => "%",
 });
 
-impl Items {
+impl LangItem {
     pub fn len(&self) -> usize {
-        use Items::*;
+        use LangItem::*;
         match self {
             Key(i) => i.len(),
             Cmd(i) => i.len(),
