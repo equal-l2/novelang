@@ -17,6 +17,7 @@ clap = { version = "3.2.17", default-features = false, features = [
   "std",
 ] }
 once_cell = { version = "1.13.1", default-features = false }
+derive_more = { version = "0.99.17", default-features = false, features = ["from"] }
 
 [dev-dependencies]
 pretty_assertions = { version = "1.2.1", default-features = false, features = [

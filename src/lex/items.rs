@@ -135,6 +135,7 @@ impl Item for Ops {
         }
     }
 
+    #[allow(clippy::manual_map)]
     fn parse_slice(s: &[char]) -> Option<Self> {
         if let Some(i) = LogOps::parse_slice(s) {
             Some(Self::Log(i))

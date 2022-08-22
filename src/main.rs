@@ -19,7 +19,7 @@
     clippy::non_ascii_literal,
     clippy::cast_sign_loss,
     clippy::default_trait_access,
-    clippy::clippy::option_if_let_else
+    clippy::option_if_let_else
 )]
 
 mod exprs;

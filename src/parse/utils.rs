@@ -42,9 +42,23 @@ where
     Expr::try_from_tokens(tks, last)
 }
 
-macro_rules! parse_stmt {
+//macro_rules! parse_stmt {
+//    ($stmts: ident, $proc: block) => {{
+//        let inst_obj = $proc;
+//        $stmts.push(inst_obj);
+//    }};
+//}
+
+macro_rules! parse_normal {
     ($stmts: ident, $proc: block) => {{
         let inst_obj = $proc;
-        $stmts.push(inst_obj);
+        $stmts.push(Statement::Normal(inst_obj));
+    }};
+}
+
+macro_rules! parse_block {
+    ($stmts: ident, $loc: ident, $proc: block) => {{
+        let inst_obj = $proc;
+        $stmts.push(Statement::Block(inst_obj, $loc.clone()));
     }};
 }
