@@ -6,7 +6,7 @@ pub enum LangItem {
     Cmd(Command),
     Op(Ops),
     Num(crate::IntType, usize),
-    Ident(String),
+    Ident(crate::IdentName),
     Str(String),
     Semi,
     Comma,
@@ -93,7 +93,8 @@ impl LangItem {
             Cmd(i) => i.len(),
             Op(i) => i.len(),
             Num(_, l) => *l,
-            Ident(i) | Str(i) => i.len(),
+            Ident(i) => i.as_ref().len(),
+            Str(i) => i.len(),
             Semi | Comma | LPar | RPar | LBra | RBra => 1,
         }
     }

@@ -57,7 +57,7 @@ pub enum Value {
 pub enum Core {
     Str(String, Span),
     Num(crate::IntType, Span),
-    Ident(String, Span),
+    Ident(crate::IdentName, Span),
     True(Span),
     False(Span),
     Paren(Box<TopItem>, Span),

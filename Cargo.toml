@@ -5,7 +5,7 @@ authors = ["equal-l2 <eng.equall2@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-# TODO: replace own implementation
+# TODO: replace with our own implementation
 rand = { version = "0.8.5", default-features = false, features = [
   "getrandom",
   "small_rng",
@@ -17,7 +17,12 @@ clap = { version = "3.2.17", default-features = false, features = [
   "std",
 ] }
 once_cell = { version = "1.13.1", default-features = false }
-derive_more = { version = "0.99.17", default-features = false, features = ["from"] }
+derive_more = { version = "0.99.17", default-features = false, features = [
+  "as_ref",
+  "from",
+  "into",
+  "display",
+] }
 
 [dev-dependencies]
 pretty_assertions = { version = "1.2.1", default-features = false, features = [

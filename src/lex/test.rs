@@ -2,8 +2,8 @@
 
 use super::*;
 use Command::*;
-use LangItem::*;
 use Keyword::*;
+use LangItem::*;
 
 #[test]
 fn test_smoke() {

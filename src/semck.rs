@@ -1,6 +1,7 @@
 use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::span::*;
+use crate::IdentName;
 
 mod exprs;
 mod types;
@@ -25,22 +26,21 @@ impl From<TypeError> for ParseError {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Print {
-        args: Vec<Expr>,
-    },
-    Sub {
-        name: String,
-        offset_to_end: usize,
+    Assert {
+        mesg: Expr,
+        cond: Expr,
     },
     Call {
-        name: String,
+        name: IdentName,
     },
-    While {
-        cond: Expr,
-        offset_to_end: usize,
+    Halt,
+    Input {
+        prompt: Option<String>,
+        target: LVal,
+        as_num: bool,
     },
     Let {
-        name: String,
+        name: IdentName,
         init: Expr,
         is_mut: bool,
     },
@@ -48,6 +48,27 @@ pub enum Statement {
         target: LVal,
         expr: Expr,
     },
+    Print {
+        args: Vec<Expr>,
+    },
+    Roll {
+        count: Expr,
+        face: Expr,
+        target: LVal,
+    },
+
+    For {
+        counter: IdentName,
+        from: Expr,
+        to: Expr,
+        offset_to_end: usize,
+    },
+    While {
+        cond: Expr,
+        offset_to_end: usize,
+    },
+    Break,
+    Continue,
     If {
         cond: Expr,
         offset_to_next: usize,
@@ -59,32 +80,13 @@ pub enum Statement {
     Else {
         offset_to_end: usize,
     },
-    End,
-    Input {
-        prompt: Option<String>,
-        target: LVal,
-        as_num: bool,
-    },
-    Roll {
-        count: Expr,
-        face: Expr,
-        target: LVal,
-    },
-    Halt,
-    Ill,
-    Break,
-    Assert {
-        mesg: Expr,
-        cond: Expr,
-    },
-    Continue,
-    For {
-        counter: String,
-        from: Expr,
-        to: Expr,
+    Sub {
+        name: IdentName,
         offset_to_end: usize,
     },
     Return,
+    End,
+    Ill,
 }
 
 #[derive(Debug, Clone)]
@@ -98,7 +100,7 @@ struct TypeInfo {
     is_mut: bool,
 }
 
-type VarMap = std::collections::HashMap<String, TypeInfo>;
+type VarMap = std::collections::HashMap<IdentName, TypeInfo>;
 
 #[derive(Clone)]
 enum ScopeKind {
@@ -123,16 +125,16 @@ impl Scope {
         }
     }
 
-    fn add_var(&mut self, name: &str, var: TypeInfo) -> bool {
-        let to_add = !self.map.contains_key(name);
+    fn add_var(&mut self, name: IdentName, var: TypeInfo) -> bool {
+        let to_add = !self.map.contains_key(&name);
         if to_add {
-            self.map.insert(name.to_owned(), var);
+            self.map.insert(name, var);
         }
 
         to_add
     }
 
-    fn get_type_info(&self, name: &str) -> Option<&TypeInfo> {
+    fn get_type_info(&self, name: &IdentName) -> Option<&TypeInfo> {
         self.map.get(name)
     }
 }
@@ -145,7 +147,7 @@ impl ScopeStack {
     fn new() -> Self {
         let mut internals = Scope::new(ScopeKind::Other, 0);
         internals.add_var(
-            &String::from("_wait"),
+            IdentName::from("_wait"),
             TypeInfo {
                 ty: Type::Bool,
                 is_mut: true,
@@ -178,7 +180,7 @@ impl ScopeStack {
         self.scopes.last_mut().unwrap()
     }
 
-    fn add_var(&mut self, name: &str, info: TypeInfo) -> bool {
+    fn add_var(&mut self, name: IdentName, info: TypeInfo) -> bool {
         self.get_top_mut().add_var(name, info)
     }
 
@@ -290,7 +292,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                 NormalStmt::Let { name, init, is_mut } => {
                     let init_ty = get_type(&init, &scope_stack);
                     let success = scope_stack.add_var(
-                        &name,
+                        name.clone(),
                         TypeInfo {
                             ty: init_ty,
                             is_mut,
@@ -450,7 +452,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
 
                     // always successful because we are pushing it to a new scope
                     let _ = scope_stack.add_var(
-                        &counter,
+                        counter.clone(),
                         TypeInfo {
                             ty: Type::Num,
                             is_mut: false,
@@ -461,7 +463,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         None
                     } else {
                         Some(Statement::For {
-                            counter: counter.clone(),
+                            counter,
                             from,
                             to,
                             offset_to_end: 0,
@@ -615,7 +617,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
 
                     // add this sub to var table
                     let success = scope_stack.add_var(
-                        &name,
+                        name.clone(),
                         TypeInfo {
                             ty: Type::Sub,
                             is_mut: false,

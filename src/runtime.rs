@@ -6,21 +6,23 @@ use super::IntType;
 use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
-use crate::semck::{Statement, Ast};
+use crate::semck::{Ast, Statement};
+use crate::IdentName;
+use once_cell::sync::Lazy;
 
 use exprs::Eval;
 use val::Val;
 
-type VarTable<'a> = std::collections::HashMap<&'a str, Val>;
+type VarTable = std::collections::HashMap<IdentName, Val>;
 
 /// Represents a scope
-struct Scope<'a> {
+struct Scope {
     kind: ScopeKind,
     ret_idx: usize,
-    vars: VarTable<'a>,
+    vars: VarTable,
 }
 
-impl<'a> Scope<'a> {
+impl Scope {
     fn new(kind: ScopeKind, ret_idx: usize) -> Self {
         Self {
             kind,
@@ -39,15 +41,15 @@ enum ScopeKind {
 }
 
 /// Represents the store for runtime state
-pub struct Runtime<'a> {
-    stack: Vec<Scope<'a>>,
-    globals: VarTable<'a>,
-    internals: VarTable<'a>,
+pub struct Runtime {
+    stack: Vec<Scope>,
+    globals: VarTable,
+    internals: VarTable,
     rng: rand::rngs::SmallRng,
 }
 
-impl<'a> exprs::VarsMap for Runtime<'a> {
-    fn get(&self, name: &str) -> Val {
+impl<'a> exprs::VarsMap for Runtime {
+    fn get(&self, name: &IdentName) -> Val {
         self.get_var(name).clone()
     }
 
@@ -68,7 +70,9 @@ impl<'a> exprs::VarsMap for Runtime<'a> {
     }
 }
 
-impl<'a> Runtime<'a> {
+static WAIT: Lazy<IdentName> = Lazy::new(|| "_wait".into());
+
+impl Runtime {
     fn new() -> Self {
         use rand::SeedableRng;
         // internal variables
@@ -76,7 +80,7 @@ impl<'a> Runtime<'a> {
 
         let internals = {
             let mut vt = VarTable::new();
-            vt.insert("_wait", Val::Bool(false));
+            vt.insert(WAIT.clone(), Val::Bool(false));
             vt
         };
 
@@ -92,13 +96,13 @@ impl<'a> Runtime<'a> {
 
     /// Declare a variable
     /// Aborts when the variable is already declared in the scope
-    fn decl_var(&mut self, name: &'a str, val: Val) {
+    fn decl_var(&mut self, name: IdentName, val: Val) {
         let var_table = if self.stack.is_empty() {
             &mut self.globals
         } else {
             &mut self.stack.last_mut().unwrap().vars
         };
-        if var_table.insert(name, val).is_some() {
+        if var_table.insert(name.clone(), val).is_some() {
             die!("Runtime error: variable {} is already declared", name);
         }
     }
@@ -133,11 +137,11 @@ impl<'a> Runtime<'a> {
     }
 
     /// Pop the current scope
-    fn pop(&mut self) -> Option<Scope<'a>> {
+    fn pop(&mut self) -> Option<Scope> {
         self.stack.pop()
     }
 
-    fn peek(&self) -> Option<&Scope<'a>> {
+    fn peek(&self) -> Option<&Scope> {
         self.stack.last()
     }
 
@@ -146,14 +150,14 @@ impl<'a> Runtime<'a> {
         self.stack.push(Scope::new(kind, ret_idx));
     }
 
-    fn vars_iter(&self) -> impl Iterator<Item = &VarTable<'a>> {
+    fn vars_iter(&self) -> impl Iterator<Item = &VarTable> {
         use std::iter::once;
         once(&self.internals)
             .chain(self.stack.iter().map(|f| &f.vars).rev())
             .chain(once(&self.globals))
     }
 
-    fn vars_iter_mut(&mut self) -> impl Iterator<Item = &mut VarTable<'a>> {
+    fn vars_iter_mut(&mut self) -> impl Iterator<Item = &mut VarTable> {
         use std::iter::once;
         once(&mut self.internals)
             .chain(self.stack.iter_mut().map(|f| &mut f.vars).rev())
@@ -161,7 +165,7 @@ impl<'a> Runtime<'a> {
     }
 
     // get the highest variable in the stack with the specified name
-    pub fn get_var(&self, name: &str) -> &Val {
+    pub fn get_var(&self, name: &IdentName) -> &Val {
         self.vars_iter()
             .map(|t| t.get(name))
             .find(Option::is_some)
@@ -169,7 +173,7 @@ impl<'a> Runtime<'a> {
             .expect("Variable must exist")
     }
 
-    fn get_var_mut(&mut self, name: &str) -> &mut Val {
+    fn get_var_mut(&mut self, name: &IdentName) -> &mut Val {
         self.vars_iter_mut()
             .map(|t| t.get_mut(name))
             .find(Option::is_some)
@@ -223,7 +227,7 @@ impl<'a> Runtime<'a> {
             writeln!(lock)?;
             lock.flush()?;
 
-            let wait = unwrap_bool(self.get_var("_wait"));
+            let wait = unwrap_bool(self.get_var(&WAIT));
 
             if wait {
                 write!(lock, "[Proceed with Enter⏎ ]")?;
@@ -322,7 +326,7 @@ pub fn run(prog: Ast) {
                 name,
                 offset_to_end,
             } => {
-                rt.decl_var(name, Val::Sub(i));
+                rt.decl_var(name.clone(), Val::Sub(i));
                 i += offset_to_end;
             }
             Statement::Call { name } => {
@@ -362,7 +366,7 @@ pub fn run(prog: Ast) {
                 let init_val = init.eval(&rt).unwrap_or_else(|e| {
                     die!("Runtime error: Failed to eval init value of Let: {}", e);
                 });
-                rt.decl_var(name, init_val);
+                rt.decl_var(name.clone(), init_val);
             }
             Statement::Modify { target, expr } => {
                 let to_value = expr.eval(&rt).unwrap_or_else(|e| {
@@ -566,7 +570,7 @@ pub fn run(prog: Ast) {
                             // loop ended
                             i += offset_to_end;
                         } else {
-                            rt.decl_var(counter, Val::Num(from));
+                            rt.decl_var(counter.clone(), Val::Num(from));
                             rt.push(ScopeKind::Loop, i);
                         }
                     } else {

@@ -55,7 +55,10 @@ fn handle_ident(vs: &[char]) -> (LangItem, usize) {
     while len < vs.len() && is_ident_char(vs[len]) {
         len += 1;
     }
-    (LangItem::Ident(vs[0..len].iter().collect()), len)
+    (
+        LangItem::Ident(vs[0..len].iter().collect::<String>().into()),
+        len,
+    )
 }
 
 fn handle_number(vs: &[char]) -> Result<(LangItem, usize), ErrorKind> {

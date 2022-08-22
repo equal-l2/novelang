@@ -26,7 +26,12 @@ macro_rules! expects {
 // expects_semi!(i, lexed);
 macro_rules! expects_semi {
     ($tks: ident, $last: ident) => {
-        expects!("Semicolon expected", crate::lex::LangItem::Semi, $tks, $last)
+        expects!(
+            "Semicolon expected",
+            crate::lex::LangItem::Semi,
+            $tks,
+            $last
+        )
     };
 }
 

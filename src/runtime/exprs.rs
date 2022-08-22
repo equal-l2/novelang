@@ -1,10 +1,11 @@
 use super::{Expr, Val};
 use crate::exprs::items::*;
+use crate::IdentName;
 
 pub type Result = std::result::Result<Val, EvalError>;
 
 pub trait VarsMap {
-    fn get(&self, name: &str) -> Val;
+    fn get(&self, name: &IdentName) -> Val;
     fn get_arr_elem<L: Eval, R: Eval>(&self, l: &L, r: &R) -> Result;
 }
 

@@ -1,15 +1,10 @@
 use crate::exprs::Expr;
+use crate::IdentName;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_more::From)]
 pub enum LVal {
-    Scalar(String),
+    Scalar(IdentName),
     Vector(Box<Self>, Box<Expr>),
-}
-
-impl From<String> for LVal {
-    fn from(s: String) -> Self {
-        Self::Scalar(s)
-    }
 }
 
 impl std::fmt::Display for LVal {

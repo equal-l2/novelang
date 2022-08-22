@@ -29,9 +29,9 @@ mod parse;
 mod runtime;
 mod semck;
 mod span;
+mod types;
 
-/// The type used to represent integer type
-pub type IntType = i64;
+pub use types::*;
 
 #[macro_export]
 macro_rules! die {

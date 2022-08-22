@@ -3,7 +3,7 @@ use crate::exprs::items::*;
 
 #[derive(Debug)]
 pub(super) enum TypeError {
-    VarNotFound(String),
+    VarNotFound(crate::IdentName),
     UnaryUndefined(Type),
     BinaryUndefined(Type, Type),
     Unexpected { expected: Type, actual: Type },

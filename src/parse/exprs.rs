@@ -266,19 +266,21 @@ impl<'a> TryFromTokens<'a> for Node {
 
         ensure_start!(tks, last);
 
-        Ok(if let Some(LangItem::Op(Ops::Add(op))) = tks.peek().item() {
-            let (from, _) = tks.next().unwrap();
-            let operand = Self::try_from_tokens(tks, last)?;
-            let to = operand.span().1;
-            let span = Span(from, to);
-            match op {
-                AddOps::Add => Self::Plus(Box::from(operand), span),
-                AddOps::Sub => Self::Minus(Box::from(operand), span),
-            }
-        } else {
-            let operand = Value::try_from_tokens(tks, last)?;
-            Self::Single(operand)
-        })
+        Ok(
+            if let Some(LangItem::Op(Ops::Add(op))) = tks.peek().item() {
+                let (from, _) = tks.next().unwrap();
+                let operand = Self::try_from_tokens(tks, last)?;
+                let to = operand.span().1;
+                let span = Span(from, to);
+                match op {
+                    AddOps::Add => Self::Plus(Box::from(operand), span),
+                    AddOps::Sub => Self::Minus(Box::from(operand), span),
+                }
+            } else {
+                let operand = Value::try_from_tokens(tks, last)?;
+                Self::Single(operand)
+            },
+        )
     }
 }
 

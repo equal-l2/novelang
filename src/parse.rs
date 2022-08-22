@@ -2,6 +2,7 @@ use crate::exprs::Expr;
 use crate::lex;
 use crate::lval::LVal;
 use crate::span::{Span, Spannable};
+use crate::IdentName;
 
 mod exprs;
 
@@ -33,7 +34,8 @@ pub enum NormalStmt {
         cond: Expr,
     },
     Call {
-        name: String,
+        // FUTURE: accept expression, allowing containing functions in an array
+        name: IdentName,
     },
     Halt,
     Input {
@@ -41,7 +43,7 @@ pub enum NormalStmt {
         target: LVal,
     },
     Let {
-        name: String,
+        name: IdentName,
         init: Expr,
         is_mut: bool,
     },
@@ -62,7 +64,7 @@ pub enum NormalStmt {
 #[derive(Debug, Clone)]
 pub enum BlockStmt {
     For {
-        counter: String,
+        counter: IdentName,
         from: Expr,
         to: Expr,
     },
@@ -81,7 +83,7 @@ pub enum BlockStmt {
     Else,
 
     Sub {
-        name: String,
+        name: IdentName,
     },
     Return,
 
@@ -221,7 +223,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .next()
                         .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
                     if let LangItem::Ident(name) = &tk.item {
-                        if name.starts_with('_') {
+                        if name.as_ref().starts_with('_') {
                             return Err(Error(
                                 "Identifier starts with _ is reserved".into(),
                                 i.into(),
@@ -343,7 +345,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
 
                     if let LangItem::Ident(name) = &tk.item {
-                        if name.starts_with('_') {
+                        if name.as_ref().starts_with('_') {
                             return Err(Error(
                                 "Identifier starts with _ is reserved".into(),
                                 i.into(),
