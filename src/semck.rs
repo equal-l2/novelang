@@ -299,30 +299,30 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         },
                     );
 
-                    if !success {
-                        errors.push(Error(
-                            format!("Conflicting variable name \"{}\"", name),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    } else {
+                    if success {
                         Some(Statement::Let {
                             name: name.clone(),
                             init,
                             is_mut,
                         })
+                    } else {
+                        errors.push(Error(
+                            format!("Conflicting variable name \"{}\"", name),
+                            Default::default(), // TODO: implement span retrieval
+                        ));
+                        None
                     }
                 }
                 NormalStmt::Modify { target, expr } => {
                     let lval_tinfo_opt = if let Some(info) = scope_stack.get_type_info(&target) {
-                        if !info.is_mut {
+                        if info.is_mut {
+                            Some(info)
+                        } else {
                             errors.push(Error(
                                 format!("LVal \"{}\" is immutable", target),
                                 Default::default(), // TODO: implement span retrieval
                             ));
                             None
-                        } else {
-                            Some(info)
                         }
                     } else {
                         errors.push(Error(
@@ -473,17 +473,17 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                 BlockStmt::While { cond } => {
                     scope_stack.push(ScopeKind::Loop, stmts.len());
                     let cond_ty = get_type(&cond, &scope_stack);
-                    if Type::Bool != cond_ty {
+                    if Type::Bool == cond_ty {
+                        Some(Statement::While {
+                            cond,
+                            offset_to_end: 0,
+                        })
+                    } else {
                         errors.push(Error(
                             format!("Expected Bool, found {}", cond_ty),
                             cond.span(),
                         ));
                         None
-                    } else {
-                        Some(Statement::While {
-                            cond,
-                            offset_to_end: 0,
-                        })
                     }
                 }
                 BlockStmt::Break => {
@@ -544,15 +544,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                 BlockStmt::ElIf { cond } => {
                     let prev_idx = scope_stack.pop();
 
-                    if prev_idx.is_none() {
-                        errors.push(Error(
-                            "A stray Else-If detected.".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    } else {
-                        let prev_idx = prev_idx.unwrap();
-
+                    if let Some(prev_idx) = prev_idx {
                         let offset_to_next = stmts.len() - prev_idx;
 
                         let prev = stmts[prev_idx].clone();
@@ -576,20 +568,18 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                             cond,
                             offset_to_next: 0,
                         })
+                    } else {
+                        errors.push(Error(
+                            "A stray Else-If detected.".to_string(),
+                            Default::default(), // TODO: implement span retrieval
+                        ));
+                        None
                     }
                 }
                 BlockStmt::Else => {
                     let prev_idx = scope_stack.pop();
 
-                    if prev_idx.is_none() {
-                        errors.push(Error(
-                            "A stray Else detected.".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    } else {
-                        let prev_idx = prev_idx.unwrap();
-
+                    if let Some(prev_idx) = prev_idx {
                         let offset_to_next = stmts.len() - prev_idx;
 
                         let prev = stmts[prev_idx].clone();
@@ -609,6 +599,12 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         };
                         scope_stack.push(ScopeKind::Other, stmts.len());
                         Some(Statement::Else { offset_to_end: 0 })
+                    } else {
+                        errors.push(Error(
+                            "A stray Else detected.".to_string(),
+                            Default::default(), // TODO: implement span retrieval
+                        ));
+                        None
                     }
                 }
                 BlockStmt::Sub { name } => {
@@ -624,17 +620,17 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         },
                     );
 
-                    if !success {
+                    if success {
+                        Some(Statement::Sub {
+                            name: name.clone(),
+                            offset_to_end: 0,
+                        })
+                    } else {
                         errors.push(Error(
                             format!("Conflicting subroutine name \"{}\"", name),
                             Default::default(), // TODO: implement span retrieval
                         ));
                         None
-                    } else {
-                        Some(Statement::Sub {
-                            name: name.clone(),
-                            offset_to_end: 0,
-                        })
                     }
                 }
                 BlockStmt::Return => {
@@ -661,15 +657,7 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                     // Pop stack and assign end index
                     let prev_idx = scope_stack.pop();
 
-                    if prev_idx.is_none() {
-                        errors.push(Error(
-                            "A stray End detected.".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    } else {
-                        let prev_idx = prev_idx.unwrap();
-
+                    if let Some(prev_idx) = prev_idx {
                         let offset_to_end = stmts.len() - prev_idx;
 
                         let prev = stmts[prev_idx].clone();
@@ -706,6 +694,12 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         };
 
                         Some(Statement::End)
+                    } else {
+                        errors.push(Error(
+                            "A stray End detected.".to_string(),
+                            Default::default(), // TODO: implement span retrieval
+                        ));
+                        None
                     }
                 }
             },

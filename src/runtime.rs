@@ -48,7 +48,7 @@ pub struct Runtime {
     rng: rand::rngs::SmallRng,
 }
 
-impl<'a> exprs::VarsMap for Runtime {
+impl exprs::VarsMap for Runtime {
     fn get(&self, name: &IdentName) -> Val {
         self.get_var(name).clone()
     }
@@ -559,7 +559,18 @@ pub fn run(prog: Ast) {
                         })),
                     );
 
-                    if !on_for {
+                    if on_for {
+                        let cnt = { unwrap_num(rt.get_var_mut(counter)) };
+
+                        if cnt >= to {
+                            // loop ended
+                            i += offset_to_end;
+                        } else {
+                            // loop continues
+                            *rt.get_var_mut(counter) = Val::Num(cnt + 1);
+                            rt.push(ScopeKind::Loop, i);
+                        }
+                    } else {
                         // create counter
                         rt.push(ScopeKind::ForWrap, i);
                         let from = unwrap_num(&from.eval(&rt).unwrap_or_else(|e| {
@@ -571,17 +582,6 @@ pub fn run(prog: Ast) {
                             i += offset_to_end;
                         } else {
                             rt.decl_var(counter.clone(), Val::Num(from));
-                            rt.push(ScopeKind::Loop, i);
-                        }
-                    } else {
-                        let cnt = { unwrap_num(rt.get_var_mut(counter)) };
-
-                        if cnt >= to {
-                            // loop ended
-                            i += offset_to_end;
-                        } else {
-                            // loop continues
-                            *rt.get_var_mut(counter) = Val::Num(cnt + 1);
                             rt.push(ScopeKind::Loop, i);
                         }
                     }

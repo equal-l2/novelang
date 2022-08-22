@@ -20,6 +20,7 @@ pub struct ExprError {
     span: Span,
 }
 
+#[allow(clippy::missing_const_for_fn)]
 impl ExprError {
     fn exhausted(from: usize, to: usize) -> Self {
         Self {

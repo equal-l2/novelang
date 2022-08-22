@@ -9,17 +9,18 @@
     clippy::nursery
 )]
 #![allow(
-    clippy::enum_glob_use,
-    clippy::similar_names,
-    clippy::use_self,
-    clippy::wildcard_imports,
     clippy::cast_possible_truncation,
-    clippy::many_single_char_names,
-    clippy::match_on_vec_items,
-    clippy::non_ascii_literal,
     clippy::cast_sign_loss,
     clippy::default_trait_access,
-    clippy::option_if_let_else
+    clippy::enum_glob_use,
+    clippy::many_single_char_names,
+    clippy::match_on_vec_items,
+    clippy::needless_pass_by_value,
+    clippy::non_ascii_literal,
+    clippy::option_if_let_else,
+    clippy::similar_names,
+    clippy::use_self,
+    clippy::wildcard_imports
 )]
 
 mod exprs;

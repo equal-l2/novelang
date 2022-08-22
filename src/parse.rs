@@ -153,19 +153,15 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                         .peek()
                         .ok_or_else(|| Error("expected With or Semicolon".into(), last.into()))?;
 
-                    let mesg;
-                    let cond;
-                    if tk.item == LangItem::Key(Keyword::With) {
+                    let (mesg, cond) = if tk.item == LangItem::Key(Keyword::With) {
                         // with string
                         let _ = tks.next().unwrap();
-                        mesg = expr1;
                         let expr2 = parse_expr(&mut tks, last)?;
-                        cond = expr2;
+                        (expr1, expr2)
                     } else {
                         // without string
-                        mesg = Expr::from(expr1.to_string());
-                        cond = expr1;
-                    }
+                        (Expr::from(expr1.to_string()), expr1)
+                    };
                     expects_semi!(tks, last);
 
                     NormalStmt::Assert { mesg, cond }
