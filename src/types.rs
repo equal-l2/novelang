@@ -1,5 +1,6 @@
 use derive_more::*;
 #[derive(Debug, Clone, PartialEq, Eq, From, Display, Hash, AsRef)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct IdentName(String);
 
 impl From<&str> for IdentName {

@@ -1,5 +1,6 @@
+pub mod items;
+
 mod fragments;
-mod items;
 mod macros;
 mod utils;
 
@@ -179,7 +180,6 @@ pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
                                     item
                                 }
                                 Err(kind) => {
-                                    eprintln!("{:?}", tks);
                                     return Err(Error {
                                         loc_info: LocWithLine {
                                             line: l.clone(),
@@ -196,7 +196,6 @@ pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
                                 item
                             }
                             Err(kind) => {
-                                eprintln!("{:?}", tks);
                                 return Err(Error {
                                     loc_info: LocWithLine {
                                         line: l.clone(),

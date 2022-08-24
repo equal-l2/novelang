@@ -49,6 +49,7 @@ decl_reserved!(Command, {
 });
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Ops {
     Log(LogOps),
     Equ(EquOps),
@@ -86,6 +87,24 @@ decl_ops!(MulOps,{
 });
 
 impl LangItem {
+    pub fn to_string(&self) -> String {
+        use LangItem::*;
+        match self {
+            Key(i) => i.as_str().into(),
+            Cmd(i) => i.as_str().into(),
+            Op(i) => i.as_str().into(),
+            Num(i, _) => i.to_string(),
+            Ident(i) => i.as_ref().into(),
+            Str(i) => i.clone(),
+            Semi => ";".into(),
+            Comma => ",".into(),
+            LPar => "(".into(),
+            RPar => ")".into(),
+            LBra => "[".into(),
+            RBra => "]".into(),
+        }
+    }
+
     pub fn len(&self) -> usize {
         use LangItem::*;
         match self {

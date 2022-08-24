@@ -2,6 +2,7 @@
 macro_rules! decl_reserved {
     ($name: ident, { $( $var:ident => $str:literal ),+ $(,)? }) => {
         #[derive(Debug, Clone, PartialEq, Eq)]
+        #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
         pub enum $name {
             $(
                 $var
@@ -47,6 +48,7 @@ macro_rules! decl_reserved {
 macro_rules! decl_ops {
     ($name: ident, { $( $var:ident => $str:literal ),+ $(,)? }) => {
         #[derive(Debug, Clone, PartialEq, Eq)]
+        #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
         pub enum $name {
             $(
                 $var

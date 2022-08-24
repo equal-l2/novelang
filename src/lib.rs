@@ -34,6 +34,8 @@ mod semck;
 mod span;
 mod types;
 
+pub mod fuzz_utils;
+
 pub enum Error {
     Lex(lex::Error),
     Parse(lex::Lexed, parse::Error),
