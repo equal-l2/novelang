@@ -5,7 +5,7 @@ use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::semck::{Ast, Statement};
-use crate::types::{IntType, IdentName};
+use crate::types::{IdentName, IntType};
 use once_cell::sync::Lazy;
 
 use exprs::Eval;

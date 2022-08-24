@@ -40,7 +40,7 @@ fn main() {
 
     let insts = novelang::compile(&s).unwrap_or_else(|e| {
         eprintln!("{e}");
-        die!("Exitting...");
+        die!("Exiting...");
     });
     eprintln!("Info: Load completed");
 

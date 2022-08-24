@@ -214,22 +214,26 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                         let offset_to_next = stmts.len() - prev_idx;
 
                         let prev = stmts[prev_idx].clone();
-                        stmts[prev_idx] = match prev {
+                        match prev {
                             Statement::Block(BlockStmt::If { cond, .. }) => {
-                                Statement::Block(BlockStmt::If {
+                                stmts[prev_idx] = Statement::Block(BlockStmt::If {
                                     cond: cond.clone(),
                                     offset_to_next,
                                 })
                             }
                             Statement::Block(BlockStmt::ElIf { cond, .. }) => {
-                                Statement::Block(BlockStmt::ElIf {
+                                stmts[prev_idx] = Statement::Block(BlockStmt::ElIf {
                                     cond: cond.clone(),
                                     offset_to_next,
                                 })
                             }
                             _ => {
-                                // TODO: how can this happen?
-                                panic!("Invalid statement was finding Else-If");
+                                // example: "Else;Else If something;"
+                                // the second Else-If pops the scope of the first Else
+                                errors.push(Error {
+                                    kind: ErrorKind::NoPairIfOrElif,
+                                    span: span.clone(),
+                                });
                             }
                         };
                     } else {
@@ -252,22 +256,26 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                         let offset_to_next = stmts.len() - prev_idx;
 
                         let prev = stmts[prev_idx].clone();
-                        stmts[prev_idx] = match prev {
+                        match prev {
                             Statement::Block(BlockStmt::If { cond, .. }) => {
-                                Statement::Block(BlockStmt::If {
+                                stmts[prev_idx] = Statement::Block(BlockStmt::If {
                                     cond: cond.clone(),
                                     offset_to_next,
                                 })
                             }
                             Statement::Block(BlockStmt::ElIf { cond, .. }) => {
-                                Statement::Block(BlockStmt::ElIf {
+                                stmts[prev_idx] = Statement::Block(BlockStmt::ElIf {
                                     cond: cond.clone(),
                                     offset_to_next,
                                 })
                             }
                             _ => {
-                                // TODO: proper error handle
-                                panic!("Invalid statement was finding Else");
+                                // example: "Else;Else;"
+                                // the second Else pops the scope of the first Else
+                                errors.push(Error {
+                                    kind: ErrorKind::NoPairIfOrElif,
+                                    span: span.clone(),
+                                });
                             }
                         };
                     } else {
