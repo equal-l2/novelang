@@ -2,7 +2,7 @@ use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::span::*;
-use crate::IdentName;
+use crate::types::IdentName;
 
 mod exprs;
 mod types;

@@ -9,7 +9,7 @@ pub struct Error {
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    VariableNotFound(crate::IdentName),
+    VariableNotFound(crate::types::IdentName),
     UnaryUndefined(&'static str, Type),
     BinaryUndefined(&'static str, Type, Type),
     NonNumIndex(Type),

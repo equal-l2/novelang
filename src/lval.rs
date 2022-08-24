@@ -1,5 +1,5 @@
 use crate::exprs::Expr;
-use crate::IdentName;
+use crate::types::IdentName;
 
 #[derive(Clone, Debug, derive_more::From)]
 pub enum LVal {

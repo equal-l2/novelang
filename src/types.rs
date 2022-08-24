@@ -10,3 +10,13 @@ impl From<&str> for IdentName {
 
 /// The type used to represent integer type
 pub type IntType = i64;
+
+#[macro_export]
+macro_rules! die {
+    ($( $x:expr ),*) => {
+        {
+            eprintln!($($x,)*);
+            std::process::exit(1)
+        }
+    }
+}

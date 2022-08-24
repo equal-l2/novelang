@@ -1,4 +1,4 @@
-use crate::IntType;
+use crate::types::IntType;
 
 /// The typed content of a variable
 #[derive(Debug, Clone)]

@@ -1,13 +1,11 @@
 mod exprs;
 mod val;
 
-use super::IntType;
-
 use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::semck::{Ast, Statement};
-use crate::IdentName;
+use crate::types::{IntType, IdentName};
 use once_cell::sync::Lazy;
 
 use exprs::Eval;

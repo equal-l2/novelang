@@ -56,8 +56,8 @@ pub enum Value {
 #[derive(Clone, Debug)]
 pub enum Core {
     Str(String, Span),
-    Num(crate::IntType, Span),
-    Ident(crate::IdentName, Span),
+    Num(crate::types::IntType, Span),
+    Ident(crate::types::IdentName, Span),
     True(Span),
     False(Span),
     Paren(Box<TopItem>, Span),

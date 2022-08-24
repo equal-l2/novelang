@@ -1,7 +1,7 @@
 use crate::exprs::Expr;
 use crate::parse;
 use crate::span::Span;
-use crate::IdentName;
+use crate::types::IdentName;
 
 #[derive(Debug)]
 pub struct Error {

@@ -116,7 +116,7 @@ impl std::fmt::Display for Error {
             ErrorKind::TooLongNum => write!(
                 f,
                 "Number is too long for {}-bit integer",
-                std::mem::size_of::<crate::IntType>() * 8
+                std::mem::size_of::<crate::types::IntType>() * 8
             )?,
         };
         let l = &self.loc_info;

@@ -1,6 +1,6 @@
 use super::{Expr, Val};
 use crate::exprs::items::*;
-use crate::IdentName;
+use crate::types::IdentName;
 
 pub type Result = std::result::Result<Val, EvalError>;
 
