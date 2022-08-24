@@ -1,7 +1,9 @@
 let n be [0]*3 asmut;
 
+# first digit
 roll 1 die with 9 faces to n[0];
 
+# second digit
 while true;
     roll 1 die with 9 faces to n[1];
     if n[0] != n[1];
@@ -9,6 +11,7 @@ while true;
     end;
 end;
 
+# third digit
 while true;
     roll 1 die with 9 faces to n[2];
     if n[0] != n[2] && n[1] != n[2];
@@ -20,7 +23,13 @@ print "chosen:", n[0], n[1], n[2];
 
 while true;
     let in_num be 0 asmut;
-    input "Input 3-digit" to in_num;
+    input "Input a 3-digit number" to in_num;
+
+    if -(100 <= in && in <= 999);
+        print "the number you input is not 3-digit, try again!";
+        continue;
+    end;
+
     let in be [in_num/100, (in_num/10)%10, in_num%10];
     print in[0], in[1], in[2];
 

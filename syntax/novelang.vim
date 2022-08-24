@@ -17,7 +17,7 @@ syntax keyword Statement Sub Call nextgroup=FuncName skipwhite skipempty
 syntax keyword Boolean True False
 syntax keyword StorageClass AsMut
 syntax keyword Conditional If Else
-syntax match Comment '^\s*#.*$' display
+syntax match Comment '#.*$' display
 syntax match FuncName '[^[:cntrl:][:space:][:digit:][:punct:]]\%([^[:cntrl:][:space:][:punct:]]\|_\)*' contained display
 syntax match Operator '&&\|||\|+\|-\|*\|/\|%\|<\|>\|=\|!' display
 syntax match Number '\<\d*\>' display

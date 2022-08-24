@@ -5,6 +5,7 @@ pub enum Type {
     Str,
     Sub,
     Arr(Box<Self>),
+    Invalid,
 }
 
 impl std::fmt::Display for Type {
@@ -21,6 +22,7 @@ impl Type {
             Self::Str => "Str".to_owned(),
             Self::Sub => "Sub".to_owned(),
             Self::Arr(i) => format!("Arr[{}]", i.typename()),
+            Self::Invalid => "Invalid".to_owned(),
         }
     }
 

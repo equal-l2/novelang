@@ -1,3 +1,4 @@
+// Cotains the index of the start token and the end token
 #[derive(Clone, Debug, Default)]
 pub struct Span(pub usize, pub usize);
 

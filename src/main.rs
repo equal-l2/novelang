@@ -15,6 +15,7 @@
     clippy::enum_glob_use,
     clippy::many_single_char_names,
     clippy::match_on_vec_items,
+    clippy::module_name_repetitions,
     clippy::needless_pass_by_value,
     clippy::non_ascii_literal,
     clippy::option_if_let_else,
@@ -23,6 +24,7 @@
     clippy::wildcard_imports
 )]
 
+mod block;
 mod exprs;
 mod lex;
 mod lval;
@@ -98,12 +100,27 @@ fn main() {
     });
     eprintln!("{:?}", parsed.stmts);
 
-    eprintln!("Info: Checking semantics");
-    let ast = semck::check_semantics(parsed).unwrap_or_else(|es| {
+    eprintln!("Info: Checking block syntax");
+    let block_checked = block::check_block(parsed).unwrap_or_else(|es| {
         let len = es.len();
         for e in es {
-            let info = lexed.generate_error_mesg(e.1 .0);
-            eprintln!("Error: {}\n{}", e.0, info);
+            let info = lexed.generate_error_mesg(e.span.0);
+            eprintln!("Error: {}\n{}", e.kind, info);
+        }
+        if len == 1 {
+            die!("A block syntax error was found, quitting...")
+        } else {
+            die!("{} block syntax errors was found, quitting...", len)
+        }
+    });
+    eprintln!("{:?}", block_checked.stmts);
+
+    eprintln!("Info: Checking semantics");
+    let final_insts = semck::check_semantics(block_checked).unwrap_or_else(|es| {
+        let len = es.len();
+        for e in es {
+            let info = lexed.generate_error_mesg(e.span.0);
+            eprintln!("Error: {}\n{}", e.kind, info);
         }
         if len == 1 {
             die!("A semantic error was found, quitting...")
@@ -111,8 +128,8 @@ fn main() {
             die!("{} semantic errors was found, quitting...", len)
         }
     });
-    eprintln!("{:?}", ast.stmts);
+    eprintln!("{:?}", final_insts.stmts);
     eprintln!("Info: Load completed");
 
-    runtime::run(ast);
+    runtime::run(final_insts);
 }

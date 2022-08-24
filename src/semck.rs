@@ -1,3 +1,4 @@
+use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::span::*;
@@ -6,23 +7,7 @@ use crate::IdentName;
 mod exprs;
 mod types;
 
-#[macro_use]
-mod utils;
-
-use exprs::TypeError;
 use types::Type;
-use utils::*;
-
-#[derive(Debug)]
-enum ParseError {
-    TypeError(TypeError),
-}
-
-impl From<TypeError> for ParseError {
-    fn from(e: TypeError) -> Self {
-        Self::TypeError(e)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -102,25 +87,16 @@ struct TypeInfo {
 
 type VarMap = std::collections::HashMap<IdentName, TypeInfo>;
 
-#[derive(Clone)]
-enum ScopeKind {
-    Loop,
-    Sub,
-    Other,
-}
-
-// TODO: have the starting stmt as a reference to provide proper error message
+#[derive(Debug)]
 struct Scope {
     map: VarMap,
-    kind: ScopeKind,
     ret_idx: usize,
 }
 
 impl Scope {
-    fn new(kind: ScopeKind, ret_idx: usize) -> Self {
+    fn new(ret_idx: usize) -> Self {
         Self {
             map: VarMap::new(),
-            kind,
             ret_idx,
         }
     }
@@ -144,26 +120,27 @@ struct ScopeStack {
 }
 
 impl ScopeStack {
+    const INTERNAL_VARS: &'static [(&'static str, Type)] =
+        &[("_wait", Type::Bool), ("_explicit_assert", Type::Bool)];
+
     fn new() -> Self {
-        let mut internals = Scope::new(ScopeKind::Other, 0);
-        internals.add_var(
-            IdentName::from("_wait"),
-            TypeInfo {
-                ty: Type::Bool,
-                is_mut: true,
-            },
-        );
+        let mut internals = Scope::new(0);
+        for var in Self::INTERNAL_VARS {
+            internals.add_var(
+                IdentName::from(var.0),
+                TypeInfo {
+                    ty: var.1.clone(),
+                    is_mut: true,
+                },
+            );
+        }
         Self {
             scopes: vec![internals],
         }
     }
 
-    fn kinds(&self) -> Vec<&ScopeKind> {
-        self.scopes.iter().map(|sc| &sc.kind).rev().collect()
-    }
-
-    fn push(&mut self, kind: ScopeKind, ret_idx: usize) {
-        self.scopes.push(Scope::new(kind, ret_idx));
+    fn push(&mut self, ret_idx: usize) {
+        self.scopes.push(Scope::new(ret_idx));
     }
 
     fn pop(&mut self) -> Option<usize> {
@@ -204,6 +181,7 @@ impl ScopeStack {
                         ty: (*i).clone(),
                         is_mut,
                     }),
+                    // TODO: fix panic with non-array indexing
                     Some(_) => unreachable!(),
                     None => None,
                 }
@@ -216,81 +194,142 @@ impl ScopeStack {
     }
 }
 
-pub struct Error(pub String, pub Span);
+pub struct Error {
+    pub kind: ErrorKind,
+    pub span: Span,
+}
 
-// TODO: move block analysis (while, for, if&else, sub) to the separate module `parse_block` (after parse, before semck)
-pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> {
-    use crate::parse::{BlockStmt, NormalStmt, Statement as ParsedStmt};
+pub enum ErrorKind {
+    VariableAlreadyDefined(IdentName),
+    SubroutineNotFound(IdentName),
+    SubroutineAlreadyDefined(IdentName),
+    NonPrintable(Type),
+    TypeMismatch {
+        // Expected <some-type>
+        expected: Type,
+        actual: Type,
+    },
+    Expr(exprs::ErrorKind),
+    Other(String),
+}
+
+impl std::fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorKind::VariableAlreadyDefined(name) => {
+                write!(f, "Variable named {} is already defined", name)
+            }
+            ErrorKind::SubroutineNotFound(name) => {
+                write!(f, "Subroutine named {} was not found", name)
+            }
+            ErrorKind::SubroutineAlreadyDefined(name) => {
+                write!(f, "Subroutine named {} is already defined", name)
+            }
+            ErrorKind::NonPrintable(ty) => write!(f, "Type {} is not printable", ty),
+            ErrorKind::TypeMismatch { expected, actual } => {
+                write!(f, "Expected type {}, found {}", expected, actual)
+            }
+            ErrorKind::Expr(e) => write!(f, "{}", e),
+            ErrorKind::Other(error) => write!(f, "{}", error),
+        }
+    }
+}
+
+macro_rules! check_expr_type {
+    ($expr: ident, $expected: expr, $scope_stack: ident, $errors: ident) => {
+        match $expr.check_type(&$scope_stack) {
+            Ok(ty) if ty == $expected => { /* OK */ }
+            Ok(ty) => {
+                $errors.push(Error {
+                    kind: ErrorKind::TypeMismatch {
+                        expected: $expected,
+                        actual: ty,
+                    },
+                    span: $expr.span(),
+                });
+            }
+            Err(e) => {
+                $errors.push(Error {
+                    kind: ErrorKind::Expr(e.kind),
+                    span: e.span,
+                });
+            }
+        }
+    };
+}
+
+macro_rules! get_type {
+    ($expr: ident, $scope_stack: ident, $errors: ident) => {
+        match $expr.check_type(&$scope_stack) {
+            Ok(ty) => ty,
+            Err(e) => {
+                $errors.push(Error {
+                    kind: ErrorKind::Expr(e.kind),
+                    span: e.span,
+                });
+                Type::Invalid
+            }
+        }
+    };
+}
+
+pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Error>> {
+    use crate::block::{BlockStmt, Statement as ParsedStmt};
+    use crate::parse::NormalStmt;
+    use exprs::TypeCheck;
     let mut stmts = Vec::<Statement>::new();
     let mut scope_stack = ScopeStack::new();
     let mut errors = vec![];
 
     for parsed_stmt in parsed.stmts {
-        let stmt_opt: Option<_> = match parsed_stmt {
+        stmts.push(match parsed_stmt {
             ParsedStmt::Normal(normal) => match normal {
                 NormalStmt::Assert { mesg, cond } => {
-                    let mut failure = false;
-                    let mesg_ty = get_type(&mesg, &scope_stack);
-                    if mesg_ty != Type::Str {
-                        errors.push(Error("Expected Str".to_string(), mesg.span()));
-                        failure = true;
-                    }
-
-                    let cond_ty = get_type(&cond, &scope_stack);
-                    if cond_ty != Type::Bool {
-                        errors.push(Error("Expected Bool".to_string(), cond.span()));
-                        failure = true;
-                    }
-
-                    if failure {
-                        None
-                    } else {
-                        Some(Statement::Assert { mesg, cond })
-                    }
+                    check_expr_type!(mesg, Type::Str, scope_stack, errors);
+                    check_expr_type!(cond, Type::Bool, scope_stack, errors);
+                    Statement::Assert { mesg, cond }
                 }
                 NormalStmt::Call { name } => {
                     let info = scope_stack.get_type_info(&LVal::Scalar(name.clone()));
                     if info.is_none() || info.unwrap().ty != Type::Sub {
-                        errors.push(Error(
-                            format!("Subroutine \"{}\" was not found", name),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    } else {
-                        Some(Statement::Call { name: name.clone() })
+                        errors.push(Error {
+                            kind: ErrorKind::SubroutineNotFound(name.clone()),
+                            span: Default::default(), // TODO: implement span retrieval
+                        });
                     }
+                    Statement::Call { name: name.clone() }
                 }
-                NormalStmt::Halt => Some(Statement::Halt),
+                NormalStmt::Halt => Statement::Halt,
                 NormalStmt::Input { prompt, target } => {
-                    let as_num_opt = if let Some(info) = scope_stack.get_type_info(&target) {
+                    let as_num = if let Some(info) = scope_stack.get_type_info(&target) {
                         if !info.is_mut {
-                            errors.push(Error(
-                                format!("LVal \"{}\" is immutable", target),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
+                            errors.push(Error {
+                                kind: ErrorKind::Other(format!("LVal \"{}\" is immutable", target)),
+                                span: Default::default(), // TODO: implement span retrieval
+                            });
                         }
-                        Some(match info.ty {
+                        match info.ty {
                             Type::Num => true,
                             Type::Str => false,
                             // TODO: proper error handling
                             _ => die!("Expected Num or Str, found {}", info.ty),
-                        })
+                        }
                     } else {
-                        errors.push(Error(
-                            format!("LVal \"{}\" is invalid", target),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
+                        errors.push(Error {
+                            kind: ErrorKind::Other(format!("LVal \"{}\" is invalid", target)),
+                            span: Default::default(), // TODO: implement span retrieval
+                        });
+                        false
                     };
 
-                    as_num_opt.map(|as_num| Statement::Input {
+                    Statement::Input {
                         prompt,
                         target,
                         as_num,
-                    })
+                    }
                 }
                 NormalStmt::Let { name, init, is_mut } => {
-                    let init_ty = get_type(&init, &scope_stack);
+                    let init_ty = get_type!(init, scope_stack, errors);
                     let success = scope_stack.add_var(
                         name.clone(),
                         TypeInfo {
@@ -299,156 +338,99 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         },
                     );
 
-                    if success {
-                        Some(Statement::Let {
-                            name: name.clone(),
-                            init,
-                            is_mut,
-                        })
-                    } else {
-                        errors.push(Error(
-                            format!("Conflicting variable name \"{}\"", name),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
+                    if !success {
+                        errors.push(Error {
+                            kind: ErrorKind::VariableAlreadyDefined(name.clone()),
+                            span: Default::default(), // TODO: implement span retrieval
+                        });
+                    }
+                    Statement::Let {
+                        name: name.clone(),
+                        init,
+                        is_mut,
                     }
                 }
                 NormalStmt::Modify { target, expr } => {
-                    let lval_tinfo_opt = if let Some(info) = scope_stack.get_type_info(&target) {
-                        if info.is_mut {
-                            Some(info)
-                        } else {
-                            errors.push(Error(
-                                format!("LVal \"{}\" is immutable", target),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
-                            None
+                    if let Some(info) = scope_stack.get_type_info(&target) {
+                        if !info.is_mut {
+                            errors.push(Error {
+                                kind: ErrorKind::Other(format!("LVal \"{}\" is immutable", target)),
+                                span: Default::default(), // TODO: implement span retrieval
+                            });
                         }
+                        check_expr_type!(expr, info.ty, scope_stack, errors);
                     } else {
-                        errors.push(Error(
-                            format!("LVal \"{}\" is invalid", target),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    };
-
-                    if let Some(lval_tinfo) = lval_tinfo_opt {
-                        let expr_ty = get_type(&expr, &scope_stack);
-
-                        if lval_tinfo.ty == expr_ty {
-                            Some(Statement::Modify { target, expr })
-                        } else {
-                            errors.push(Error(
-                                format!(
-                                    "Type mismatch, expected {}, got {}",
-                                    lval_tinfo.ty, expr_ty
-                                ),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
-                            None
-                        }
-                    } else {
-                        None
+                        errors.push(Error {
+                            kind: ErrorKind::Other(format!("LVal \"{}\" is invalid", target)),
+                            span: Default::default(), // TODO: implement span retrieval
+                        });
                     }
+
+                    Statement::Modify { target, expr }
                 }
                 NormalStmt::Print { args } => {
-                    let mut failure = false;
                     for a in &args {
-                        let ty = get_type(a, &scope_stack);
+                        let ty = get_type!(a, scope_stack, errors);
                         if !ty.is_printable() {
-                            errors.push(Error(
-                                format!("Value of type {} cannot be printed", ty),
-                                a.span(),
-                            ));
-                            failure = true;
+                            errors.push(Error {
+                                kind: ErrorKind::NonPrintable(ty),
+                                span: a.span(),
+                            });
                         }
                     }
 
-                    if failure {
-                        None
-                    } else {
-                        Some(Statement::Print { args: args.clone() })
-                    }
+                    Statement::Print { args: args.clone() }
                 }
                 NormalStmt::Roll {
                     count,
                     face,
                     target,
                 } => {
-                    let mut failure = false;
-                    let count_ty = get_type(&count, &scope_stack);
-                    if count_ty != Type::Num {
-                        errors.push(Error(
-                            format!("Expected Num, found {}", count_ty),
-                            count.span(),
-                        ));
-                        failure = true;
-                    }
-
-                    let face_ty = get_type(&face, &scope_stack);
-                    if face_ty != Type::Num {
-                        errors.push(Error(
-                            format!("Expected Num, found {}", face_ty),
-                            face.span(),
-                        ));
-                        failure = true;
-                    }
+                    check_expr_type!(count, Type::Num, scope_stack, errors);
+                    check_expr_type!(face, Type::Num, scope_stack, errors);
 
                     if let Some(info) = scope_stack.get_type_info(&target) {
                         if info.ty != Type::Num {
-                            errors.push(Error(
-                                format!("Expected Num, found {}", info.ty),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
-                            failure = true;
+                            errors.push(Error {
+                                kind: ErrorKind::TypeMismatch {
+                                    expected: Type::Num,
+                                    actual: info.ty,
+                                },
+                                span: Default::default(), // TODO: implement span retrieval
+                            });
                         }
                         if !info.is_mut {
-                            errors.push(Error(
-                                format!("LVal \"{}\" is immutable", target),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
-                            failure = true;
+                            errors.push(Error {
+                                kind: ErrorKind::Other(format!("LVal \"{}\" is immutable", target)),
+                                span: Default::default(), // TODO: implement span retrieval
+                            });
                         }
                     } else {
-                        errors.push(Error(
-                            format!("LVal \"{}\" is invalid", target),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        failure = true;
+                        errors.push(Error {
+                            kind: ErrorKind::Other(format!("LVal \"{}\" is invalid", target)),
+                            span: Default::default(), // TODO: implement span retrieval
+                        });
                     };
 
-                    if failure {
-                        None
-                    } else {
-                        Some(Statement::Roll {
-                            count,
-                            face,
-                            target,
-                        })
+                    Statement::Roll {
+                        count,
+                        face,
+                        target,
                     }
                 }
             },
-            ParsedStmt::Block(block, _) => match block {
-                BlockStmt::For { counter, from, to } => {
+            ParsedStmt::Block(block) => match block {
+                BlockStmt::For {
+                    counter,
+                    from,
+                    to,
+                    offset_to_end,
+                } => {
                     // "For" <name> "from" <expr> "to" <expr> ";"
-                    let mut failure = false;
+                    check_expr_type!(from, Type::Num, scope_stack, errors);
+                    check_expr_type!(to, Type::Num, scope_stack, errors);
 
-                    let from_ty = get_type(&from, &scope_stack);
-                    if from_ty != Type::Num {
-                        errors.push(Error(
-                            format!("Expected Num, found {}", from_ty),
-                            from.span(),
-                        ));
-                        failure = true;
-                    }
-
-                    let to_ty = get_type(&to, &scope_stack);
-                    if to_ty != Type::Num {
-                        errors.push(Error(format!("Expected Num, found {}", to_ty), to.span()));
-                        failure = true;
-                    }
-
-                    scope_stack.push(ScopeKind::Loop, stmts.len());
+                    scope_stack.push(stmts.len());
 
                     // always successful because we are pushing it to a new scope
                     let _ = scope_stack.add_var(
@@ -459,159 +441,68 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         },
                     );
 
-                    if failure {
-                        None
-                    } else {
-                        Some(Statement::For {
-                            counter,
-                            from,
-                            to,
-                            offset_to_end: 0,
-                        })
+                    Statement::For {
+                        counter,
+                        from,
+                        to,
+                        offset_to_end,
                     }
                 }
-                BlockStmt::While { cond } => {
-                    scope_stack.push(ScopeKind::Loop, stmts.len());
-                    let cond_ty = get_type(&cond, &scope_stack);
-                    if Type::Bool == cond_ty {
-                        Some(Statement::While {
-                            cond,
-                            offset_to_end: 0,
-                        })
-                    } else {
-                        errors.push(Error(
-                            format!("Expected Bool, found {}", cond_ty),
-                            cond.span(),
-                        ));
-                        None
+                BlockStmt::While {
+                    cond,
+                    offset_to_end,
+                } => {
+                    scope_stack.push(stmts.len());
+                    check_expr_type!(cond, Type::Bool, scope_stack, errors);
+                    Statement::While {
+                        cond,
+                        offset_to_end,
                     }
                 }
-                BlockStmt::Break => {
-                    let mut loop_found = false;
-                    for k in scope_stack.kinds() {
-                        match k {
-                            ScopeKind::Loop => {
-                                loop_found = true;
-                                break;
-                            }
-                            ScopeKind::Sub => break,
-                            _ => {}
-                        }
-                    }
-
-                    if loop_found {
-                        Some(Statement::Break)
-                    } else {
-                        errors.push(Error(
-                            "Break must be in a loop".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    }
-                }
+                BlockStmt::Break => Statement::Break,
                 BlockStmt::Continue => {
                     // "Continue" ";"
-                    let mut loop_found = false;
-                    for k in scope_stack.kinds() {
-                        match k {
-                            ScopeKind::Loop => {
-                                loop_found = true;
-                                break;
-                            }
-                            ScopeKind::Sub => break,
-                            _ => {}
-                        }
-                    }
-
-                    if loop_found {
-                        Some(Statement::Continue)
-                    } else {
-                        errors.push(Error(
-                            "Break must be in a loop".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    }
+                    Statement::Continue
                 }
-                BlockStmt::If { cond } => {
-                    scope_stack.push(ScopeKind::Other, stmts.len());
+                BlockStmt::If {
+                    cond,
+                    offset_to_next,
+                } => {
+                    scope_stack.push(stmts.len());
 
-                    Some(Statement::If {
+                    check_expr_type!(cond, Type::Bool, scope_stack, errors);
+
+                    Statement::If {
                         cond,
-                        offset_to_next: 0,
-                    })
-                }
-                BlockStmt::ElIf { cond } => {
-                    let prev_idx = scope_stack.pop();
-
-                    if let Some(prev_idx) = prev_idx {
-                        let offset_to_next = stmts.len() - prev_idx;
-
-                        let prev = stmts[prev_idx].clone();
-                        stmts[prev_idx] = match prev {
-                            Statement::If { cond, .. } => Statement::If {
-                                cond: cond.clone(),
-                                offset_to_next,
-                            },
-                            Statement::ElIf { cond, .. } => Statement::ElIf {
-                                cond: cond.clone(),
-                                offset_to_next,
-                            },
-                            _ => {
-                                // TODO: proper error handle
-                                panic!("Invalid statement was finding Else-If");
-                            }
-                        };
-
-                        scope_stack.push(ScopeKind::Other, stmts.len());
-                        Some(Statement::ElIf {
-                            cond,
-                            offset_to_next: 0,
-                        })
-                    } else {
-                        errors.push(Error(
-                            "A stray Else-If detected.".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
+                        offset_to_next,
                     }
                 }
-                BlockStmt::Else => {
-                    let prev_idx = scope_stack.pop();
+                BlockStmt::ElIf {
+                    cond,
+                    offset_to_next,
+                } => {
+                    let _ = scope_stack.pop();
 
-                    if let Some(prev_idx) = prev_idx {
-                        let offset_to_next = stmts.len() - prev_idx;
+                    scope_stack.push(stmts.len());
 
-                        let prev = stmts[prev_idx].clone();
-                        stmts[prev_idx] = match prev {
-                            Statement::If { cond, .. } => Statement::If {
-                                cond: cond.clone(),
-                                offset_to_next,
-                            },
-                            Statement::ElIf { cond, .. } => Statement::ElIf {
-                                cond: cond.clone(),
-                                offset_to_next,
-                            },
-                            _ => {
-                                // TODO: proper error handle
-                                panic!("Invalid statement was finding Else");
-                            }
-                        };
-                        scope_stack.push(ScopeKind::Other, stmts.len());
-                        Some(Statement::Else { offset_to_end: 0 })
-                    } else {
-                        errors.push(Error(
-                            "A stray Else detected.".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
+                    check_expr_type!(cond, Type::Bool, scope_stack, errors);
+
+                    Statement::ElIf {
+                        cond,
+                        offset_to_next,
                     }
                 }
-                BlockStmt::Sub { name } => {
-                    // create new scope
-                    scope_stack.push(ScopeKind::Sub, stmts.len());
+                BlockStmt::Else { offset_to_end } => {
+                    let _ = scope_stack.pop();
 
-                    // add this sub to var table
+                    scope_stack.push(stmts.len());
+                    Statement::Else { offset_to_end }
+                }
+                BlockStmt::Sub {
+                    name,
+                    offset_to_end,
+                } => {
+                    // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
                         name.clone(),
                         TypeInfo {
@@ -620,103 +511,41 @@ pub fn check_semantics(parsed: crate::parse::Parsed) -> Result<Ast, Vec<Error>> 
                         },
                     );
 
-                    if success {
-                        Some(Statement::Sub {
-                            name: name.clone(),
-                            offset_to_end: 0,
-                        })
-                    } else {
-                        errors.push(Error(
-                            format!("Conflicting subroutine name \"{}\"", name),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
+                    if !success {
+                        errors.push(Error {
+                            kind: ErrorKind::SubroutineAlreadyDefined(name.clone()),
+                            span: Default::default(), // TODO: implement span retrieval
+                        });
+                    }
+
+                    // create new scope
+                    scope_stack.push(stmts.len());
+
+                    Statement::Sub {
+                        name: name.clone(),
+                        offset_to_end,
                     }
                 }
                 BlockStmt::Return => {
                     // "Return" ";"
-                    let mut sub_found = false;
-                    for k in scope_stack.kinds() {
-                        if let ScopeKind::Sub = k {
-                            sub_found = true;
-                            break;
-                        }
-                    }
-
-                    if sub_found {
-                        Some(Statement::Return)
-                    } else {
-                        errors.push(Error(
-                            "Return must be in a sub".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    }
+                    Statement::Return
                 }
                 BlockStmt::End => {
                     // Pop stack and assign end index
-                    let prev_idx = scope_stack.pop();
+                    let _ = scope_stack.pop();
 
-                    if let Some(prev_idx) = prev_idx {
-                        let offset_to_end = stmts.len() - prev_idx;
-
-                        let prev = stmts[prev_idx].clone();
-                        stmts[prev_idx] = match prev {
-                            Statement::Sub { name, .. } => Statement::Sub {
-                                name,
-                                offset_to_end,
-                            },
-                            Statement::While { cond, .. } => Statement::While {
-                                cond,
-                                offset_to_end,
-                            },
-                            Statement::If { ref cond, .. } => Statement::If {
-                                cond: cond.clone(),
-                                offset_to_next: offset_to_end,
-                            },
-                            Statement::ElIf { ref cond, .. } => Statement::ElIf {
-                                cond: cond.clone(),
-                                offset_to_next: offset_to_end,
-                            },
-                            Statement::Else { .. } => Statement::Else { offset_to_end },
-                            Statement::For {
-                                counter, from, to, ..
-                            } => Statement::For {
-                                counter,
-                                from,
-                                to,
-                                offset_to_end,
-                            },
-                            _ => {
-                                // TODO: proper error handling
-                                panic!("Invalid statement was finding End");
-                            }
-                        };
-
-                        Some(Statement::End)
-                    } else {
-                        errors.push(Error(
-                            "A stray End detected.".to_string(),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
-                        None
-                    }
+                    Statement::End
                 }
             },
-            ParsedStmt::Ill => Some(Statement::Ill),
-        };
-
-        if let Some(stmt) = stmt_opt {
-            stmts.push(stmt);
-        }
+            ParsedStmt::Ill => Statement::Ill,
+        });
     }
 
-    if !errors.is_empty() {
-        Err(errors)
-    } else if !scope_stack.is_empty() {
-        // TODO: replace with proper handler when scopes have their starting stmt
-        todo!("scope_stack is not empty")
-    } else {
+    debug_assert!(scope_stack.is_empty());
+
+    if errors.is_empty() {
         Ok(Ast { stmts })
+    } else {
+        Err(errors)
     }
 }

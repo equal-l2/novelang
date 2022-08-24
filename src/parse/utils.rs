@@ -62,8 +62,8 @@ macro_rules! parse_normal {
 }
 
 macro_rules! parse_block {
-    ($stmts: ident, $loc: ident, $proc: block) => {{
+    ($stmts: ident, $idx: ident, $proc: block) => {{
         let inst_obj = $proc;
-        $stmts.push(Statement::Block(inst_obj, $loc.clone()));
+        $stmts.push(Statement::Block(inst_obj, $idx.into()));
     }};
 }

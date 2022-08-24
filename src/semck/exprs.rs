@@ -1,16 +1,42 @@
 use super::{Expr, ScopeStack, Type};
 use crate::exprs::items::*;
+use crate::span::{Span, Spannable};
+
+pub struct Error {
+    pub kind: ErrorKind,
+    pub span: Span,
+}
 
 #[derive(Debug)]
-pub(super) enum TypeError {
-    VarNotFound(crate::IdentName),
-    UnaryUndefined(Type),
-    BinaryUndefined(Type, Type),
-    Unexpected { expected: Type, actual: Type },
+pub enum ErrorKind {
+    VariableNotFound(crate::IdentName),
+    UnaryUndefined(&'static str, Type),
+    BinaryUndefined(&'static str, Type, Type),
+    NonNumIndex(Type),
+    NonIndexable(Type),
     ArrayTypeDiffer(Type),
 }
 
-type Result = std::result::Result<Type, TypeError>;
+impl std::fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorKind::VariableNotFound(name) => write!(f, "Variable {} was not found", name),
+            ErrorKind::UnaryUndefined(op, ty) => {
+                write!(f, "Unary operator {} is not defined for type {}", op, ty)
+            }
+            ErrorKind::BinaryUndefined(op, ty_l, ty_r) => write!(
+                f,
+                "Binary operator {} is not defined between types {} and {}",
+                op, ty_l, ty_r
+            ),
+            ErrorKind::NonNumIndex(ty) => write!(f, "Type {} cannot be used as an index", ty),
+            ErrorKind::NonIndexable(ty) => write!(f, "Type {} cannot be indexed", ty),
+            ErrorKind::ArrayTypeDiffer(_) => write!(f, "PLACEHOLDER"),
+        }
+    }
+}
+
+type Result = std::result::Result<Type, Error>;
 
 pub(super) trait TypeCheck {
     fn check_type(&self, stack: &ScopeStack) -> Result;
@@ -33,7 +59,15 @@ impl TypeCheck for Log {
                 if l_ty == r_ty && l_ty == Type::Bool {
                     Ok(Type::Bool)
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    let op = match self {
+                        Self::Single(_) => unreachable!(),
+                        Self::And(_, _) => "&&",
+                        Self::Or(_, _) => "||",
+                    };
+                    Err(Error {
+                        kind: ErrorKind::BinaryUndefined(op, l_ty, r_ty),
+                        span: self.span(),
+                    })
                 }
             }
         }
@@ -51,7 +85,15 @@ impl TypeCheck for Equ {
                 if l_ty == r_ty {
                     Ok(Type::Bool)
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    let op = match self {
+                        Self::Single(_) => unreachable!(),
+                        Self::Equal(_, _) => "==",
+                        Self::NotEqual(_, _) => "!=",
+                    };
+                    Err(Error {
+                        kind: ErrorKind::BinaryUndefined(op, l_ty, r_ty),
+                        span: self.span(),
+                    })
                 }
             }
         }
@@ -72,7 +114,17 @@ impl TypeCheck for Rel {
                 if l_ty == r_ty && !matches!(l_ty, Type::Sub | Type::Arr(_)) {
                     Ok(Type::Bool)
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    let op = match self {
+                        Self::Single(_) => unreachable!(),
+                        Self::LessEqual(_, _) => "<=",
+                        Self::GreaterEqual(_, _) => ">=",
+                        Self::LessThan(_, _) => "<",
+                        Self::GreaterThan(_, _) => ">",
+                    };
+                    Err(Error {
+                        kind: ErrorKind::BinaryUndefined(op, l_ty, r_ty),
+                        span: self.span(),
+                    })
                 }
             }
         }
@@ -90,7 +142,10 @@ impl TypeCheck for AddSub {
                 if l_ty == r_ty && l_ty != Type::Sub {
                     Ok(l_ty)
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    Err(Error {
+                        kind: ErrorKind::BinaryUndefined("+", l_ty, r_ty),
+                        span: self.span(),
+                    })
                 }
             }
             Self::Sub(l, r) => {
@@ -100,7 +155,10 @@ impl TypeCheck for AddSub {
                 if l_ty == r_ty && l_ty == Type::Num {
                     Ok(l_ty)
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    Err(Error {
+                        kind: ErrorKind::BinaryUndefined("-", l_ty, r_ty),
+                        span: self.span(),
+                    })
                 }
             }
         }
@@ -121,7 +179,10 @@ impl TypeCheck for MulDiv {
                     (Type::Num, Type::Arr(t)) | (Type::Arr(t), Type::Num) => {
                         Ok(Type::Arr(t.clone()))
                     }
-                    _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
+                    _ => Err(Error {
+                        kind: ErrorKind::BinaryUndefined("*", l_ty, r_ty),
+                        span: self.span(),
+                    }),
                 }
             }
             Self::Div(l, r) | Self::Mod(l, r) => {
@@ -131,7 +192,15 @@ impl TypeCheck for MulDiv {
                 if l_ty == r_ty && l_ty == Type::Num {
                     Ok(l_ty)
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    let op = if matches!(self, Self::Div(_, _)) {
+                        "/"
+                    } else {
+                        "%"
+                    };
+                    Err(Error {
+                        kind: ErrorKind::BinaryUndefined(op, l_ty, r_ty),
+                        span: self.span(),
+                    })
                 }
             }
         }
@@ -145,7 +214,15 @@ impl TypeCheck for Node {
             Self::Plus(i, _) | Self::Minus(i, _) => {
                 let ty = i.check_type(stack)?;
                 if matches!(ty, Type::Sub) {
-                    Err(TypeError::UnaryUndefined(ty))
+                    let op = if matches!(self, Self::Plus(_, _)) {
+                        "+"
+                    } else {
+                        "-"
+                    };
+                    Err(Error {
+                        kind: ErrorKind::UnaryUndefined(op, ty),
+                        span: self.span(),
+                    })
                 } else {
                     Ok(ty)
                 }
@@ -165,10 +242,16 @@ impl TypeCheck for Value {
                     match l_ty {
                         Type::Str => Ok(Type::Str),
                         Type::Arr(t) => Ok(*t),
-                        _ => Err(TypeError::BinaryUndefined(l_ty, r_ty)),
+                        _ => Err(Error {
+                            kind: ErrorKind::NonIndexable(l_ty),
+                            span: self.span(),
+                        }),
                     }
                 } else {
-                    Err(TypeError::BinaryUndefined(l_ty, r_ty))
+                    Err(Error {
+                        kind: ErrorKind::NonNumIndex(r_ty),
+                        span: self.span(),
+                    })
                 }
             }
         }
@@ -183,7 +266,10 @@ impl TypeCheck for Core {
             Self::Ident(name, _) => stack
                 .get_type_info(&name.clone().into())
                 .map(|ti| ti.ty)
-                .ok_or_else(|| TypeError::VarNotFound(name.clone())),
+                .ok_or_else(|| Error {
+                    kind: ErrorKind::VariableNotFound(name.clone()),
+                    span: self.span(),
+                }),
             Self::True(_) | Self::False(_) => Ok(Type::Bool),
             Self::Paren(i, _) => i.check_type(stack),
             Self::Arr(i, _) => {
@@ -195,7 +281,10 @@ impl TypeCheck for Core {
                 if v.iter().all(|e| e == first) {
                     Ok(Type::Arr(Box::from(first.clone())))
                 } else {
-                    Err(TypeError::ArrayTypeDiffer(first.clone()))
+                    Err(Error {
+                        kind: ErrorKind::ArrayTypeDiffer(first.clone()),
+                        span: self.span(),
+                    })
                 }
             }
         }
