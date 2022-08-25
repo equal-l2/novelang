@@ -65,7 +65,7 @@ decl_ops!(LogOps,{
 
 decl_ops!(EquOps,{
     Equal => "==",
-    NotEqual => "!=",
+    NotEqual => "-=",
 });
 
 decl_ops!(RelOps,{
