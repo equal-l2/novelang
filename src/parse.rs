@@ -413,7 +413,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                             expects_semi!(tks, last);
                             Statement::Block(BlockStmt::Else, idx.into())
                         }
-                    })
+                    });
                 }
 
                 lex::Command::Sub => parse_block!(stmts, idx, {

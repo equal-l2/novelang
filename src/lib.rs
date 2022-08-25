@@ -15,7 +15,9 @@
     clippy::enum_glob_use,
     clippy::many_single_char_names,
     clippy::match_on_vec_items,
+    clippy::match_wildcard_for_single_variants,
     clippy::module_name_repetitions,
+    clippy::must_use_candidate,
     clippy::needless_pass_by_value,
     clippy::non_ascii_literal,
     clippy::option_if_let_else,
@@ -72,7 +74,7 @@ pub(crate) fn span_to_range(span: Span, tokens: &[Token]) -> Range {
 }
 
 pub fn compile<S: AsRef<str>>(s: &[S]) -> Result<Ast, Error> {
-    let lexed = lex::lex(s).map_err(|v| Error::Lex(v))?;
+    let lexed = lex::lex(s).map_err(Error::Lex)?;
     let parsed =
         parse::parse(&lexed).map_err(|(e, s)| Error::Parse(e, span_to_range(s, &lexed.tokens)))?;
     let block_checked = block::check_block(parsed).map_err(|v| {

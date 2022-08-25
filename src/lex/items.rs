@@ -87,24 +87,6 @@ decl_ops!(MulOps,{
 });
 
 impl LangItem {
-    pub fn to_string(&self) -> String {
-        use LangItem::*;
-        match self {
-            Key(i) => i.as_str().into(),
-            Cmd(i) => i.as_str().into(),
-            Op(i) => i.as_str().into(),
-            Num(i, _) => i.to_string(),
-            Ident(i) => i.as_ref().into(),
-            Str(i) => i.clone(),
-            Semi => ";".into(),
-            Comma => ",".into(),
-            LPar => "(".into(),
-            RPar => ")".into(),
-            LBra => "[".into(),
-            RBra => "]".into(),
-        }
-    }
-
     pub fn len(&self) -> usize {
         use LangItem::*;
         match self {
@@ -115,6 +97,26 @@ impl LangItem {
             Ident(i) => i.as_ref().len(),
             Str(i) => i.len(),
             Semi | Comma | LPar | RPar | LBra | RBra => 1,
+        }
+    }
+}
+
+impl std::fmt::Display for LangItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use LangItem::*;
+        match self {
+            Key(i) => write!(f, "{}", i.as_str()),
+            Cmd(i) => write!(f, "{}", i.as_str()),
+            Op(i) => write!(f, "{}", i.as_str()),
+            Num(i, _) => write!(f, "{}", i),
+            Ident(i) => write!(f, "{}", i),
+            Str(i) => write!(f, "{}", i),
+            Semi => write!(f, ";"),
+            Comma => write!(f, ","),
+            LPar => write!(f, "("),
+            RPar => write!(f, ")"),
+            LBra => write!(f, "["),
+            RBra => write!(f, "]"),
         }
     }
 }

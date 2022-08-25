@@ -11,7 +11,7 @@ pub use items::*;
 
 use super::{Location, Range};
 
-pub(crate) fn loc_to_range(loc: Location, len: usize) -> Range {
+fn loc_to_range(loc: Location, len: usize) -> Range {
     let head = loc.clone();
     let tail = Location {
         row: loc.row,

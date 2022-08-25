@@ -84,7 +84,7 @@ struct Scope {
 }
 
 impl Scope {
-    fn new(kind: ScopeKind, start_span: Span, ret_idx: usize) -> Self {
+    const fn new(kind: ScopeKind, start_span: Span, ret_idx: usize) -> Self {
         Self {
             kind,
             start_span,
@@ -207,13 +207,13 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                                 stmts[prev_idx] = Statement::Block(BlockStmt::If {
                                     cond: cond.clone(),
                                     offset_to_next,
-                                })
+                                });
                             }
                             Statement::Block(BlockStmt::ElIf { cond, .. }) => {
                                 stmts[prev_idx] = Statement::Block(BlockStmt::ElIf {
                                     cond: cond.clone(),
                                     offset_to_next,
-                                })
+                                });
                             }
                             _ => {
                                 // example: "Else;Else If something;"
@@ -243,13 +243,13 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                                 stmts[prev_idx] = Statement::Block(BlockStmt::If {
                                     cond: cond.clone(),
                                     offset_to_next,
-                                })
+                                });
                             }
                             Statement::Block(BlockStmt::ElIf { cond, .. }) => {
                                 stmts[prev_idx] = Statement::Block(BlockStmt::ElIf {
                                     cond: cond.clone(),
                                     offset_to_next,
-                                })
+                                });
                             }
                             _ => {
                                 // example: "Else;Else;"
