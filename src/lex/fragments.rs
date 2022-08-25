@@ -13,9 +13,7 @@ pub(super) fn handle_multichars(vs: &[char]) -> Result<(LangItem, usize), ErrorK
 }
 
 fn handle_reserved(vs: &[char]) -> Option<(LangItem, usize)> {
-    if let Some(inner) = handle_alias(vs) {
-        Some(inner)
-    } else if let Some(res) = Keyword::parse_slice(vs) {
+    if let Some(res) = Keyword::parse_slice(vs) {
         let len = res.len();
         Some((LangItem::Key(res), len))
     } else if let Some(res) = Command::parse_slice(vs) {
@@ -27,27 +25,6 @@ fn handle_reserved(vs: &[char]) -> Option<(LangItem, usize)> {
     } else {
         None
     }
-}
-
-fn handle_alias(vs: &[char]) -> Option<(LangItem, usize)> {
-    use once_cell::sync::Lazy;
-    static ALIASES: Lazy<Vec<(Vec<char>, LangItem)>> = Lazy::new(|| {
-        vec![
-            ("die".chars().collect(), LangItem::Key(Keyword::Dice)),
-            ("face".chars().collect(), LangItem::Key(Keyword::Faces)),
-        ]
-    });
-
-    let confirm_item = |len| len == vs.len() || !is_ident_char(vs[len]);
-
-    for alias in ALIASES.iter() {
-        let len = alias.0.len();
-        if is_item(&alias.0, vs) && confirm_item(len) {
-            return Some((alias.1.clone(), len));
-        }
-    }
-
-    None
 }
 
 fn handle_ident(vs: &[char]) -> (LangItem, usize) {
