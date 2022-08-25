@@ -2,7 +2,7 @@ let i be 0 asmut;
 
 sub test;
     print "hello";
-    if i != 5;
+    if i /= 5;
         return;
     end;
     print "world";

@@ -1,20 +1,20 @@
 let n be [0]*3 asmut;
 
 # first digit
-roll 1 die with 9 faces to n[0];
+roll 1 dice with 9 faces to n[0];
 
 # second digit
 while true;
-    roll 1 die with 9 faces to n[1];
-    if n[0] != n[1];
+    roll 1 dice with 9 faces to n[1];
+    if n[0] /= n[1];
         break;
     end;
 end;
 
 # third digit
 while true;
-    roll 1 die with 9 faces to n[2];
-    if n[0] != n[2] && n[1] != n[2];
+    roll 1 dice with 9 faces to n[2];
+    if n[0] /= n[2] && n[1] /= n[2];
         break;
     end;
 end;
@@ -25,7 +25,7 @@ while true;
     let in_num be 0 asmut;
     input "Input a 3-digit number" to in_num;
 
-    if -(100 <= in && in <= 999);
+    if -(100 <= in_num && in_num <= 999);
         print "the number you input is not 3-digit, try again!";
         continue;
     end;

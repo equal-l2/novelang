@@ -63,7 +63,6 @@ impl From<ExprError> for (super::Error, Span) {
 macro_rules! ensure_start {
     ($tks: ident, $last: expr) => {
         let front = $tks.peek();
-        log::trace!("parsing {}", std::any::type_name::<Self>(),);
         match front {
             Some((i, tk)) => {
                 if !Self::can_start_with(&tk.item) {

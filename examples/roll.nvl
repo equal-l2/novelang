@@ -2,7 +2,7 @@ print "roll 10 times";
 let n be 0 asmut;
 while n < 10;
     let res be 0 asmut;
-    Roll 1 die with 6 faces to res;
+    Roll 1 dice with 6 faces to res;
     print res;
     modify n to n+1;
 end;

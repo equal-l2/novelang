@@ -1,5 +1,5 @@
 use crate::exprs::Expr;
-use crate::lval::LVal;
+use crate::lval::Target;
 use crate::span::*;
 use crate::types::IdentName;
 
@@ -20,7 +20,7 @@ pub enum Statement {
     Halt,
     Input {
         prompt: Option<String>,
-        target: LVal,
+        target: Target,
         as_num: bool,
     },
     Let {
@@ -29,7 +29,7 @@ pub enum Statement {
         is_mut: bool,
     },
     Modify {
-        target: LVal,
+        target: Target,
         expr: Expr,
     },
     Print {
@@ -37,8 +37,8 @@ pub enum Statement {
     },
     Roll {
         count: Expr,
-        face: Expr,
-        target: LVal,
+        faces: Expr,
+        target: Target,
     },
 
     For {
@@ -160,9 +160,9 @@ impl ScopeStack {
         self.get_top_mut().add_var(name, info)
     }
 
-    fn get_type_info(&self, lval: &LVal) -> Result<TypeInfo, exprs::ErrorKind> {
+    fn get_type_info(&self, lval: &Target) -> Result<TypeInfo, exprs::ErrorKind> {
         match lval {
-            LVal::Scalar(i) => self
+            Target::Scalar(i) => self
                 .scopes
                 .iter()
                 .rev()
@@ -171,7 +171,7 @@ impl ScopeStack {
                 .flatten()
                 .cloned()
                 .ok_or_else(|| exprs::ErrorKind::VariableNotFound(i.0.clone())),
-            LVal::Vector(l, _) => {
+            Target::Vector(l, _) => {
                 // TODO: refactor
                 let v = self.get_type_info(l);
                 match v {
@@ -364,11 +364,11 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                 }
                 NormalStmt::Roll {
                     count,
-                    face,
+                    faces,
                     target,
                 } => {
                     check_expr_type!(count, Type::Num, scope_stack, errors);
-                    check_expr_type!(face, Type::Num, scope_stack, errors);
+                    check_expr_type!(faces, Type::Num, scope_stack, errors);
 
                     match scope_stack.get_type_info(&target) {
                         Ok(TypeInfo { ty, is_mut }) => {
@@ -395,7 +395,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
 
                     Statement::Roll {
                         count,
-                        face,
+                        faces,
                         target,
                     }
                 }

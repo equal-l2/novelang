@@ -3,7 +3,7 @@ mod val;
 
 use crate::die;
 use crate::exprs::Expr;
-use crate::lval::LVal;
+use crate::lval::Target;
 use crate::semck::{Ast, Statement};
 use crate::types::{IdentName, IntType};
 use once_cell::sync::Lazy;
@@ -105,10 +105,10 @@ impl Runtime {
         }
     }
 
-    fn resolve_lval(&mut self, target: &LVal) -> Result<&mut Val, exprs::EvalError> {
+    fn resolve_lval(&mut self, target: &Target) -> Result<&mut Val, exprs::EvalError> {
         match target {
-            LVal::Scalar(i) => Ok(self.get_var_mut(&i.0)),
-            LVal::Vector(l, r) => {
+            Target::Scalar(i) => Ok(self.get_var_mut(&i.0)),
+            Target::Vector(l, r) => {
                 let r = r.eval(self)?;
                 if let Val::Num(n) = r {
                     let resolved = self.resolve_lval(l)?;
@@ -127,7 +127,7 @@ impl Runtime {
 
     /// Modify a variable
     /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
-    fn modify_var(&mut self, target: &LVal, val: Val) {
+    fn modify_var(&mut self, target: &Target, val: Val) {
         let var = self
             .resolve_lval(target)
             .unwrap_or_else(|e| die!("Runtime error: cannot resolve {} because of: {}", target, e));
@@ -179,25 +179,25 @@ impl Runtime {
             .expect("Variable must exist")
     }
 
-    pub fn exec_roll(&mut self, cnt: &Expr, face: &Expr, name: &LVal) {
+    pub fn exec_roll(&mut self, cnt: &Expr, faces: &Expr, name: &Target) {
         use rand::Rng;
 
         let cnt = unwrap_num(&cnt.eval(self).unwrap_or_else(|e| {
             die!("Runtime error: Failed to eval count of Roll: {}", e);
         }));
-        let face = unwrap_num(&face.eval(self).unwrap_or_else(|e| {
-            die!("Runtime error: Failed to eval face of Roll: {}", e);
+        let faces = unwrap_num(&faces.eval(self).unwrap_or_else(|e| {
+            die!("Runtime error: Failed to eval faces of Roll: {}", e);
         }));
 
         if cnt <= 0 {
             die!("Runtime error: Count for Roll must be a positive integer");
         }
 
-        if face <= 0 {
-            die!("Runtime error: Face for Roll must be a positive integer");
+        if faces <= 0 {
+            die!("Runtime error: Faces for Roll must be a positive integer");
         }
 
-        let val = std::iter::repeat_with(|| self.rng.gen_range(1..=face))
+        let val = std::iter::repeat_with(|| self.rng.gen_range(1..=faces))
             .take(cnt as usize)
             .sum();
 
@@ -243,7 +243,7 @@ impl Runtime {
         }
     }
 
-    pub fn exec_input(&mut self, prompt: &Option<String>, name: &LVal, as_num: bool) {
+    pub fn exec_input(&mut self, prompt: &Option<String>, name: &Target, as_num: bool) {
         if as_num {
             let input = get_input(prompt.as_deref());
             self.modify_var(name, Val::Num(input));
@@ -462,10 +462,10 @@ pub fn run(prog: Ast) {
             }
             Statement::Roll {
                 count,
-                face,
+                faces,
                 target,
             } => {
-                rt.exec_roll(count, face, target);
+                rt.exec_roll(count, faces, target);
             }
             Statement::Halt => {
                 return;

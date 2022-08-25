@@ -1,5 +1,5 @@
 use clap::Parser;
-use novelang::{die, Location, Range};
+use novelang::{die, Range};
 
 #[derive(clap::Parser)]
 struct Opt {
@@ -37,24 +37,6 @@ fn read_input(filename: &str) -> Result<Vec<String>, InputError<'_>> {
         ))
         .collect::<Result<_, _>>()
         .map_err(|e| InputError::File(filename, e))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LocWithLine {
-    line: String,
-    loc: Location,
-}
-
-impl std::fmt::Display for LocWithLine {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let row = self.loc.row;
-        let col = self.loc.col;
-        writeln!(f, "     |")?;
-        writeln!(f, "{:<4} | {}", row, self.line)?;
-        writeln!(f, "     | {:>1$}", "^", col)?;
-        writeln!(f, "     |")?;
-        Ok(())
     }
 }
 
@@ -121,7 +103,6 @@ fn print_compile_errors<S: AsRef<str>>(e: novelang::Error, lines: &[S]) {
 }
 
 fn main() {
-    env_logger::init();
     let opt = Opt::parse();
     let lines = read_input(&opt.filename).unwrap_or_else(|e| die!("Input error: {}", e));
 

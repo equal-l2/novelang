@@ -7,41 +7,29 @@
 ```
 <program>  ::= {<line>}
 <line>     ::= {<stmt>} ["#" { CHAR }] NL
-<stmt>     ::= <print> | <sub> | <call> | <while> | <let>
-             | <modify> | <input> | <if> | <elif> | <else>
-             | <end> | <roll> | <halt> | <break>
-<print>    ::= "print" <expr> {"," <expr>} ";"
-<sub>      ::= "sub" IDENT ";"
-<call>     ::= "call" IDENT ";"
-<while>    ::= "while" <expr> ";"
-<let>      ::= "let" IDENT "be" <expr> ["asmut"] ";"
-<modify>   ::= "modify" IDENT "to" <expr> ";"
-<input>    ::= "input" [<expr>] "to" <ident>";"
-<if>       ::= "if" <cond> ";"
-<elif>     ::= "else" "if" <cond> ";"
-<else>     ::= "else" ";"
-<end>      ::= "end" ";"
-<roll>     ::= "roll" <expr> ("die"|"dice") "with" <expr> ("face"|"faces") "to" <ident> ";"
-<halt>     ::= "halt" ";"
-<break>    ::= "break" ";"
-<assert>   ::= "assert" [<expr> "with"] <cond> ";"
-<continue> ::= "continue" ";"
-<for>      ::= "for" IDENT "from" <expr> "to" <expr> ";"
-```
+<stmt>     ::= <assert> | <call> | <halt> | <input> | <let> | <modify> | <print> | <roll>
+             | <for> | <while> | <break> | <continue> | <if> | <elif> | <else>
+             | <sub> | <return> | <end>
 
-## Instructions
-- `print {String|Expr}[,{String|Expr}]*;` : print `String` or/and `Expr`.
-- `sub Ident;` : declare a subroutine named `Ident`.
-- `call Ident;` : call a subroutine named `Ident`.
-- `while CompExpr;` : loop while `CompExpr` is satisfied.
-- `let Ident be InitExpr [asmut];` : declare an ident named `Ident` using the value of `InitExpr`.
-- `modify Ident to Expr;` : modify the value of an ident named `Ident` to the value of `InitExpr`.
-- `input [prompt];` : get an input to `_result`.
-- `if expr / else if expr / else`
-- `end;` : ends anything started (e.g. `sub` and `while`)
-- `roll Expr1 dice with Expr2 faces;`
-- `halt` : halt execution.
-- `break`
+<assert>   ::= "assert" [EXPR "with"] EXPR ";"
+<call>     ::= "call" EXPR ";"
+<halt>     ::= "halt" ";"
+<input>    ::= "input" [STRING] "to" TARGET ";"
+<let>      ::= "let" IDENT "be" EXPR ["asmut"] ";"
+<modify>   ::= "modify" TARGET "to" EXPR ";"
+<print>    ::= "print" EXPR {"," EXPR } ";"
+<roll>     ::= "roll" EXPR "dice" "with" EXPR "faces" "to" TARGET ";"
+<for>      ::= "for" IDENT "from" EXPR "to" EXPR ";"
+<while>    ::= "while" EXPR ";"
+<break>    ::= "break" ";"
+<continue> ::= "continue" ";"
+<if>       ::= "if" EXPR ";"
+<elif>     ::= "else" "if" EXPR ";"
+<else>     ::= "else" ";"
+<sub>      ::= "sub" IDENT ";"
+<end>      ::= "end" ";"
+<return>   ::= "return" ";"
+```
 
 ## String arithmetic
 - `-<str>` : string inversion
@@ -50,5 +38,4 @@
 
 ## TODO
 - add subroutine with return value
-- better type checking (i.e. better diagnostics)
 - add regex matching?

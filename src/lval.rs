@@ -19,12 +19,12 @@ impl Spannable for Ident {
 
 // Values that can be targets for modification
 #[derive(Clone, Debug)]
-pub enum LVal {
+pub enum Target {
     Scalar(Ident),
     Vector(Box<Self>, Box<Expr>),
 }
 
-impl std::fmt::Display for LVal {
+impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Scalar(i) => write!(f, "{}", i),
@@ -33,7 +33,7 @@ impl std::fmt::Display for LVal {
     }
 }
 
-impl Spannable for LVal {
+impl Spannable for Target {
     fn span(&self) -> Span {
         match self {
             Self::Scalar(i) => i.span(),
@@ -43,7 +43,7 @@ impl Spannable for LVal {
     }
 }
 
-impl From<Ident> for LVal {
+impl From<Ident> for Target {
     fn from(ident: Ident) -> Self {
         Self::Scalar(ident)
     }

@@ -1,6 +1,6 @@
 use crate::exprs::Expr;
 use crate::lex;
-use crate::lval::{Ident, LVal};
+use crate::lval::{Ident, Target};
 use crate::span::{Span, Spannable};
 
 mod exprs;
@@ -44,7 +44,7 @@ pub enum NormalStmt {
     Halt,
     Input {
         prompt: Option<String>,
-        target: LVal,
+        target: Target,
     },
     Let {
         name: Ident,
@@ -52,7 +52,7 @@ pub enum NormalStmt {
         is_mut: bool,
     },
     Modify {
-        target: LVal,
+        target: Target,
         expr: Expr,
     },
     Print {
@@ -60,8 +60,8 @@ pub enum NormalStmt {
     },
     Roll {
         count: Expr,
-        face: Expr,
-        target: LVal,
+        faces: Expr,
+        target: Target,
     },
 }
 
@@ -109,7 +109,7 @@ impl LookItem for Option<&lex::Token> {
     }
 }
 
-fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<LVal, (Error, Span)>
+fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Target, (Error, Span)>
 where
     T: Iterator<Item = (usize, &'a lex::Token)>,
 {
@@ -119,14 +119,14 @@ where
         .peek()
         .ok_or_else(|| (Error("expected Ident".into()), last.into()))?;
     if let LangItem::Ident(name) = &tk.item {
-        let mut val = LVal::Scalar(Ident(name.clone(), (*i).into()));
+        let mut val = Target::Scalar(Ident(name.clone(), (*i).into()));
         let _ = tks.next().unwrap();
         loop {
             if tks.peek().item() == Some(LangItem::LBra) {
                 let _ = tks.next().unwrap();
                 let expr = parse_expr(tks, last)?;
                 expects!("expected RBra", LangItem::RBra, tks, last);
-                val = LVal::Vector(Box::from(val), Box::from(expr));
+                val = Target::Vector(Box::from(val), Box::from(expr));
             } else {
                 return Ok(val);
             }
@@ -149,7 +149,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
         if let LangItem::Cmd(inst) = &tok.item {
             match inst {
                 Command::Assert => parse_normal!(stmts, {
-                    // "Assert" (<str> "With") <cond> ";"
+                    // "Assert" (<mesg> "With") <cond> ";"
                     let expr1 = parse_expr(&mut tks, last)?;
 
                     let (_, tk) = tks
@@ -210,7 +210,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                 }),
 
                 lex::Command::Let => parse_normal!(stmts, {
-                    // "Let" <name> "Be" <expr> ("AsMut") ";"
+                    // "Let" <name> "Be" <init> ("AsMut") ";"
 
                     let (i, tk) = tks
                         .next()
@@ -309,7 +309,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                     expects!("\"Dice\" expected", LangItem::Key(Keyword::Dice), tks, last);
                     expects!("\"With\" expected", LangItem::Key(Keyword::With), tks, last);
 
-                    let face = parse_expr(&mut tks, last)?;
+                    let faces = parse_expr(&mut tks, last)?;
 
                     expects!(
                         "\"Faces\" expected",
@@ -324,7 +324,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                     expects_semi!(tks, last);
                     NormalStmt::Roll {
                         count,
-                        face,
+                        faces,
                         target: lval,
                     }
                 }),
