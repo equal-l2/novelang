@@ -12,7 +12,13 @@ mod utils;
 use utils::*;
 
 #[derive(Debug)]
-pub struct Error(pub String, pub Span);
+pub struct Error(pub String);
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, Clone, derive_more::From)]
 pub enum Statement {
@@ -105,7 +111,7 @@ impl LookItem for Option<&lex::Token> {
     }
 }
 
-fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<LVal, Error>
+fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<LVal, (Error, Span)>
 where
     T: Iterator<Item = (usize, &'a lex::Token)>,
 {
@@ -113,7 +119,7 @@ where
 
     let (i, tk) = tks
         .peek()
-        .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
+        .ok_or_else(|| (Error("expected Ident".into()), last.into()))?;
     if let LangItem::Ident(name) = &tk.item {
         let mut val = LVal::Scalar(name.clone());
         let _ = tks.next().unwrap();
@@ -128,11 +134,11 @@ where
             }
         }
     } else {
-        Err(Error("expected Ident".into(), (*i).into()))
+        Err((Error("expected Ident".into()), (*i).into()))
     }
 }
 
-pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
+pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
     use lex::{Command, Keyword, LangItem};
 
     // index 0 is reserved for placeholder
@@ -150,7 +156,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     let (_, tk) = tks
                         .peek()
-                        .ok_or_else(|| Error("expected With or Semicolon".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected With or Semicolon".into()), last.into()))?;
 
                     let (mesg, cond) = if tk.item == LangItem::Key(Keyword::With) {
                         // with string
@@ -170,12 +176,12 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                     // "Call" <name> ";"
                     let (i, tk) = tks
                         .next()
-                        .ok_or_else(|| Error("expected subrountine name".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
                     if let LangItem::Ident(name) = &tk.item {
                         expects_semi!(tks, last);
                         NormalStmt::Call { name: name.clone() }
                     } else {
-                        return Err(Error("Expected subroutine name".into(), i.into()));
+                        return Err((Error("Expected subroutine name".into()), i.into()));
                     }
                 }),
 
@@ -191,7 +197,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                     // TODO: accept runtime prompt string
                     let (_, tk) = tks
                         .peek()
-                        .ok_or_else(|| Error("expected To".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected To".into()), last.into()))?;
 
                     let prompt = if let LangItem::Str(prompt) = &tk.item {
                         let _ = tks.next().unwrap();
@@ -216,11 +222,11 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     let (i, tk) = tks
                         .next()
-                        .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected Ident".into()), last.into()))?;
                     if let LangItem::Ident(name) = &tk.item {
                         if name.as_ref().starts_with('_') {
-                            return Err(Error(
-                                "Identifier starts with _ is reserved".into(),
+                            return Err((
+                                Error("Identifier starts with _ is reserved".into()),
                                 i.into(),
                             ));
                         }
@@ -246,21 +252,21 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                                     is_mut: false,
                                 },
                                 _ => {
-                                    return Err(Error(
-                                        "expected Semicolon or AsMut".into(),
+                                    return Err((
+                                        Error("expected Semicolon or AsMut".into()),
                                         (i + 1).into(),
                                     ))
                                 }
                             },
                             None => {
-                                return Err(Error(
-                                    "expected Semicolon or AsMut".into(),
+                                return Err((
+                                    Error("expected Semicolon or AsMut".into()),
                                     (i + 1).into(),
                                 ));
                             }
                         }
                     } else {
-                        return Err(Error("Ident expected".into(), i.into()));
+                        return Err((Error("Ident expected".into()), i.into()));
                     }
                 }),
 
@@ -295,7 +301,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                                 args.push(parse_expr(&mut tks, last)?);
                             }
                             _ => {
-                                return Err(Error("Unexpected token".into(), (*i).into()));
+                                return Err((Error("Unexpected token".into()), (*i).into()));
                             }
                         }
                     }
@@ -337,12 +343,12 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     let (i, tk) = tks
                         .next()
-                        .ok_or_else(|| Error("expected Ident".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected Ident".into()), last.into()))?;
 
                     if let LangItem::Ident(name) = &tk.item {
                         if name.as_ref().starts_with('_') {
-                            return Err(Error(
-                                "Identifier starts with _ is reserved".into(),
+                            return Err((
+                                Error("Identifier starts with _ is reserved".into()),
                                 i.into(),
                             ));
                         }
@@ -362,7 +368,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                             to,
                         }
                     } else {
-                        return Err(Error("Ident expected".into(), i.into()));
+                        return Err((Error("Ident expected".into()), i.into()));
                     }
                 }),
 
@@ -400,7 +406,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
 
                     let (_, tk) = tks
                         .peek()
-                        .ok_or_else(|| Error("expected Semicolon or If".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected Semicolon or If".into()), last.into()))?;
 
                     if tk.item == LangItem::Cmd(lex::Command::If) {
                         // "Else" "If" <cond> ";"
@@ -421,12 +427,12 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                     // "Sub" <name> ";"
                     let (i, tk) = tks
                         .next()
-                        .ok_or_else(|| Error("expected subrountine name".into(), last.into()))?;
+                        .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
                     if let LangItem::Ident(name) = &tk.item {
                         expects_semi!(tks, last);
                         BlockStmt::Sub { name: name.clone() }
                     } else {
-                        return Err(Error("Expected subroutine name".into(), i.into()));
+                        return Err((Error("Expected subroutine name".into()), i.into()));
                     }
                 }),
 
@@ -443,7 +449,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, Error> {
                 }),
             }
         } else {
-            return Err(Error("Line must begin with Command".into(), idx.into()));
+            return Err((Error("Line must begin with Command".into()), idx.into()));
         }
     }
     Ok(Parsed { stmts })

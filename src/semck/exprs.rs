@@ -13,7 +13,7 @@ pub enum ErrorKind {
     UnaryUndefined(&'static str, Type),
     BinaryUndefined(&'static str, Type, Type),
     NonNumIndex(Type),
-    NonIndexable(Type),
+    NotIndexable(Type),
     ArrayTypeDiffer(Type),
 }
 
@@ -30,7 +30,7 @@ impl std::fmt::Display for ErrorKind {
                 op, ty_l, ty_r
             ),
             ErrorKind::NonNumIndex(ty) => write!(f, "Type {} cannot be used as an index", ty),
-            ErrorKind::NonIndexable(ty) => write!(f, "Type {} cannot be indexed", ty),
+            ErrorKind::NotIndexable(ty) => write!(f, "Type {} cannot be indexed", ty),
             ErrorKind::ArrayTypeDiffer(_) => write!(f, "PLACEHOLDER"),
         }
     }
@@ -243,7 +243,7 @@ impl TypeCheck for Value {
                         Type::Str => Ok(Type::Str),
                         Type::Arr(t) => Ok(*t),
                         _ => Err(Error {
-                            kind: ErrorKind::NonIndexable(l_ty),
+                            kind: ErrorKind::NotIndexable(l_ty),
                             span: self.span(),
                         }),
                     }
@@ -266,8 +266,8 @@ impl TypeCheck for Core {
             Self::Ident(name, _) => stack
                 .get_type_info(&name.clone().into())
                 .map(|ti| ti.ty)
-                .ok_or_else(|| Error {
-                    kind: ErrorKind::VariableNotFound(name.clone()),
+                .map_err(|kind| Error {
+                    kind,
                     span: self.span(),
                 }),
             Self::True(_) | Self::False(_) => Ok(Type::Bool),

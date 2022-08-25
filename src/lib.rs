@@ -35,48 +35,59 @@ mod span;
 mod types;
 
 pub mod fuzz_utils;
-
-pub enum Error {
-    Lex(lex::Error),
-    Parse(lex::Lexed, parse::Error),
-    Block(lex::Lexed, Vec<block::Error>),
-    Semck(lex::Lexed, Vec<semck::Error>),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Lex(e) => write!(f, "Lex error: {}", e),
-            Self::Parse(lexed, e) => {
-                let info = lexed.generate_error_mesg(e.1 .0);
-                write!(f, "Parse error: {}\n{}", e.0, info)
-            }
-            Self::Block(lexed, es) => {
-                for e in es {
-                    let info = lexed.generate_error_mesg(e.span.0);
-                    write!(f, "Block syntax error: {}\n{}", e.kind, info)?;
-                }
-                Ok(())
-            }
-            Self::Semck(lexed, es) => {
-                for e in es {
-                    let info = lexed.generate_error_mesg(e.span.0);
-                    write!(f, "Semantic error: {}\n{}", e.kind, info)?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
+pub use lex::Token;
 pub use runtime::run;
 pub use semck::Ast;
 
-pub fn compile(s: &str) -> Result<Ast, Error> {
-    let lexed = lex::lex(s).map_err(Error::Lex)?;
-    let parsed = parse::parse(&lexed).map_err(|e| Error::Parse(lexed.clone(), e))?;
-    let block_checked = block::check_block(parsed).map_err(|e| Error::Block(lexed.clone(), e))?;
-    let final_insts =
-        semck::check_semantics(block_checked).map_err(|e| Error::Semck(lexed.clone(), e))?;
+use span::Span;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Location {
+    pub row: usize,
+    pub col: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct Range(pub Location, pub Location);
+
+pub enum Error {
+    Lex(lex::Error, Range),
+    Parse(parse::Error, Range),
+    Block(Vec<(block::Error, Range)>),
+    Semck(Vec<(semck::Error, Range)>),
+}
+
+pub(crate) fn span_to_range(span: Span, tokens: &[Token]) -> Range {
+    let head = tokens
+        .get(span.0)
+        .map_or_else(|| tokens.last().unwrap().next_col(), |tk| tk.loc.clone());
+    let tail = tokens.get(span.1).map_or_else(
+        || tokens.last().unwrap().next_col(),
+        |tk| Location {
+            row: tk.loc.row,
+            col: tk.loc.col + tk.item.len(),
+        },
+    );
+    Range(head, tail)
+}
+
+pub fn compile<S: AsRef<str>>(s: &[S]) -> Result<Ast, Error> {
+    let lexed = lex::lex(s).map_err(|(e, r)| Error::Lex(e, r))?;
+    let parsed =
+        parse::parse(&lexed).map_err(|(e, s)| Error::Parse(e, span_to_range(s, &lexed.tokens)))?;
+    let block_checked = block::check_block(parsed).map_err(|v| {
+        Error::Block(
+            v.into_iter()
+                .map(|(e, s)| (e, span_to_range(s, &lexed.tokens)))
+                .collect(),
+        )
+    })?;
+    let final_insts = semck::check_semantics(block_checked).map_err(|v| {
+        Error::Semck(
+            v.into_iter()
+                .map(|(e, s)| (e, span_to_range(s, &lexed.tokens)))
+                .collect(),
+        )
+    })?;
     Ok(final_insts)
 }

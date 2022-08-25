@@ -4,13 +4,7 @@ use crate::span::Span;
 use crate::types::IdentName;
 
 #[derive(Debug)]
-pub struct Error {
-    pub kind: ErrorKind,
-    pub span: crate::span::Span,
-}
-
-#[derive(Debug)]
-pub enum ErrorKind {
+pub enum Error {
     NoEnd,
     ExtraEnd,       // A stray End detected.
     NotInALoop,     // Break/Continue must be in a loop
@@ -18,14 +12,14 @@ pub enum ErrorKind {
     NotInASub,      // Return must be in a Sub
 }
 
-impl std::fmt::Display for ErrorKind {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorKind::NoEnd => write!(f, "This statement has no pair End statement"),
-            ErrorKind::ExtraEnd => write!(f, "This End statement has no starting statement"),
-            ErrorKind::NotInALoop => write!(f, "This statement must be in a loop (While/For)"),
-            ErrorKind::NoPairIfOrElif => write!(f, "This statement has no pair If/Else If"),
-            ErrorKind::NotInASub => write!(f, "This statement must be in a Sub"),
+            Error::NoEnd => write!(f, "This statement has no pair End statement"),
+            Error::ExtraEnd => write!(f, "This End statement has no starting statement"),
+            Error::NotInALoop => write!(f, "This statement must be in a loop (While/For)"),
+            Error::NoPairIfOrElif => write!(f, "This statement has no pair If/Else If"),
+            Error::NotInASub => write!(f, "This statement must be in a Sub"),
         }
     }
 }
@@ -130,7 +124,7 @@ impl ScopeStack {
     }
 }
 
-pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Error>> {
+pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Error, Span)>> {
     let mut stmts = Vec::<Statement>::new();
     let mut scope_stack = ScopeStack::new();
     let mut errors = vec![];
@@ -170,10 +164,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                     }
 
                     if !loop_found {
-                        errors.push(Error {
-                            kind: ErrorKind::NotInALoop,
-                            span,
-                        });
+                        errors.push((Error::NotInALoop, span));
                     }
                     Statement::Block(BlockStmt::Break)
                 }
@@ -192,10 +183,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                     }
 
                     if !loop_found {
-                        errors.push(Error {
-                            kind: ErrorKind::NotInALoop,
-                            span,
-                        });
+                        errors.push((Error::NotInALoop, span));
                     }
                     Statement::Block(BlockStmt::Continue)
                 }
@@ -230,17 +218,11 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                             _ => {
                                 // example: "Else;Else If something;"
                                 // the second Else-If pops the scope of the first Else
-                                errors.push(Error {
-                                    kind: ErrorKind::NoPairIfOrElif,
-                                    span: span.clone(),
-                                });
+                                errors.push((Error::NoPairIfOrElif, span.clone()));
                             }
                         };
                     } else {
-                        errors.push(Error {
-                            kind: ErrorKind::NoPairIfOrElif,
-                            span: span.clone(),
-                        });
+                        errors.push((Error::NoPairIfOrElif, span.clone()));
                     }
 
                     scope_stack.push(ScopeKind::Other, span, stmts.len());
@@ -272,17 +254,11 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                             _ => {
                                 // example: "Else;Else;"
                                 // the second Else pops the scope of the first Else
-                                errors.push(Error {
-                                    kind: ErrorKind::NoPairIfOrElif,
-                                    span: span.clone(),
-                                });
+                                errors.push((Error::NoPairIfOrElif, span.clone()));
                             }
                         };
                     } else {
-                        errors.push(Error {
-                            kind: ErrorKind::NoPairIfOrElif,
-                            span: span.clone(),
-                        });
+                        errors.push((Error::NoPairIfOrElif, span.clone()));
                     }
 
                     scope_stack.push(ScopeKind::Other, span, stmts.len());
@@ -308,10 +284,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                     }
 
                     if !sub_found {
-                        errors.push(Error {
-                            kind: ErrorKind::NotInASub,
-                            span,
-                        });
+                        errors.push((Error::NotInASub, span));
                     }
                     Statement::Block(BlockStmt::Return)
                 }
@@ -365,10 +338,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
                             }
                         };
                     } else {
-                        errors.push(Error {
-                            kind: ErrorKind::ExtraEnd,
-                            span,
-                        });
+                        errors.push((Error::ExtraEnd, span));
                     }
 
                     Statement::Block(BlockStmt::End)
@@ -382,10 +352,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<Err
     // Convert scopes left into errors
     // Note the global scope should be ignored
     for scope in scope_stack.scopes.drain(1..) {
-        errors.push(Error {
-            kind: ErrorKind::NoEnd,
-            span: scope.start_span,
-        });
+        errors.push((Error::NoEnd, scope.start_span));
     }
 
     if errors.is_empty() {

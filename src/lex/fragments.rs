@@ -1,6 +1,7 @@
 use super::utils::*;
 use super::*;
-pub(super) fn handle_multichars(vs: &[char]) -> Result<(LangItem, usize), ErrorKind> {
+
+pub(super) fn handle_multichars(vs: &[char]) -> Result<(LangItem, usize), (Error, usize)> {
     if let Some(inner) = handle_reserved(vs) {
         Ok(inner)
     } else if vs[0].is_numeric() {
@@ -8,7 +9,7 @@ pub(super) fn handle_multichars(vs: &[char]) -> Result<(LangItem, usize), ErrorK
     } else if is_ident_char(vs[0]) {
         Ok(handle_ident(vs))
     } else {
-        Err(ErrorKind::UnexpectedChar(vs[0]))
+        Err((Error::UnexpectedChar(vs[0]), 1))
     }
 }
 
@@ -38,7 +39,7 @@ fn handle_ident(vs: &[char]) -> (LangItem, usize) {
     )
 }
 
-fn handle_number(vs: &[char]) -> Result<(LangItem, usize), ErrorKind> {
+fn handle_number(vs: &[char]) -> Result<(LangItem, usize), (Error, usize)> {
     let mut len = 0;
     while len < vs.len() && vs[len].is_numeric() {
         len += 1;
@@ -46,15 +47,15 @@ fn handle_number(vs: &[char]) -> Result<(LangItem, usize), ErrorKind> {
     let s = String::from_iter(&vs[0..len]);
     match s.parse() {
         Ok(i) => Ok((LangItem::Num(i, len), len)),
-        Err(_) => Err(ErrorKind::TooLongNum),
+        Err(_) => Err((Error::TooLongNum, len)),
     }
 }
 
-pub(super) fn handle_string(vs: &[char]) -> Result<(LangItem, usize), ErrorKind> {
+pub(super) fn handle_string(vs: &[char]) -> Result<(LangItem, usize), (Error, usize)> {
     let mut len = 0;
     loop {
         if len >= vs.len() {
-            return Err(ErrorKind::UnterminatedStr);
+            return Err((Error::UnterminatedStr, len));
         }
         if vs[len] == '"' {
             let s = vs[0..len].iter().collect();

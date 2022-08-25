@@ -12,11 +12,11 @@ macro_rules! expects {
             match _ret {
                 Some((_i, _tk)) => {
                     if !matches!(_tk.item, $($pat)|+) {
-                        return Err(Error($msg.into(), _i.into()));
+                        return Err((Error($msg.into()), _i.into()));
                     }
                 }
                 None => {
-                    return Err(Error($msg.into(), $last.into()));
+                    return Err((Error($msg.into()), $last.into()));
                 }
             }
         }

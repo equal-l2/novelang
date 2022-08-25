@@ -1,4 +1,3 @@
-use crate::die;
 use crate::exprs::Expr;
 use crate::lval::LVal;
 use crate::span::*;
@@ -161,7 +160,7 @@ impl ScopeStack {
         self.get_top_mut().add_var(name, info)
     }
 
-    fn get_type_info(&self, lval: &LVal) -> Option<TypeInfo> {
+    fn get_type_info(&self, lval: &LVal) -> Result<TypeInfo, exprs::ErrorKind> {
         match lval {
             LVal::Scalar(s) => self
                 .scopes
@@ -170,20 +169,20 @@ impl ScopeStack {
                 .map(|m| m.get_type_info(s))
                 .find(Option::is_some)
                 .flatten()
-                .cloned(),
+                .cloned()
+                .ok_or_else(|| exprs::ErrorKind::VariableNotFound(s.clone())),
             LVal::Vector(l, _) => {
+                // TODO: refactor
                 let v = self.get_type_info(l);
                 match v {
-                    Some(TypeInfo {
-                        ty: Type::Arr(i),
-                        is_mut,
-                    }) => Some(TypeInfo {
-                        ty: (*i).clone(),
-                        is_mut,
-                    }),
-                    // TODO: fix panic with non-array indexing
-                    Some(_) => unreachable!(),
-                    None => None,
+                    Ok(TypeInfo { ty, is_mut }) => match ty {
+                        Type::Arr(i) => Ok(TypeInfo {
+                            ty: (*i).clone(),
+                            is_mut,
+                        }),
+                        _ => Err(exprs::ErrorKind::NotIndexable(ty)),
+                    },
+                    Err(e) => Err(e),
                 }
             }
         }
@@ -194,12 +193,7 @@ impl ScopeStack {
     }
 }
 
-pub struct Error {
-    pub kind: ErrorKind,
-    pub span: Span,
-}
-
-pub enum ErrorKind {
+pub enum Error {
     VariableAlreadyDefined(IdentName),
     SubroutineNotFound(IdentName),
     SubroutineAlreadyDefined(IdentName),
@@ -213,24 +207,24 @@ pub enum ErrorKind {
     Other(String),
 }
 
-impl std::fmt::Display for ErrorKind {
+impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorKind::VariableAlreadyDefined(name) => {
+            Error::VariableAlreadyDefined(name) => {
                 write!(f, "Variable named {} is already defined", name)
             }
-            ErrorKind::SubroutineNotFound(name) => {
+            Error::SubroutineNotFound(name) => {
                 write!(f, "Subroutine named {} was not found", name)
             }
-            ErrorKind::SubroutineAlreadyDefined(name) => {
+            Error::SubroutineAlreadyDefined(name) => {
                 write!(f, "Subroutine named {} is already defined", name)
             }
-            ErrorKind::NonPrintable(ty) => write!(f, "Type {} is not printable", ty),
-            ErrorKind::TypeMismatch { expected, actual } => {
+            Error::NonPrintable(ty) => write!(f, "Type {} is not printable", ty),
+            Error::TypeMismatch { expected, actual } => {
                 write!(f, "Expected type {}, found {}", expected, actual)
             }
-            ErrorKind::Expr(e) => write!(f, "{}", e),
-            ErrorKind::Other(error) => write!(f, "{}", error),
+            Error::Expr(e) => write!(f, "{}", e),
+            Error::Other(error) => write!(f, "{}", error),
         }
     }
 }
@@ -240,19 +234,16 @@ macro_rules! check_expr_type {
         match $expr.check_type(&$scope_stack) {
             Ok(ty) if ty == $expected => { /* OK */ }
             Ok(ty) => {
-                $errors.push(Error {
-                    kind: ErrorKind::TypeMismatch {
+                $errors.push((
+                    Error::TypeMismatch {
                         expected: $expected,
                         actual: ty,
                     },
-                    span: $expr.span(),
-                });
+                    $expr.span(),
+                ));
             }
             Err(e) => {
-                $errors.push(Error {
-                    kind: ErrorKind::Expr(e.kind),
-                    span: e.span,
-                });
+                $errors.push((Error::Expr(e.kind), e.span));
             }
         }
     };
@@ -263,17 +254,14 @@ macro_rules! get_type {
         match $expr.check_type(&$scope_stack) {
             Ok(ty) => ty,
             Err(e) => {
-                $errors.push(Error {
-                    kind: ErrorKind::Expr(e.kind),
-                    span: e.span,
-                });
+                $errors.push((Error::Expr(e.kind), e.span));
                 Type::Invalid
             }
         }
     };
 }
 
-pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Error>> {
+pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(Error, Span)>> {
     use crate::block::{BlockStmt, Statement as ParsedStmt};
     use crate::parse::NormalStmt;
     use exprs::TypeCheck;
@@ -290,36 +278,53 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Er
                     Statement::Assert { mesg, cond }
                 }
                 NormalStmt::Call { name } => {
-                    let info = scope_stack.get_type_info(&LVal::Scalar(name.clone()));
-                    if info.is_none() || info.unwrap().ty != Type::Sub {
-                        errors.push(Error {
-                            kind: ErrorKind::SubroutineNotFound(name.clone()),
-                            span: Default::default(), // TODO: implement span retrieval
-                        });
+                    match scope_stack.get_type_info(&LVal::Scalar(name.clone())) {
+                        Ok(TypeInfo { ty: Type::Sub, .. }) => { /* OK */ }
+                        Ok(_) => {
+                            errors.push((
+                                Error::SubroutineNotFound(name.clone()),
+                                Default::default(), // TODO: implement span retrieval
+                            ));
+                        }
+                        Err(e) => {
+                            errors.push((
+                                Error::Expr(e),
+                                Default::default(), // TODO: implement span retrieval
+                            ));
+                        }
                     }
+
                     Statement::Call { name: name.clone() }
                 }
                 NormalStmt::Halt => Statement::Halt,
                 NormalStmt::Input { prompt, target } => {
-                    let as_num = if let Some(info) = scope_stack.get_type_info(&target) {
-                        if !info.is_mut {
-                            errors.push(Error {
-                                kind: ErrorKind::Other(format!("LVal \"{}\" is immutable", target)),
-                                span: Default::default(), // TODO: implement span retrieval
-                            });
+                    let as_num = match scope_stack.get_type_info(&target) {
+                        Ok(TypeInfo { ty, is_mut }) => {
+                            if !is_mut {
+                                errors.push((
+                                    Error::Other(format!("LVal \"{}\" is immutable", target)),
+                                    Default::default(), // TODO: implement span retrieval
+                                ));
+                            }
+                            match ty {
+                                Type::Num => true,
+                                Type::Str => false,
+                                _ => {
+                                    errors.push((
+                                        Error::Other(format!("Expected Num or Str, found {}", ty)),
+                                        Default::default(), // TODO: implement span retrieval
+                                    ));
+                                    false
+                                }
+                            }
                         }
-                        match info.ty {
-                            Type::Num => true,
-                            Type::Str => false,
-                            // TODO: proper error handling
-                            _ => die!("Expected Num or Str, found {}", info.ty),
+                        Err(e) => {
+                            errors.push((
+                                Error::Expr(e),
+                                Default::default(), // TODO: implement span retrieval
+                            ));
+                            false
                         }
-                    } else {
-                        errors.push(Error {
-                            kind: ErrorKind::Other(format!("LVal \"{}\" is invalid", target)),
-                            span: Default::default(), // TODO: implement span retrieval
-                        });
-                        false
                     };
 
                     Statement::Input {
@@ -339,10 +344,10 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Er
                     );
 
                     if !success {
-                        errors.push(Error {
-                            kind: ErrorKind::VariableAlreadyDefined(name.clone()),
-                            span: Default::default(), // TODO: implement span retrieval
-                        });
+                        errors.push((
+                            Error::VariableAlreadyDefined(name.clone()),
+                            Default::default(), // TODO: implement span retrieval
+                        ));
                     }
                     Statement::Let {
                         name: name.clone(),
@@ -351,20 +356,23 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Er
                     }
                 }
                 NormalStmt::Modify { target, expr } => {
-                    if let Some(info) = scope_stack.get_type_info(&target) {
-                        if !info.is_mut {
-                            errors.push(Error {
-                                kind: ErrorKind::Other(format!("LVal \"{}\" is immutable", target)),
-                                span: Default::default(), // TODO: implement span retrieval
-                            });
+                    match scope_stack.get_type_info(&target) {
+                        Ok(TypeInfo { ty, is_mut }) => {
+                            if !is_mut {
+                                errors.push((
+                                    Error::Other(format!("LVal \"{}\" is immutable", target)),
+                                    Default::default(), // TODO: implement span retrieval
+                                ));
+                            }
+                            check_expr_type!(expr, ty, scope_stack, errors);
                         }
-                        check_expr_type!(expr, info.ty, scope_stack, errors);
-                    } else {
-                        errors.push(Error {
-                            kind: ErrorKind::Other(format!("LVal \"{}\" is invalid", target)),
-                            span: Default::default(), // TODO: implement span retrieval
-                        });
-                    }
+                        Err(e) => {
+                            errors.push((
+                                Error::Expr(e),
+                                Default::default(), // TODO: implement span retrieval
+                            ));
+                        }
+                    };
 
                     Statement::Modify { target, expr }
                 }
@@ -372,10 +380,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Er
                     for a in &args {
                         let ty = get_type!(a, scope_stack, errors);
                         if !ty.is_printable() {
-                            errors.push(Error {
-                                kind: ErrorKind::NonPrintable(ty),
-                                span: a.span(),
-                            });
+                            errors.push((Error::NonPrintable(ty), a.span()));
                         }
                     }
 
@@ -389,27 +394,30 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Er
                     check_expr_type!(count, Type::Num, scope_stack, errors);
                     check_expr_type!(face, Type::Num, scope_stack, errors);
 
-                    if let Some(info) = scope_stack.get_type_info(&target) {
-                        if info.ty != Type::Num {
-                            errors.push(Error {
-                                kind: ErrorKind::TypeMismatch {
-                                    expected: Type::Num,
-                                    actual: info.ty,
-                                },
-                                span: Default::default(), // TODO: implement span retrieval
-                            });
+                    match scope_stack.get_type_info(&target) {
+                        Ok(TypeInfo { ty, is_mut }) => {
+                            if ty != Type::Num {
+                                errors.push((
+                                    Error::TypeMismatch {
+                                        expected: Type::Num,
+                                        actual: ty,
+                                    },
+                                    Default::default(), // TODO: implement span retrieval
+                                ));
+                            }
+                            if !is_mut {
+                                errors.push((
+                                    Error::Other(format!("LVal \"{}\" is immutable", target)),
+                                    Default::default(), // TODO: implement span retrieval
+                                ));
+                            }
                         }
-                        if !info.is_mut {
-                            errors.push(Error {
-                                kind: ErrorKind::Other(format!("LVal \"{}\" is immutable", target)),
-                                span: Default::default(), // TODO: implement span retrieval
-                            });
+                        Err(e) => {
+                            errors.push((
+                                Error::Expr(e),
+                                Default::default(), // TODO: implement span retrieval
+                            ));
                         }
-                    } else {
-                        errors.push(Error {
-                            kind: ErrorKind::Other(format!("LVal \"{}\" is invalid", target)),
-                            span: Default::default(), // TODO: implement span retrieval
-                        });
                     };
 
                     Statement::Roll {
@@ -512,10 +520,10 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<Er
                     );
 
                     if !success {
-                        errors.push(Error {
-                            kind: ErrorKind::SubroutineAlreadyDefined(name.clone()),
-                            span: Default::default(), // TODO: implement span retrieval
-                        });
+                        errors.push((
+                            Error::SubroutineAlreadyDefined(name.clone()),
+                            Default::default(), // TODO: implement span retrieval
+                        ));
                     }
 
                     // create new scope

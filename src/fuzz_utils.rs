@@ -43,14 +43,14 @@ fn into_lexed(input: Vec<FuzzItem>) -> crate::lex::Lexed {
         lines.push(mapped.to_string());
         tokens.push(lex::Token {
             item: mapped,
-            loc: lex::Location {
+            loc: super::Location {
                 row: idx + 1,
                 col: 1,
             },
         });
     }
 
-    lex::Lexed { lines, tokens }
+    lex::Lexed { tokens }
 }
 
 pub fn fuzz_entry_point(input: Vec<FuzzItem>) {

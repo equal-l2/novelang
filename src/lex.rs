@@ -9,10 +9,15 @@ mod test;
 
 pub use items::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Location {
-    pub row: usize,
-    pub col: usize,
+use super::{Location, Range};
+
+pub(crate) fn loc_to_range(loc: Location, len: usize) -> Range {
+    let head = loc.clone();
+    let tail = Location {
+        row: loc.row,
+        col: loc.col + len,
+    };
+    Range(head, tail)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,7 +27,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn next_col_loc(&self) -> Location {
+    pub fn next_col(&self) -> Location {
         let loc = &self.loc;
         Location {
             row: loc.row,
@@ -43,67 +48,11 @@ impl std::fmt::Display for Token {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lexed {
-    pub lines: Vec<String>,
     pub tokens: Vec<Token>,
 }
 
 #[derive(Debug, Clone)]
-pub struct LocWithLine {
-    line: String,
-    loc: Location,
-}
-
-impl std::fmt::Display for LocWithLine {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let row = self.loc.row;
-        let col = self.loc.col;
-        writeln!(f, "     |")?;
-        writeln!(f, "{:<4} | {}", row, self.line)?;
-        writeln!(f, "     | {:>1$}", "^", col)?;
-        writeln!(f, "     |")?;
-        Ok(())
-    }
-}
-
-impl Lexed {
-    pub fn generate_error_mesg(&self, idx: usize) -> LocWithLine {
-        let loc = self.tokens.get(idx).map_or_else(
-            || self.tokens.last().unwrap().next_col_loc(),
-            |tk| tk.loc.clone(),
-        );
-
-        LocWithLine {
-            line: self.lines[loc.row - 1].clone(),
-            loc,
-        }
-    }
-}
-
-impl std::fmt::Display for Lexed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut i = 0;
-        for idx in 0..self.lines.len() {
-            writeln!(f, "{:4>} |{}", idx + 1, self.lines[idx])?;
-            while i < self.tokens.len() && self.tokens[i].loc.row == idx + 1 {
-                write!(f, "{:?} ", self.tokens[i].item)?;
-                i += 1;
-            }
-            writeln!(f)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Error {
-    loc_info: LocWithLine,
-    kind: ErrorKind,
-}
-
-impl std::error::Error for Error {}
-
-#[derive(Debug, Clone)]
-enum ErrorKind {
+pub enum Error {
     UnterminatedStr,
     UnexpectedChar(char),
     TooLongNum,
@@ -111,26 +60,23 @@ enum ErrorKind {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.kind {
-            ErrorKind::UnterminatedStr => write!(f, "String is not terminated")?,
-            ErrorKind::UnexpectedChar(c) => write!(f, "Unexpected character '{}'", c)?,
-            ErrorKind::TooLongNum => write!(
+        match self {
+            Error::UnterminatedStr => write!(f, "String is not terminated")?,
+            Error::UnexpectedChar(c) => write!(f, "Unexpected character '{}'", c)?,
+            Error::TooLongNum => write!(
                 f,
                 "Number is too long for {}-bit integer",
                 std::mem::size_of::<crate::types::IntType>() * 8
             )?,
         };
-        let l = &self.loc_info;
-        writeln!(f, " ({}:{})\n{}", l.loc.row, l.loc.col, l)?;
         Ok(())
     }
 }
 
-pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
+pub fn lex<S: AsRef<str>>(lines: &[S]) -> Result<Lexed, (Error, Range)> {
     let mut tks = Vec::new();
-    let lines: Vec<_> = s.as_ref().lines().map(String::from).collect();
     for (idx, l) in lines.iter().enumerate() {
-        let v: Vec<_> = l.chars().collect();
+        let v: Vec<_> = l.as_ref().chars().collect();
         let mut i = 0;
         while i < v.len() {
             if v[i].is_whitespace() {
@@ -179,14 +125,8 @@ pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
                                     i += len + 1; // Note end quote of the string
                                     item
                                 }
-                                Err(kind) => {
-                                    return Err(Error {
-                                        loc_info: LocWithLine {
-                                            line: l.clone(),
-                                            loc,
-                                        },
-                                        kind,
-                                    });
+                                Err((kind, len)) => {
+                                    return Err((kind, loc_to_range(loc, len)));
                                 }
                             }
                         }
@@ -195,14 +135,8 @@ pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
                                 i += len;
                                 item
                             }
-                            Err(kind) => {
-                                return Err(Error {
-                                    loc_info: LocWithLine {
-                                        line: l.clone(),
-                                        loc,
-                                    },
-                                    kind,
-                                });
+                            Err((kind, len)) => {
+                                return Err((kind, loc_to_range(loc, len)));
                             }
                         },
                     },
@@ -211,5 +145,5 @@ pub fn lex<S: AsRef<str>>(s: S) -> Result<Lexed, Error> {
         }
     }
 
-    Ok(Lexed { lines, tokens: tks })
+    Ok(Lexed { tokens: tks })
 }

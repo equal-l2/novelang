@@ -44,15 +44,17 @@ impl ExprError {
     }
 }
 
-impl From<ExprError> for super::Error {
+impl From<ExprError> for (super::Error, Span) {
     fn from(err: ExprError) -> Self {
-        Self(
-            match err.kind {
-                ExprErrorKind::UnexpectedToken => "Failed to parse expr because of this token",
-                ExprErrorKind::NoPairParen => "Paren doesn't have its pair",
-                ExprErrorKind::TokenExhausted => "Expression abruptly ended",
-            }
-            .into(),
+        (
+            super::Error(
+                match err.kind {
+                    ExprErrorKind::UnexpectedToken => "Failed to parse expr because of this token",
+                    ExprErrorKind::NoPairParen => "Paren doesn't have its pair",
+                    ExprErrorKind::TokenExhausted => "Expression abruptly ended",
+                }
+                .into(),
+            ),
             err.span,
         )
     }
