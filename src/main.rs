@@ -94,9 +94,12 @@ pub fn generate_source_info<S: AsRef<str>>(lines: &[S], range: Range) -> String 
 
 fn print_compile_errors<S: AsRef<str>>(e: novelang::Error, lines: &[S]) {
     match e {
-        novelang::Error::Lex(e, r) => {
-            let info = generate_source_info(lines, r);
-            eprintln!("Lex error: {}\n{}", e, info)
+        novelang::Error::Lex(es) => {
+            println!("{}", es.len());
+            for (e, r) in es {
+                let info = generate_source_info(lines, r);
+                eprintln!("Lex syntax error: {}\n{}", e, info)
+            }
         }
         novelang::Error::Parse(e, r) => {
             let info = generate_source_info(lines, r);

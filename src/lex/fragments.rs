@@ -55,7 +55,7 @@ pub(super) fn handle_string(vs: &[char]) -> Result<(LangItem, usize), (Error, us
     let mut len = 0;
     loop {
         if len >= vs.len() {
-            return Err((Error::UnterminatedStr, len));
+            return Err((Error::UnterminatedStr, len + 1));
         }
         if vs[len] == '"' {
             let s = vs[0..len].iter().collect();

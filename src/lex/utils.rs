@@ -7,7 +7,7 @@ pub fn is_item(item_chars: &[char], src_chars: &[char]) -> bool {
 }
 
 pub const RESERVED_CHARS: &[char] = &[
-    '+', '-', '*', '/', '%', '"', '<', '>', '!', '=', ';', ',', '(', ')', '[', ']',
+    '+', '-', '*', '/', '%', '"', '<', '>', '=', ';', ',', '(', ')', '[', ']', '&', '|',
 ];
 
 pub fn is_ident_char(c: char) -> bool {

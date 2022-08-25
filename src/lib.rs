@@ -51,7 +51,7 @@ pub struct Location {
 pub struct Range(pub Location, pub Location);
 
 pub enum Error {
-    Lex(lex::Error, Range),
+    Lex(Vec<(lex::Error, Range)>),
     Parse(parse::Error, Range),
     Block(Vec<(block::Error, Range)>),
     Semck(Vec<(semck::Error, Range)>),
@@ -72,7 +72,7 @@ pub(crate) fn span_to_range(span: Span, tokens: &[Token]) -> Range {
 }
 
 pub fn compile<S: AsRef<str>>(s: &[S]) -> Result<Ast, Error> {
-    let lexed = lex::lex(s).map_err(|(e, r)| Error::Lex(e, r))?;
+    let lexed = lex::lex(s).map_err(|v| Error::Lex(v))?;
     let parsed =
         parse::parse(&lexed).map_err(|(e, s)| Error::Parse(e, span_to_range(s, &lexed.tokens)))?;
     let block_checked = block::check_block(parsed).map_err(|v| {

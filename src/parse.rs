@@ -393,27 +393,28 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                     BlockStmt::If { cond }
                 }),
 
-                lex::Command::Else => parse_block!(stmts, idx, {
-                    // "Else" ("If" <cond>) ";"
+                lex::Command::Else => {
+                    stmts.push({
+                        // "Else" ("If" <cond>) ";"
+                        let (_, tk) = tks.peek().ok_or_else(|| {
+                            (Error("expected Semicolon or If".into()), last.into())
+                        })?;
 
-                    let (_, tk) = tks
-                        .peek()
-                        .ok_or_else(|| (Error("expected Semicolon or If".into()), last.into()))?;
+                        if tk.item == LangItem::Cmd(lex::Command::If) {
+                            // "Else" "If" <cond> ";"
+                            let _ = tks.next().unwrap();
 
-                    if tk.item == LangItem::Cmd(lex::Command::If) {
-                        // "Else" "If" <cond> ";"
-                        let _ = tks.next().unwrap();
+                            let cond = parse_expr(&mut tks, last)?;
+                            expects_semi!(tks, last);
 
-                        let cond = parse_expr(&mut tks, last)?;
-                        expects_semi!(tks, last);
-
-                        BlockStmt::ElIf { cond }
-                    } else {
-                        // "Else" ";"
-                        expects_semi!(tks, last);
-                        BlockStmt::Else
-                    }
-                }),
+                            Statement::Block(BlockStmt::ElIf { cond }, Span(idx, idx + 1))
+                        } else {
+                            // "Else" ";"
+                            expects_semi!(tks, last);
+                            Statement::Block(BlockStmt::Else, idx.into())
+                        }
+                    })
+                }
 
                 lex::Command::Sub => parse_block!(stmts, idx, {
                     // "Sub" <name> ";"
