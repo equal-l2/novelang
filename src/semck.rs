@@ -15,7 +15,7 @@ pub enum Statement {
         cond: Expr,
     },
     Call {
-        name: IdentName,
+        name: Expr,
     },
     Halt,
     Input {
@@ -162,15 +162,15 @@ impl ScopeStack {
 
     fn get_type_info(&self, lval: &LVal) -> Result<TypeInfo, exprs::ErrorKind> {
         match lval {
-            LVal::Scalar(s) => self
+            LVal::Scalar(i) => self
                 .scopes
                 .iter()
                 .rev()
-                .map(|m| m.get_type_info(s))
+                .map(|m| m.get_type_info(&i.0))
                 .find(Option::is_some)
                 .flatten()
                 .cloned()
-                .ok_or_else(|| exprs::ErrorKind::VariableNotFound(s.clone())),
+                .ok_or_else(|| exprs::ErrorKind::VariableNotFound(i.0.clone())),
             LVal::Vector(l, _) => {
                 // TODO: refactor
                 let v = self.get_type_info(l);
@@ -278,22 +278,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     Statement::Assert { mesg, cond }
                 }
                 NormalStmt::Call { name } => {
-                    match scope_stack.get_type_info(&LVal::Scalar(name.clone())) {
-                        Ok(TypeInfo { ty: Type::Sub, .. }) => { /* OK */ }
-                        Ok(_) => {
-                            errors.push((
-                                Error::SubroutineNotFound(name.clone()),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
-                        }
-                        Err(e) => {
-                            errors.push((
-                                Error::Expr(e),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
-                        }
-                    }
-
+                    check_expr_type!(name, Type::Sub, scope_stack, errors);
                     Statement::Call { name: name.clone() }
                 }
                 NormalStmt::Halt => Statement::Halt,
@@ -303,7 +288,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                             if !is_mut {
                                 errors.push((
                                     Error::Other(format!("LVal \"{}\" is immutable", target)),
-                                    Default::default(), // TODO: implement span retrieval
+                                    target.span(),
                                 ));
                             }
                             match ty {
@@ -312,17 +297,14 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                                 _ => {
                                     errors.push((
                                         Error::Other(format!("Expected Num or Str, found {}", ty)),
-                                        Default::default(), // TODO: implement span retrieval
+                                        target.span(),
                                     ));
                                     false
                                 }
                             }
                         }
                         Err(e) => {
-                            errors.push((
-                                Error::Expr(e),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
+                            errors.push((Error::Expr(e), target.span()));
                             false
                         }
                     };
@@ -336,7 +318,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                 NormalStmt::Let { name, init, is_mut } => {
                     let init_ty = get_type!(init, scope_stack, errors);
                     let success = scope_stack.add_var(
-                        name.clone(),
+                        name.0.clone(),
                         TypeInfo {
                             ty: init_ty,
                             is_mut,
@@ -344,13 +326,10 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     );
 
                     if !success {
-                        errors.push((
-                            Error::VariableAlreadyDefined(name.clone()),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
+                        errors.push((Error::VariableAlreadyDefined(name.0.clone()), name.span()));
                     }
                     Statement::Let {
-                        name: name.clone(),
+                        name: name.0.clone(),
                         init,
                         is_mut,
                     }
@@ -361,16 +340,13 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                             if !is_mut {
                                 errors.push((
                                     Error::Other(format!("LVal \"{}\" is immutable", target)),
-                                    Default::default(), // TODO: implement span retrieval
+                                    target.span(),
                                 ));
                             }
                             check_expr_type!(expr, ty, scope_stack, errors);
                         }
                         Err(e) => {
-                            errors.push((
-                                Error::Expr(e),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
+                            errors.push((Error::Expr(e), target.span()));
                         }
                     };
 
@@ -402,21 +378,18 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                                         expected: Type::Num,
                                         actual: ty,
                                     },
-                                    Default::default(), // TODO: implement span retrieval
+                                    target.span(),
                                 ));
                             }
                             if !is_mut {
                                 errors.push((
                                     Error::Other(format!("LVal \"{}\" is immutable", target)),
-                                    Default::default(), // TODO: implement span retrieval
+                                    target.span(),
                                 ));
                             }
                         }
                         Err(e) => {
-                            errors.push((
-                                Error::Expr(e),
-                                Default::default(), // TODO: implement span retrieval
-                            ));
+                            errors.push((Error::Expr(e), target.span()));
                         }
                     };
 
@@ -442,7 +415,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
 
                     // always successful because we are pushing it to a new scope
                     let _ = scope_stack.add_var(
-                        counter.clone(),
+                        counter.0.clone(),
                         TypeInfo {
                             ty: Type::Num,
                             is_mut: false,
@@ -450,7 +423,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     );
 
                     Statement::For {
-                        counter,
+                        counter: counter.0,
                         from,
                         to,
                         offset_to_end,
@@ -512,7 +485,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                 } => {
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
-                        name.clone(),
+                        name.0.clone(),
                         TypeInfo {
                             ty: Type::Sub,
                             is_mut: false,
@@ -520,17 +493,14 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     );
 
                     if !success {
-                        errors.push((
-                            Error::SubroutineAlreadyDefined(name.clone()),
-                            Default::default(), // TODO: implement span retrieval
-                        ));
+                        errors.push((Error::SubroutineAlreadyDefined(name.0.clone()), name.span()));
                     }
 
                     // create new scope
                     scope_stack.push(stmts.len());
 
                     Statement::Sub {
-                        name: name.clone(),
+                        name: name.0.clone(),
                         offset_to_end,
                     }
                 }

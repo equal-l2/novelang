@@ -343,25 +343,25 @@ impl<'a> TryFromTokens<'a> for Core {
 
         ensure_start!(tks, last);
 
-        let (from, tok) = tks.next().unwrap();
+        let (start, tok) = tks.next().unwrap();
         Ok(match &tok.item {
-            LangItem::Str(s) => Self::Str(s.clone(), from.into()),
-            LangItem::Num(n, _) => Self::Num(*n, from.into()),
-            LangItem::Ident(s) => Self::Ident(s.clone(), from.into()),
-            LangItem::Key(Keyword::True) => Self::True(from.into()),
-            LangItem::Key(Keyword::False) => Self::False(from.into()),
+            LangItem::Str(s) => Self::Str(s.clone(), start.into()),
+            LangItem::Num(n, _) => Self::Num(*n, start.into()),
+            LangItem::Ident(s) => Self::Ident(crate::lval::Ident(s.clone(), start.into())),
+            LangItem::Key(Keyword::True) => Self::True(start.into()),
+            LangItem::Key(Keyword::False) => Self::False(start.into()),
             LangItem::LPar => {
                 let expr = TopItem::try_from_tokens(tks, last)?;
                 let next_tk = tks.next();
                 match next_tk.item() {
                     Some(LangItem::RPar) => {
-                        Self::Paren(Box::from(expr), Span(from, next_tk.unwrap().0))
+                        Self::Paren(Box::from(expr), Span(start, next_tk.unwrap().0))
                     }
                     Some(_) => {
                         let to = next_tk.unwrap().0;
-                        return Err(ExprError::no_pair_paren(from, to));
+                        return Err(ExprError::no_pair_paren(start, to));
                     }
-                    None => return Err(ExprError::exhausted(from, last)),
+                    None => return Err(ExprError::exhausted(start, last)),
                 }
             }
             LangItem::LBra => {
@@ -379,19 +379,19 @@ impl<'a> TryFromTokens<'a> for Core {
                                         LangItem::Comma => {
                                             // continue
                                         }
-                                        LangItem::RBra => break Self::Arr(v, Span(from, i)),
+                                        LangItem::RBra => break Self::Arr(v, Span(start, i)),
                                         _ => return Err(ExprError::unexpected(i)),
                                     }
                                 } else {
-                                    return Err(ExprError::exhausted(from, last));
+                                    return Err(ExprError::exhausted(start, last));
                                 }
                             }
                         }
-                        LangItem::RBra => Self::Arr(v, Span(from, idx)),
+                        LangItem::RBra => Self::Arr(v, Span(start, idx)),
                         _ => return Err(ExprError::unexpected(idx)),
                     }
                 } else {
-                    return Err(ExprError::exhausted(from, last));
+                    return Err(ExprError::exhausted(start, last));
                 }
             }
             // I'm not sure if this arm would catch anything

@@ -99,11 +99,11 @@ impl Spannable for Core {
         match self {
             Core::Str(_, s)
             | Core::Num(_, s)
-            | Core::Ident(_, s)
             | Core::True(s)
             | Core::False(s)
             | Core::Paren(_, s)
             | Core::Arr(_, s) => s.clone(),
+            Core::Ident(i) => i.span(),
         }
     }
 }

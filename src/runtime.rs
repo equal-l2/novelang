@@ -107,7 +107,7 @@ impl Runtime {
 
     fn resolve_lval(&mut self, target: &LVal) -> Result<&mut Val, exprs::EvalError> {
         match target {
-            LVal::Scalar(s) => Ok(self.get_var_mut(s)),
+            LVal::Scalar(i) => Ok(self.get_var_mut(&i.0)),
             LVal::Vector(l, r) => {
                 let r = r.eval(self)?;
                 if let Val::Num(n) = r {
@@ -328,7 +328,11 @@ pub fn run(prog: Ast) {
                 i += offset_to_end;
             }
             Statement::Call { name } => {
-                let idx = unwrap_sub(rt.get_var(name));
+                let name_val = name.eval(&rt).unwrap_or_else(|e| {
+                    // FIXME
+                    die!("Runtime error: failed to eval Sub to call: {}", e);
+                });
+                let idx = unwrap_sub(&name_val);
 
                 // register address to return (the next line)
                 rt.push(ScopeKind::Sub, i + 1);

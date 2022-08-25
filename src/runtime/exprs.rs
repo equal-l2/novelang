@@ -251,7 +251,7 @@ impl Eval for Core {
         Ok(match self {
             Self::Str(s, _) => Val::Str(s.clone()),
             Self::Num(n, _) => Val::Num(*n),
-            Self::Ident(name, _) => vmap.get(name),
+            Self::Ident(i) => vmap.get(&i.0),
             Self::True(_) => Val::Bool(true),
             Self::False(_) => Val::Bool(false),
             Self::Paren(expr, _) => expr.eval(vmap)?,

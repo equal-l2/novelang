@@ -93,7 +93,7 @@ impl Display for Core {
         match self {
             Str(i, _) => write!(f, "{}", i),
             Num(i, _) => write!(f, "{}", i),
-            Ident(i, _) => write!(f, "{}", i),
+            Ident(i) => write!(f, "{}", i),
             True(_) => write!(f, "true"),
             False(_) => write!(f, "false"),
             Paren(i, _) => write!(f, "{}", i),

@@ -263,8 +263,8 @@ impl TypeCheck for Core {
         match self {
             Self::Str(_, _) => Ok(Type::Str),
             Self::Num(_, _) => Ok(Type::Num),
-            Self::Ident(name, _) => stack
-                .get_type_info(&name.clone().into())
+            Self::Ident(i) => stack
+                .get_type_info(&i.clone().into())
                 .map(|ti| ti.ty)
                 .map_err(|kind| Error {
                     kind,

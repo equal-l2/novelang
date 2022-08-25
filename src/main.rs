@@ -63,11 +63,10 @@ pub fn generate_source_info<S: AsRef<str>>(lines: &[S], range: Range) -> String 
     use std::fmt::Write;
     let mut s = String::new();
 
-    eprintln!("{:?}", range);
-
     let Range(head, tail) = range;
     let row = head.row;
     let line = lines[row - 1].as_ref();
+
     let len = if head.row == tail.row {
         tail.col - head.col
     } else {

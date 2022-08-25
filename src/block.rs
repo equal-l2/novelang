@@ -1,7 +1,7 @@
 use crate::exprs::Expr;
+use crate::lval::Ident;
 use crate::parse;
 use crate::span::Span;
-use crate::types::IdentName;
 
 #[derive(Debug)]
 pub enum Error {
@@ -34,7 +34,7 @@ pub enum Statement {
 #[derive(Debug, Clone)]
 pub enum BlockStmt {
     For {
-        counter: IdentName,
+        counter: Ident,
         from: Expr,
         to: Expr,
         offset_to_end: usize,
@@ -57,7 +57,7 @@ pub enum BlockStmt {
         offset_to_end: usize,
     },
     Sub {
-        name: IdentName,
+        name: Ident,
         offset_to_end: usize,
     },
     Return,

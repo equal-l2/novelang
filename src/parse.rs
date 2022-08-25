@@ -1,8 +1,7 @@
 use crate::exprs::Expr;
 use crate::lex;
-use crate::lval::LVal;
+use crate::lval::{Ident, LVal};
 use crate::span::{Span, Spannable};
-use crate::types::IdentName;
 
 mod exprs;
 
@@ -40,8 +39,7 @@ pub enum NormalStmt {
         cond: Expr,
     },
     Call {
-        // FUTURE: accept expression, allowing containing functions in an array
-        name: IdentName,
+        name: Expr,
     },
     Halt,
     Input {
@@ -49,7 +47,7 @@ pub enum NormalStmt {
         target: LVal,
     },
     Let {
-        name: IdentName,
+        name: Ident,
         init: Expr,
         is_mut: bool,
     },
@@ -70,7 +68,7 @@ pub enum NormalStmt {
 #[derive(Debug, Clone)]
 pub enum BlockStmt {
     For {
-        counter: IdentName,
+        counter: Ident,
         from: Expr,
         to: Expr,
     },
@@ -89,7 +87,7 @@ pub enum BlockStmt {
     Else,
 
     Sub {
-        name: IdentName,
+        name: Ident,
     },
     Return,
 
@@ -121,7 +119,7 @@ where
         .peek()
         .ok_or_else(|| (Error("expected Ident".into()), last.into()))?;
     if let LangItem::Ident(name) = &tk.item {
-        let mut val = LVal::Scalar(name.clone());
+        let mut val = LVal::Scalar(Ident(name.clone(), (*i).into()));
         let _ = tks.next().unwrap();
         loop {
             if tks.peek().item() == Some(LangItem::LBra) {
@@ -174,15 +172,9 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
 
                 lex::Command::Call => parse_normal!(stmts, {
                     // "Call" <name> ";"
-                    let (i, tk) = tks
-                        .next()
-                        .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
-                    if let LangItem::Ident(name) = &tk.item {
-                        expects_semi!(tks, last);
-                        NormalStmt::Call { name: name.clone() }
-                    } else {
-                        return Err((Error("Expected subroutine name".into()), i.into()));
-                    }
+                    let name = parse_expr(&mut tks, last)?;
+                    expects_semi!(tks, last);
+                    NormalStmt::Call { name: name.clone() }
                 }),
 
                 lex::Command::Halt => parse_normal!(stmts, {
@@ -241,13 +233,13 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                                 LangItem::Key(Keyword::AsMut) => {
                                     expects_semi!(tks, last);
                                     NormalStmt::Let {
-                                        name: name.clone(),
+                                        name: Ident(name.clone(), i.into()),
                                         init,
                                         is_mut: true,
                                     }
                                 }
                                 LangItem::Semi => NormalStmt::Let {
-                                    name: name.clone(),
+                                    name: Ident(name.clone(), i.into()),
                                     init,
                                     is_mut: false,
                                 },
@@ -363,7 +355,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                         expects_semi!(tks, last);
 
                         BlockStmt::For {
-                            counter: name.clone(),
+                            counter: Ident(name.clone(), i.into()),
                             from,
                             to,
                         }
@@ -430,7 +422,9 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                         .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
                     if let LangItem::Ident(name) = &tk.item {
                         expects_semi!(tks, last);
-                        BlockStmt::Sub { name: name.clone() }
+                        BlockStmt::Sub {
+                            name: Ident(name.clone(), i.into()),
+                        }
                     } else {
                         return Err((Error("Expected subroutine name".into()), i.into()));
                     }
