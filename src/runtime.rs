@@ -3,8 +3,8 @@ mod val;
 
 use crate::die;
 use crate::exprs::Expr;
-use crate::lval::Target;
 use crate::semck::{Ast, Statement};
+use crate::target::Target;
 use crate::types::{IdentName, IntType};
 use once_cell::sync::Lazy;
 
@@ -105,13 +105,13 @@ impl Runtime {
         }
     }
 
-    fn resolve_lval(&mut self, target: &Target) -> Result<&mut Val, exprs::EvalError> {
+    fn resolve_target(&mut self, target: &Target) -> Result<&mut Val, exprs::EvalError> {
         match target {
             Target::Scalar(i) => Ok(self.get_var_mut(&i.0)),
             Target::Vector(l, r) => {
                 let r = r.eval(self)?;
                 if let Val::Num(n) = r {
-                    let resolved = self.resolve_lval(l)?;
+                    let resolved = self.resolve_target(l)?;
                     if let Val::Arr(v) = resolved {
                         v.get_mut(n as usize)
                             .ok_or(exprs::EvalError::IndexOutOfBounds(n))
@@ -129,7 +129,7 @@ impl Runtime {
     /// Aborts on error (the variable doesn't exists, differ in type, or is immutable)
     fn modify_var(&mut self, target: &Target, val: Val) {
         let var = self
-            .resolve_lval(target)
+            .resolve_target(target)
             .unwrap_or_else(|e| die!("Runtime error: cannot resolve {} because of: {}", target, e));
         *var = val;
     }

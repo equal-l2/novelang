@@ -1,6 +1,6 @@
 use crate::exprs::Expr;
-use crate::lval::Target;
 use crate::span::*;
+use crate::target::Target;
 use crate::types::IdentName;
 
 mod exprs;
@@ -160,8 +160,8 @@ impl ScopeStack {
         self.get_top_mut().add_var(name, info)
     }
 
-    fn get_type_info(&self, lval: &Target) -> Result<TypeInfo, exprs::ErrorKind> {
-        match lval {
+    fn get_type_info(&self, target: &Target) -> Result<TypeInfo, exprs::ErrorKind> {
+        match target {
             Target::Scalar(i) => self
                 .scopes
                 .iter()
@@ -204,6 +204,7 @@ pub enum Error {
         actual: Type,
     },
     Expr(exprs::ErrorKind),
+    GodMistake(Box<Self>),
     Other(String),
 }
 
@@ -211,19 +212,20 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::VariableAlreadyDefined(name) => {
-                write!(f, "Variable named {} is already defined", name)
+                write!(f, "Variable named \"{}\" is already defined", name)
             }
             Error::SubroutineNotFound(name) => {
-                write!(f, "Subroutine named {} was not found", name)
+                write!(f, "Subroutine named \"{}\" was not found", name)
             }
             Error::SubroutineAlreadyDefined(name) => {
-                write!(f, "Subroutine named {} is already defined", name)
+                write!(f, "Subroutine named \"{}\" is already defined", name)
             }
-            Error::NonPrintable(ty) => write!(f, "Type {} is not printable", ty),
+            Error::NonPrintable(ty) => write!(f, "Type \"{}\" is not printable", ty),
             Error::TypeMismatch { expected, actual } => {
-                write!(f, "Expected type {}, found {}", expected, actual)
+                write!(f, "Expected type \"{}\", found \"{}\"", expected, actual)
             }
             Error::Expr(e) => write!(f, "{}", e),
+            Error::GodMistake(e) => write!(f, "Can God make a mistake? ({})", e),
             Error::Other(error) => write!(f, "{}", error),
         }
     }
@@ -287,7 +289,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         Ok(TypeInfo { ty, is_mut }) => {
                             if !is_mut {
                                 errors.push((
-                                    Error::Other(format!("LVal \"{}\" is immutable", target)),
+                                    Error::Other(format!("Target \"{}\" is immutable", target)),
                                     target.span(),
                                 ));
                             }
@@ -316,7 +318,15 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     }
                 }
                 NormalStmt::Let { name, init, is_mut } => {
-                    let init_ty = get_type!(init, scope_stack, errors);
+                    let mut let_errors = vec![];
+
+                    let init_ty = match init.check_type(&scope_stack) {
+                        Ok(ty) => ty,
+                        Err(e) => {
+                            let_errors.push((Error::Expr(e.kind), e.span));
+                            Type::Invalid
+                        }
+                    };
                     let success = scope_stack.add_var(
                         name.0.clone(),
                         TypeInfo {
@@ -326,8 +336,20 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     );
 
                     if !success {
-                        errors.push((Error::VariableAlreadyDefined(name.0.clone()), name.span()));
+                        let_errors
+                            .push((Error::VariableAlreadyDefined(name.0.clone()), name.span()));
                     }
+
+                    if name.as_ref() == "there" && init.to_string() == "light" && !is_mut {
+                        errors.extend(
+                            let_errors
+                                .into_iter()
+                                .map(|(e, s)| (Error::GodMistake(Box::new(e)), s)),
+                        );
+                    } else {
+                        errors.extend(let_errors.into_iter());
+                    }
+
                     Statement::Let {
                         name: name.0.clone(),
                         init,
@@ -339,7 +361,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         Ok(TypeInfo { ty, is_mut }) => {
                             if !is_mut {
                                 errors.push((
-                                    Error::Other(format!("LVal \"{}\" is immutable", target)),
+                                    Error::Other(format!("Target \"{}\" is immutable", target)),
                                     target.span(),
                                 ));
                             }
@@ -383,7 +405,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                             }
                             if !is_mut {
                                 errors.push((
-                                    Error::Other(format!("LVal \"{}\" is immutable", target)),
+                                    Error::Other(format!("Target \"{}\" is immutable", target)),
                                     target.span(),
                                 ));
                             }

@@ -20,18 +20,29 @@ pub enum ErrorKind {
 impl std::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorKind::VariableNotFound(name) => write!(f, "Variable {} was not found", name),
+            ErrorKind::VariableNotFound(name) => write!(f, "Variable \"{}\" was not found", name),
             ErrorKind::UnaryUndefined(op, ty) => {
-                write!(f, "Unary operator {} is not defined for type {}", op, ty)
+                write!(
+                    f,
+                    "Unary operator \"{}\" is not defined for type \"{}\"",
+                    op, ty
+                )
             }
             ErrorKind::BinaryUndefined(op, ty_l, ty_r) => write!(
                 f,
-                "Binary operator {} is not defined between types {} and {}",
+                "Binary operator \"{}\" is not defined between types \"{}\" and \"{}\"",
                 op, ty_l, ty_r
             ),
-            ErrorKind::NonNumIndex(ty) => write!(f, "Type {} cannot be used as an index", ty),
-            ErrorKind::NotIndexable(ty) => write!(f, "Type {} cannot be indexed", ty),
-            ErrorKind::ArrayTypeDiffer(_) => write!(f, "PLACEHOLDER"),
+            ErrorKind::NonNumIndex(ty) => write!(f, "Type \"{}\" cannot be used as an index", ty),
+            ErrorKind::NotIndexable(ty) => write!(f, "Type \"{}\" cannot be indexed", ty),
+            ErrorKind::ArrayTypeDiffer(ty) => write!(
+                f,
+                "{} PLACEHOLDER ({} {} {})",
+                ty,
+                file!(),
+                line!(),
+                column!()
+            ),
         }
     }
 }

@@ -29,11 +29,11 @@
 mod block;
 mod exprs;
 mod lex;
-mod lval;
 mod parse;
 mod runtime;
 mod semck;
 mod span;
+mod target;
 mod types;
 
 pub mod fuzz_utils;

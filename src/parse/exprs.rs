@@ -346,7 +346,7 @@ impl<'a> TryFromTokens<'a> for Core {
         Ok(match &tok.item {
             LangItem::Str(s) => Self::Str(s.clone(), start.into()),
             LangItem::Num(n, _) => Self::Num(*n, start.into()),
-            LangItem::Ident(s) => Self::Ident(crate::lval::Ident(s.clone(), start.into())),
+            LangItem::Ident(s) => Self::Ident(crate::target::Ident(s.clone(), start.into())),
             LangItem::Key(Keyword::True) => Self::True(start.into()),
             LangItem::Key(Keyword::False) => Self::False(start.into()),
             LangItem::LPar => {

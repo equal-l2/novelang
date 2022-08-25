@@ -1,7 +1,7 @@
 use crate::exprs::Expr;
-use crate::lval::Ident;
 use crate::parse;
 use crate::span::Span;
+use crate::target::Ident;
 
 #[derive(Debug)]
 pub enum Error {

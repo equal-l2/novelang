@@ -5,6 +5,12 @@ use crate::types::IdentName;
 #[derive(Clone, Debug)]
 pub struct Ident(pub IdentName, pub Span);
 
+impl AsRef<str> for Ident {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
 impl std::fmt::Display for Ident {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)

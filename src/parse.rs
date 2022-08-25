@@ -1,7 +1,7 @@
 use crate::exprs::Expr;
 use crate::lex;
-use crate::lval::{Ident, Target};
 use crate::span::{Span, Spannable};
+use crate::target::{Ident, Target};
 
 mod exprs;
 
@@ -109,7 +109,10 @@ impl LookItem for Option<&lex::Token> {
     }
 }
 
-fn parse_lval<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Target, (Error, Span)>
+fn parse_target<'a, T>(
+    tks: &mut std::iter::Peekable<T>,
+    last: usize,
+) -> Result<Target, (Error, Span)>
 where
     T: Iterator<Item = (usize, &'a lex::Token)>,
 {
@@ -184,7 +187,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                 }),
 
                 lex::Command::Input => parse_normal!(stmts, {
-                    // "Input" (<str>) "To" <lval> ";"
+                    // "Input" (<str>) "To" <target> ";"
 
                     // TODO: accept runtime prompt string
                     let (_, tk) = tks
@@ -200,13 +203,10 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
 
                     expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
-                    let lval = parse_lval(&mut tks, last)?;
+                    let target = parse_target(&mut tks, last)?;
 
                     expects_semi!(tks, last);
-                    NormalStmt::Input {
-                        prompt,
-                        target: lval,
-                    }
+                    NormalStmt::Input { prompt, target }
                 }),
 
                 lex::Command::Let => parse_normal!(stmts, {
@@ -263,17 +263,14 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                 }),
 
                 lex::Command::Modify => parse_normal!(stmts, {
-                    // "Modify" <lval> "To" <expr> ";"
-                    let lval = parse_lval(&mut tks, last)?;
+                    // "Modify" <target> "To" <expr> ";"
+                    let target = parse_target(&mut tks, last)?;
                     expects!("To expected", LangItem::Key(Keyword::To), tks, last);
 
                     let expr = parse_expr(&mut tks, last)?;
                     expects_semi!(tks, last);
 
-                    NormalStmt::Modify {
-                        target: lval.clone(),
-                        expr,
-                    }
+                    NormalStmt::Modify { target, expr }
                 }),
 
                 Command::Print => parse_normal!(stmts, {
@@ -302,7 +299,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                 }),
 
                 lex::Command::Roll => parse_normal!(stmts, {
-                    // "Roll" <expr> "Dice" "With" <expr> "Faces" "To" <lval> ";"
+                    // "Roll" <expr> "Dice" "With" <expr> "Faces" "To" <target> ";"
 
                     let count = parse_expr(&mut tks, last)?;
 
@@ -319,13 +316,13 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
                     );
                     expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
-                    let lval = parse_lval(&mut tks, last)?;
+                    let target = parse_target(&mut tks, last)?;
 
                     expects_semi!(tks, last);
                     NormalStmt::Roll {
                         count,
                         faces,
-                        target: lval,
+                        target,
                     }
                 }),
 
