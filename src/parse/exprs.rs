@@ -394,7 +394,7 @@ impl<'a> TryFromTokens<'a> for Core {
                 }
             }
             // I'm not sure if this arm would catch anything
-            _ => todo!("{:?}", &tok.item),
+            _ => unimplemented!("{:?}", &tok.item),
         })
     }
 }

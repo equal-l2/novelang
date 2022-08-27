@@ -29,13 +29,27 @@
 <sub>      ::= "sub" IDENT ";"
 <end>      ::= "end" ";"
 <return>   ::= "return" ";"
+
+EXPR      ::= <log>
+<log>     ::= <equ> {("&&" | "||") <equ>}
+<equ>     ::= <rel> {("==" | "/=") <rel>}
+<rel>     ::= <add-sub> {("<=" | ">=" || "<" || ">") <add-sub>}
+<add-sub> ::= <mul-div> {("+" | "-") <mul-div>}
+<mul-div> ::= <node> {("*" | "/" | "%") <node>}
+<node>    ::= {"+" | "-"} <value>
+<value>   ::= <core> [ "[" <add-sub> "]" ]
+<core>    ::= STRING | NUMBER | IDENT | "true" | "false" | "(" <log> ")" | "[" <log> {"," <log>} "]"
+
+TARGET ::= IDENT {"[" EXPR "]"}
 ```
 
 ## String arithmetic
+
 - `-<str>` : string inversion
 - `<str> + <str>` : string concatenation
 - `<str> * <num>` or `<num> * <str>` : repeating string
 
 ## TODO
+
 - add subroutine with return value
 - add regex matching?
