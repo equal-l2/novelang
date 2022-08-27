@@ -13,6 +13,7 @@
     clippy::cast_sign_loss,
     clippy::default_trait_access,
     clippy::enum_glob_use,
+    clippy::let_underscore_drop,
     clippy::many_single_char_names,
     clippy::match_on_vec_items,
     clippy::match_wildcard_for_single_variants,

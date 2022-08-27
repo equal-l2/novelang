@@ -25,7 +25,7 @@ impl Display for Equ {
         match self {
             Single(i) => write!(f, "{}", i),
             Equal(l, r) => write!(f, "{} == {}", l, r),
-            NotEqual(l, r) => write!(f, "{} != {}", l, r),
+            NotEqual(l, r) => write!(f, "{} /= {}", l, r),
         }
     }
 }
@@ -82,7 +82,7 @@ impl Display for Value {
         use Value::*;
         match self {
             Single(i) => write!(f, "{}", i),
-            ArrElem(l, r, _) => write!(f, "{}{}", l, r),
+            ArrElem(l, r, _) => write!(f, "{}[{}]", l, r),
         }
     }
 }
@@ -91,12 +91,12 @@ impl Display for Core {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         use Core::*;
         match self {
-            Str(i, _) => write!(f, "{}", i),
+            Str(i, _) => write!(f, "\"{}\"", i),
             Num(i, _) => write!(f, "{}", i),
             Ident(i) => write!(f, "{}", i),
             True(_) => write!(f, "true"),
             False(_) => write!(f, "false"),
-            Paren(i, _) => write!(f, "{}", i),
+            Paren(i, _) => write!(f, "({})", i),
             Arr(v, _) => {
                 write!(f, "[")?;
                 if !v.is_empty() {
