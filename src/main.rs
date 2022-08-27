@@ -42,7 +42,17 @@ fn read_input(filename: &str) -> Result<Vec<String>, InputError<'_>> {
 
 // TODO: implement Display wrapper for novelang::Error
 pub fn generate_source_info<S: AsRef<str>>(lines: &[S], range: Range) -> String {
+    const BRIGHT_BLUE: &str = "\x1B[94m";
+    const BRIGHT_RED: &str = "\x1B[91m";
+    const RESET: &str = "\x1B[0m";
+
     use std::fmt::Write;
+
+    // TODO: use isatty to switch them no-op
+    let bright_blue = BRIGHT_BLUE;
+    let bright_red = BRIGHT_RED;
+    let reset = RESET;
+
     let mut s = String::new();
 
     let Range(head, tail) = range;
@@ -57,19 +67,20 @@ pub fn generate_source_info<S: AsRef<str>>(lines: &[S], range: Range) -> String 
     };
 
     let col = head.col;
+    write!(s, "{}", bright_blue).unwrap();
     writeln!(s, "     |").unwrap();
-    writeln!(s, "{:<4} | {}", row, line).unwrap();
-    writeln!(
-        s,
-        "     | {:>pad$}{:~>len$}",
-        "",
-        "",
-        pad = col - 1,
-        len = len
-    )
-    .unwrap();
+
+    write!(s, "{:<4} | ", row).unwrap();
+    write!(s, "{}", reset).unwrap();
+    writeln!(s, "{}", line).unwrap();
+
+    write!(s, "{}", bright_blue).unwrap();
+    write!(s, "     | {:>pad$}", "", pad = col - 1,).unwrap();
+    write!(s, "{}", bright_red).unwrap();
+    writeln!(s, "{:~>len$}", "", len = len).unwrap();
     //writeln!(s, "     | {:>pad$}", "^", pad = col).unwrap();
-    writeln!(s, "     |").unwrap();
+
+    write!(s, "{}", reset).unwrap();
 
     s
 }
