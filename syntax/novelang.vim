@@ -7,20 +7,35 @@ endif
 let b:current_syntax = "novelang"
 
 syntax case match
-syntax keyword Special _wait
+syntax keyword novelangInternal _wait
 
 syntax case ignore
-syntax keyword Statement Print While Let Modify Input If Else End Roll Halt Break Assert
-syntax keyword Statement Break Assert For Continue
-syntax keyword Statement Be To Die Dice With Face Faces From
-syntax keyword Statement Sub Call nextgroup=FuncName skipwhite skipempty
-syntax keyword Boolean True False
-syntax keyword StorageClass AsMut
-syntax keyword Conditional If Else
-syntax match Comment '#.*$' display
-syntax match FuncName '[^[:cntrl:][:space:][:digit:][:punct:]]\%([^[:cntrl:][:space:][:punct:]]\|_\)*' contained display
-syntax match Operator '&&\|||\|==\|/=\|<=\|>=\|+\|-\|*\|/\|%\|<\|>\|,\|\[\|\]\|(\|)\|;' display
-syntax match Number '\<\d*\>' display
-syntax region String start='\"' end='\"' display
+syntax keyword novelangCommand Assert Call Halt Input Let Modify Print Roll Break Continue End Return
+syntax keyword novelangCommand Sub nextgroup=FuncName skipwhite skipempty
+syntax keyword novelangKeyword With To Be Dice Faces From
+syntax keyword novelangBoolean True False
+syntax keyword novelangAsMut AsMut
+syntax keyword novelangConditional If Else
+syntax keyword novelangRepeat For While
+syntax match novelangIdentifier '\<.\{-}\>' display " this must be the top of matches because this can be override all other matches unless this has the lowest priority
+syntax match novelangComment '#.*$' display
+syntax match novelangFuncName '[^[:cntrl:][:space:][:digit:][:punct:]]\%([^[:cntrl:][:space:][:punct:]]\|_\)*' contained display
+syntax match novelangOperator ';\|&&\|||\|==\|/=\|<=\|>=\|<\|>\|+\|-\|*\|/\|%\|\[\|\]\|(\|)' display
+syntax match novelangDelimiter ',' display
+syntax match novelangNumber '\<\d*\>' display
+syntax region novelangString start='\"' end='\"' display
 
-highlight default link FuncName Function
+highlight default link novelangInternal Special
+highlight default link novelangCommand Keyword
+highlight default link novelangKeyword Keyword
+highlight default link novelangBoolean Boolean
+highlight default link novelangAsMut StorageClass
+highlight default link novelangConditional Conditional
+highlight default link novelangRepeat Repeat
+highlight default link novelangIdentifier Identifier
+highlight default link novelangComment Comment
+highlight default link novelangFuncName Function
+highlight default link novelangOperator Operator
+highlight default link novelangDelimiter Delimiter
+highlight default link novelangNumber Number
+highlight default link novelangString String
