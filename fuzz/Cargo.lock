@@ -94,15 +94,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_logger"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
-dependencies = [
- "log",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -153,23 +144,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "log"
-version = "0.4.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "novelang"
 version = "0.1.0"
 dependencies = [
  "arbitrary",
  "clap",
  "derive_more",
- "env_logger",
- "log",
  "once_cell",
  "rand",
 ]

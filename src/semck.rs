@@ -6,7 +6,7 @@ use crate::types::IdentName;
 mod exprs;
 mod types;
 
-use types::Type;
+pub use types::Type;
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -66,6 +66,8 @@ pub enum Statement {
     },
     Sub {
         name: IdentName,
+        args: Vec<(IdentName, Type)>,
+        ret_type: Type,
         offset_to_end: usize,
     },
     Return,
@@ -503,11 +505,13 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                 }
                 BlockStmt::Sub {
                     name,
+                    args,
+                    ret_type,
                     offset_to_end,
                 } => {
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
-                        name.0.clone(),
+                        name.clone().into(),
                         TypeInfo {
                             ty: Type::Sub,
                             is_mut: false,
@@ -515,14 +519,22 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     );
 
                     if !success {
-                        errors.push((Error::SubroutineAlreadyDefined(name.0.clone()), name.span()));
+                        errors.push((
+                            Error::SubroutineAlreadyDefined(name.clone().into()),
+                            name.span(),
+                        ));
                     }
 
                     // create new scope
                     scope_stack.push(stmts.len());
 
                     Statement::Sub {
-                        name: name.0.clone(),
+                        name: name.into(),
+                        args: args
+                            .into_iter()
+                            .map(|(i, t)| (i.into(), t.into()))
+                            .collect(),
+                        ret_type: ret_type.into(),
                         offset_to_end,
                     }
                 }

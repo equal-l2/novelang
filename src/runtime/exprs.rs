@@ -70,32 +70,24 @@ impl Eval for Log {
     }
 }
 
+fn eval_equal<T: VarsMap>(l: &Box<Equ>, r: &Rel, vmap: &T) -> Result {
+    let l = l.eval(vmap)?;
+    let r = r.eval(vmap)?;
+    Ok(match (&l, &r) {
+        (Val::Bool(l), Val::Bool(r)) => Val::Bool(l == r),
+        (Val::Num(l), Val::Num(r)) => Val::Bool(l == r),
+        (Val::Str(l), Val::Str(r)) => Val::Bool(l == r),
+        (Val::Arr(l_ty, l), Val::Arr(r_ty, r)) => Val::Bool(l_ty == r_ty && l == r),
+        _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
+    })
+}
+
 impl Eval for Equ {
     fn eval<T: VarsMap>(&self, vmap: &T) -> Result {
         Ok(match self {
             Self::Single(l) => l.eval(vmap)?,
-            Self::Equal(l, r) => {
-                let l = l.eval(vmap)?;
-                let r = r.eval(vmap)?;
-                match (&l, &r) {
-                    (Val::Bool(l), Val::Bool(r)) => Val::Bool(l == r),
-                    (Val::Num(l), Val::Num(r)) => Val::Bool(l == r),
-                    (Val::Str(l), Val::Str(r)) => Val::Bool(l == r),
-                    (Val::Arr(l), Val::Arr(r)) => Val::Bool(l == r),
-                    _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
-                }
-            }
-            Self::NotEqual(l, r) => {
-                let l = l.eval(vmap)?;
-                let r = r.eval(vmap)?;
-                match (&l, &r) {
-                    (Val::Bool(l), Val::Bool(r)) => Val::Bool(l != r),
-                    (Val::Num(l), Val::Num(r)) => Val::Bool(l != r),
-                    (Val::Str(l), Val::Str(r)) => Val::Bool(l != r),
-                    (Val::Arr(l), Val::Arr(r)) => Val::Bool(l != r),
-                    _ => panic!("cannot compare {} with {}", l.typename(), r.typename()),
-                }
-            }
+            Self::Equal(l, r) => eval_equal(l, r, vmap)?,
+            Self::NotEqual(l, r) => -(eval_equal(l, r, vmap)?),
         })
     }
 }
@@ -156,6 +148,13 @@ impl Eval for AddSub {
                         None => Err(EvalError::OverFlow),
                     },
                     (Val::Str(this), Val::Str(that)) => Ok(Val::Str(this.clone() + that)),
+                    (Val::Arr(this_ty, this), Val::Arr(that_ty, that)) => {
+                        debug_assert_eq!(this_ty, that_ty);
+                        Ok(Val::Arr(
+                            this_ty.clone(),
+                            this.into_iter().chain(that.into_iter()).cloned().collect(),
+                        ))
+                    }
                     _ => panic!(
                         "cannot perform addition between {} and {}",
                         l.typename(),
@@ -197,7 +196,7 @@ impl Eval for MulDiv {
                             };
                             Ok(match t {
                                 Val::Str(s) => Val::Str(s.repeat(n as usize)),
-                                Val::Arr(v) => {
+                                Val::Arr(t, v) => {
                                     let ret = std::iter::repeat(v)
                                         .take(n as usize)
                                         .reduce(|mut v1, v2| {
@@ -205,7 +204,7 @@ impl Eval for MulDiv {
                                             v1
                                         })
                                         .expect("doesn't it work?");
-                                    Val::Arr(ret)
+                                    Val::Arr(t, ret)
                                 }
                                 _ => unreachable!(),
                             })
@@ -259,8 +258,8 @@ impl Eval for Core {
                 let v = i
                     .iter()
                     .map(|e| e.eval(vmap))
-                    .collect::<std::result::Result<_, _>>()?;
-                Val::Arr(v)
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                Val::Arr(v[0].ty(), v)
             }
         })
     }

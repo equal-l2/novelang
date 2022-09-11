@@ -1,5 +1,5 @@
 use crate::exprs::Expr;
-use crate::parse;
+use crate::parse::{self, Type};
 use crate::span::Span;
 use crate::target::Ident;
 
@@ -58,6 +58,8 @@ pub enum BlockStmt {
     },
     Sub {
         name: Ident,
+        args: Vec<(Ident, Type)>,
+        ret_type: Type,
         offset_to_end: usize,
     },
     Return,
@@ -264,12 +266,18 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                     scope_stack.push(ScopeKind::Other, span, stmts.len());
                     Statement::Block(BlockStmt::Else { offset_to_end: 0 })
                 }
-                parse::BlockStmt::Sub { name } => {
+                parse::BlockStmt::Sub {
+                    name,
+                    args,
+                    ret_type,
+                } => {
                     // create new scope
                     scope_stack.push(ScopeKind::Sub, span, stmts.len());
 
                     Statement::Block(BlockStmt::Sub {
                         name: name.clone(),
+                        args: args.clone(),
+                        ret_type: ret_type.clone(),
                         offset_to_end: 0,
                     })
                 }
@@ -297,12 +305,17 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
 
                         let prev = stmts[prev_idx].clone();
                         stmts[prev_idx] = match prev {
-                            Statement::Block(BlockStmt::Sub { name, .. }) => {
-                                Statement::Block(BlockStmt::Sub {
-                                    name,
-                                    offset_to_end,
-                                })
-                            }
+                            Statement::Block(BlockStmt::Sub {
+                                name,
+                                args,
+                                ret_type,
+                                ..
+                            }) => Statement::Block(BlockStmt::Sub {
+                                name,
+                                args,
+                                ret_type,
+                                offset_to_end,
+                            }),
                             Statement::Block(BlockStmt::While { cond, .. }) => {
                                 Statement::Block(BlockStmt::While {
                                     cond,

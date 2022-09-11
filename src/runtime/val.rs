@@ -1,4 +1,19 @@
+use crate::semck::Type;
+use crate::types::IdentName;
 use crate::types::IntType;
+
+#[derive(Debug, Clone)]
+pub struct Sub {
+    pub start: usize,
+    pub args: Vec<(IdentName, Type)>,
+    pub ret_type: Type,
+}
+
+impl From<Sub> for Val {
+    fn from(sub: Sub) -> Self {
+        Self::Sub(sub)
+    }
+}
 
 /// The typed content of a variable
 #[derive(Debug, Clone)]
@@ -6,8 +21,8 @@ pub enum Val {
     Bool(bool),
     Num(IntType),
     Str(String),
-    Sub(usize),
-    Arr(Vec<Val>),
+    Sub(Sub),
+    Arr(Type, Vec<Val>),
 }
 
 impl Val {
@@ -17,7 +32,17 @@ impl Val {
             Self::Num(_) => "Num",
             Self::Str(_) => "Str",
             Self::Sub(_) => "Sub",
-            Self::Arr(_) => "Arr",
+            Self::Arr(_, _) => "Arr",
+        }
+    }
+
+    pub fn ty(&self) -> Type {
+        match self {
+            Self::Bool(_) => Type::Bool,
+            Self::Num(_) => Type::Num,
+            Self::Str(_) => Type::Str,
+            Self::Sub(_) => Type::Sub,
+            Self::Arr(t, _) => Type::Arr(Box::new(t.clone())),
         }
     }
 }
@@ -29,7 +54,7 @@ impl std::ops::Neg for Val {
             Self::Bool(b) => Self::Bool(!b),
             Self::Num(n) => Self::Num(-n),
             Self::Str(s) => Self::Str(s.chars().rev().collect()),
-            Self::Arr(v) => Self::Arr(v.into_iter().rev().collect()),
+            Self::Arr(t, v) => Self::Arr(t, v.into_iter().rev().collect()),
             _ => unimplemented!(),
         }
     }
@@ -41,7 +66,9 @@ impl PartialEq for Val {
             (Val::Bool(this), Val::Bool(that)) => this.eq(that),
             (Val::Num(this), Val::Num(that)) => this.eq(that),
             (Val::Str(this), Val::Str(that)) => this.eq(that),
-            (Val::Arr(this), Val::Arr(that)) => this.eq(that),
+            (Val::Arr(this_ty, this), Val::Arr(that_ty, that)) => {
+                this_ty.eq(that_ty) && this.eq(that)
+            }
             _ => unimplemented!(),
         }
     }
@@ -64,7 +91,8 @@ impl std::fmt::Display for Val {
             Val::Num(n) => write!(f, "{}", n),
             Val::Str(s) => write!(f, "{}", s),
             Val::Sub(_) => unreachable!("must be denied at compile time"),
-            Val::Arr(v) => {
+            Val::Arr(_, v) => {
+                // TODO: print type?
                 write!(f, "[")?;
                 if !v.is_empty() {
                     write!(f, "{}", v[0])?;
@@ -76,5 +104,17 @@ impl std::fmt::Display for Val {
                 Ok(())
             }
         }
+    }
+}
+
+impl From<Val> for Type {
+    fn from(v: Val) -> Self {
+        v.into()
+    }
+}
+
+impl From<&mut Val> for Type {
+    fn from(v: &mut Val) -> Self {
+        v.into()
     }
 }

@@ -2,7 +2,7 @@ use crate::exprs::Expr;
 use crate::span::{Span, Spannable};
 use crate::types::IdentName;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ident(pub IdentName, pub Span);
 
 impl AsRef<str> for Ident {
@@ -20,6 +20,12 @@ impl std::fmt::Display for Ident {
 impl Spannable for Ident {
     fn span(&self) -> Span {
         self.1.clone()
+    }
+}
+
+impl From<Ident> for IdentName {
+    fn from(i: Ident) -> Self {
+        i.0
     }
 }
 

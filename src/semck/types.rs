@@ -1,3 +1,5 @@
+use crate::parse::{Ty, Type as ParseType};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
     Bool,
@@ -5,6 +7,7 @@ pub enum Type {
     Str,
     Sub,
     Arr(Box<Self>),
+    Nothing,
     Invalid,
 }
 
@@ -22,6 +25,7 @@ impl Type {
             Self::Str => "Str".to_owned(),
             Self::Sub => "Sub".to_owned(),
             Self::Arr(i) => format!("Arr[{}]", i.typename()),
+            Self::Nothing => "Nothing".to_owned(),
             Self::Invalid => "Invalid".to_owned(),
         }
     }
@@ -31,6 +35,17 @@ impl Type {
             Self::Bool | Self::Num | Self::Str => true,
             Self::Arr(i) => i.is_printable(),
             _ => false,
+        }
+    }
+}
+
+impl From<ParseType> for Type {
+    fn from(pt: ParseType) -> Self {
+        match pt.ty() {
+            Ty::Nothing => Self::Nothing,
+            Ty::Num => Self::Num,
+            Ty::Bool => Self::Bool,
+            Ty::Str => Self::Str,
         }
     }
 }

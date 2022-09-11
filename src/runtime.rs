@@ -30,11 +30,11 @@ impl Scope {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 enum ScopeKind {
     Branch,
     Loop,
-    Sub,
+    Sub(val::Sub, Option<Target>),
     ForWrap,
 }
 
@@ -58,7 +58,8 @@ impl exprs::VarsMap for Runtime {
             let l = l.eval(self)?;
             match l {
                 Val::Str(s) => s.chars().nth(n as usize).map(|c| Val::Str(c.into())),
-                Val::Arr(v) => v.get(n as usize).cloned(),
+                // TODO: check type with debug_assert?
+                Val::Arr(_, v) => v.get(n as usize).cloned(),
                 _ => unreachable!("Type {} cannot be indexed", l.typename()),
             }
             .ok_or(EvalError::IndexOutOfBounds(n))
@@ -112,7 +113,7 @@ impl Runtime {
                 let r = r.eval(self)?;
                 if let Val::Num(n) = r {
                     let resolved = self.resolve_target(l)?;
-                    if let Val::Arr(v) = resolved {
+                    if let Val::Arr(_, v) = resolved {
                         v.get_mut(n as usize)
                             .ok_or(exprs::EvalError::IndexOutOfBounds(n))
                     } else {
@@ -252,6 +253,52 @@ impl Runtime {
             self.modify_var(name, Val::Str(input));
         }
     }
+
+    pub fn exec_call(
+        &mut self,
+        name: &Expr,
+        args: Vec<Expr>,
+        target: Option<Target>,
+        index: usize,
+    ) -> usize {
+        let var_sub = name.eval(self).unwrap_or_else(|e| {
+            // FIXME: better error handle
+            die!("Runtime error: failed to eval Sub to call: {}", e);
+        });
+
+        if let Val::Sub(ref sub) = var_sub {
+            // Check the args types
+            for (arg, expr) in std::iter::zip(sub.args.iter(), args.iter()) {
+                let expected = &arg.1;
+                let actual = expr.eval(self).unwrap(); // FIXME: error
+                if expected != &actual.into() {
+                    unreachable!("args must be checked in semck")
+                }
+            }
+
+            // Check the target type
+            let ret_expected = &sub.ret_type;
+            if let Some(ref target) = target {
+                let ret_actual = self.resolve_target(&target).unwrap(); // FIXME: error
+                if ret_expected != &ret_actual.into() {
+                    unreachable!("ret_type must be checked in semck")
+                }
+            } else {
+                if ret_expected != &crate::semck::Type::Nothing {
+                    unreachable!("ret_type must be checked in semck")
+                }
+            }
+
+            // Push scope
+            // register address to return (the next line)
+            self.push(ScopeKind::Sub(sub.clone(), target), index + 1);
+
+            sub.start
+        } else {
+            // FIXME: better error handle
+            unreachable!("Runtime error: Sub expected, got {}", var_sub.typename());
+        }
+    }
 }
 
 fn read_line_from_stdin() -> String {
@@ -292,14 +339,6 @@ fn unwrap_num(val: &Val) -> IntType {
     }
 }
 
-fn unwrap_sub(val: &Val) -> usize {
-    if let Val::Sub(n) = val {
-        *n
-    } else {
-        panic!("Runtime error: Sub expected, got {}", val.typename());
-    }
-}
-
 fn unwrap_str(val: &Val) -> String {
     if let Val::Str(s) = val {
         s.clone()
@@ -322,23 +361,21 @@ pub fn run(prog: Ast) {
             }
             Statement::Sub {
                 name,
+                args,
+                ret_type,
                 offset_to_end,
             } => {
-                rt.decl_var(name.clone(), Val::Sub(i));
+                let sub = val::Sub {
+                    start: i,
+                    args: args.clone(),
+                    ret_type: ret_type.clone(),
+                };
+                rt.decl_var(name.clone(), sub.into());
                 i += offset_to_end;
             }
             Statement::Call { name } => {
-                let name_val = name.eval(&rt).unwrap_or_else(|e| {
-                    // FIXME
-                    die!("Runtime error: failed to eval Sub to call: {}", e);
-                });
-                let idx = unwrap_sub(&name_val);
-
-                // register address to return (the next line)
-                rt.push(ScopeKind::Sub, i + 1);
-
-                // jump to the address of the sub
-                i = idx;
+                // TODO: handle args and target
+                i = rt.exec_call(name, vec![], None, i);
             }
             Statement::While {
                 cond,
@@ -479,13 +516,10 @@ pub fn run(prog: Ast) {
                                 // go to starting stmt
                                 break scope.ret_idx;
                             }
-                            ScopeKind::Sub => {
-                                panic!("Runtime error: cannot break in sub scope");
-                            }
                             ScopeKind::Branch => {
                                 // break the outer scope
                             }
-                            _ => panic!("unexpected scope kind: {:?}", scope.kind),
+                            _ => panic!("unexpected scope kind for Break: {:?}", scope.kind),
                         }
                     } else {
                         die!("Runtime error: scope stack is empty");
@@ -513,13 +547,10 @@ pub fn run(prog: Ast) {
                             ScopeKind::Loop => {
                                 break scope.ret_idx;
                             }
-                            ScopeKind::Sub => {
-                                panic!("Runtime error: cannot continue in sub scope");
-                            }
                             ScopeKind::Branch => {
                                 // break the outer scope
                             }
-                            _ => panic!("unexpected scope kind: {:?}", scope.kind),
+                            _ => panic!("unexpected scope kind for Continue: {:?}", scope.kind),
                         }
                     } else {
                         panic!("Runtime error: scope stack is empty");
@@ -550,7 +581,7 @@ pub fn run(prog: Ast) {
                 } else {
                     let on_for;
                     if let Some(scope) = rt.peek() {
-                        on_for = scope.kind == ScopeKind::ForWrap;
+                        on_for = matches!(scope.kind, ScopeKind::ForWrap);
                     } else {
                         on_for = false;
                     }
@@ -592,7 +623,8 @@ pub fn run(prog: Ast) {
             Statement::Return => {
                 i = loop {
                     if let Some(scope) = rt.pop() {
-                        if scope.kind == ScopeKind::Sub {
+                        if let ScopeKind::Sub(_sub, _target) = scope.kind {
+                            // TODO: set return value to target with typecheck
                             break scope.ret_idx;
                         }
                     } else {

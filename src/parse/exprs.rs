@@ -8,7 +8,7 @@ use super::{
 use crate::exprs::items::*;
 
 #[derive(Debug)]
-enum ExprErrorKind {
+enum ErrorKind {
     UnexpectedToken,
     NoPairParen,
     TokenExhausted,
@@ -16,7 +16,7 @@ enum ExprErrorKind {
 
 #[derive(Debug)]
 pub struct ExprError {
-    kind: ExprErrorKind,
+    kind: ErrorKind,
     span: Span,
 }
 
@@ -24,21 +24,21 @@ pub struct ExprError {
 impl ExprError {
     fn exhausted(from: usize, to: usize) -> Self {
         Self {
-            kind: ExprErrorKind::TokenExhausted,
+            kind: ErrorKind::TokenExhausted,
             span: Span(from, to),
         }
     }
 
     fn unexpected(idx: usize) -> Self {
         Self {
-            kind: ExprErrorKind::UnexpectedToken,
+            kind: ErrorKind::UnexpectedToken,
             span: idx.into(),
         }
     }
 
     fn no_pair_paren(from: usize, to: usize) -> Self {
         Self {
-            kind: ExprErrorKind::NoPairParen,
+            kind: ErrorKind::NoPairParen,
             span: Span(from, to),
         }
     }
@@ -49,9 +49,9 @@ impl From<ExprError> for (super::Error, Span) {
         (
             super::Error(
                 match err.kind {
-                    ExprErrorKind::UnexpectedToken => "Failed to parse expr because of this token",
-                    ExprErrorKind::NoPairParen => "Paren doesn't have its pair",
-                    ExprErrorKind::TokenExhausted => "Expression abruptly ended",
+                    ErrorKind::UnexpectedToken => "Failed to parse expr because of this token",
+                    ErrorKind::NoPairParen => "Paren doesn't have its pair",
+                    ErrorKind::TokenExhausted => "Expression abruptly ended",
                 }
                 .into(),
             ),
@@ -322,13 +322,12 @@ impl<'a> TryFromTokens<'a> for Value {
 
 impl<'a> TryFromTokens<'a> for Core {
     fn can_start_with(item: &LangItem) -> bool {
-        use lex::Keyword;
         matches!(
             item,
             LangItem::Str(_)
                 | LangItem::Num(_, _)
                 | LangItem::Ident(_)
-                | LangItem::Key(Keyword::True | Keyword::False)
+                | LangItem::Bool(_)
                 | LangItem::LPar
                 | LangItem::LBra
         )
@@ -338,7 +337,7 @@ impl<'a> TryFromTokens<'a> for Core {
     where
         T: Iterator<Item = (usize, &'a Token)>,
     {
-        use lex::Keyword;
+        use lex::Boolean;
 
         ensure_start!(tks, last);
 
@@ -347,8 +346,8 @@ impl<'a> TryFromTokens<'a> for Core {
             LangItem::Str(s) => Self::Str(s.clone(), start.into()),
             LangItem::Num(n, _) => Self::Num(*n, start.into()),
             LangItem::Ident(s) => Self::Ident(crate::target::Ident(s.clone(), start.into())),
-            LangItem::Key(Keyword::True) => Self::True(start.into()),
-            LangItem::Key(Keyword::False) => Self::False(start.into()),
+            LangItem::Bool(Boolean::True) => Self::True(start.into()),
+            LangItem::Bool(Boolean::False) => Self::False(start.into()),
             LangItem::LPar => {
                 let expr = TopItem::try_from_tokens(tks, last)?;
                 let next_tk = tks.next();

@@ -17,6 +17,12 @@ fn handle_reserved(vs: &[char]) -> Option<(LangItem, usize)> {
     if let Some(res) = Keyword::parse_slice(vs) {
         let len = res.len();
         Some((LangItem::Key(res), len))
+    } else if let Some(res) = TypeName::parse_slice(vs) {
+        let len = res.len();
+        Some((LangItem::Type(res), len))
+    } else if let Some(res) = Boolean::parse_slice(vs) {
+        let len = res.len();
+        Some((LangItem::Bool(res), len))
     } else if let Some(res) = Command::parse_slice(vs) {
         let len = res.len();
         Some((LangItem::Cmd(res), len))
