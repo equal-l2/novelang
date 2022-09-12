@@ -76,8 +76,11 @@ pub(crate) fn span_to_range(span: Span, tokens: &[Token]) -> Range {
 
 pub fn compile<S: AsRef<str>>(s: &[S]) -> Result<Ast, Error> {
     let lexed = lex::lex(s).map_err(Error::Lex)?;
+    //eprintln!("{:?}", lexed);
+    //
     let parsed =
         parse::parse(&lexed).map_err(|(e, s)| Error::Parse(e, span_to_range(s, &lexed.tokens)))?;
+
     let block_checked = block::check_block(parsed).map_err(|v| {
         Error::Block(
             v.into_iter()
@@ -85,6 +88,7 @@ pub fn compile<S: AsRef<str>>(s: &[S]) -> Result<Ast, Error> {
                 .collect(),
         )
     })?;
+
     let final_insts = semck::check_semantics(block_checked).map_err(|v| {
         Error::Semck(
             v.into_iter()

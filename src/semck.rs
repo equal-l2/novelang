@@ -66,8 +66,8 @@ pub enum Statement {
     },
     Sub {
         name: IdentName,
-        args: Vec<(IdentName, Type)>,
-        ret_type: Type,
+        args: Option<Vec<(IdentName, Type)>>,
+        ret_type: Option<Type>,
         offset_to_end: usize,
     },
     Return,
@@ -503,12 +503,8 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     scope_stack.push(stmts.len());
                     Statement::Else { offset_to_end }
                 }
-                BlockStmt::Sub {
-                    name,
-                    args,
-                    ret_type,
-                    offset_to_end,
-                } => {
+                BlockStmt::Sub { sub, offset_to_end } => {
+                    let name = sub.name;
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
                         name.clone().into(),
@@ -530,11 +526,12 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
 
                     Statement::Sub {
                         name: name.into(),
-                        args: args
-                            .into_iter()
-                            .map(|(i, t)| (i.into(), t.into()))
-                            .collect(),
-                        ret_type: ret_type.into(),
+                        args: sub.args.map(|v| {
+                            v.into_iter()
+                                .map(|crate::parse::Arg { ident, ty }| (ident.into(), ty.into()))
+                                .collect()
+                        }),
+                        ret_type: sub.ret_type.map(Into::into),
                         offset_to_end,
                     }
                 }

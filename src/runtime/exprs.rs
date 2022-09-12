@@ -70,7 +70,7 @@ impl Eval for Log {
     }
 }
 
-fn eval_equal<T: VarsMap>(l: &Box<Equ>, r: &Rel, vmap: &T) -> Result {
+fn eval_equal<T: VarsMap>(l: &Equ, r: &Rel, vmap: &T) -> Result {
     let l = l.eval(vmap)?;
     let r = r.eval(vmap)?;
     Ok(match (&l, &r) {
@@ -152,7 +152,7 @@ impl Eval for AddSub {
                         debug_assert_eq!(this_ty, that_ty);
                         Ok(Val::Arr(
                             this_ty.clone(),
-                            this.into_iter().chain(that.into_iter()).cloned().collect(),
+                            this.iter().chain(that.iter()).cloned().collect(),
                         ))
                     }
                     _ => panic!(

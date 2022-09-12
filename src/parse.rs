@@ -5,13 +5,13 @@ use crate::target::{Ident, Target};
 
 mod exprs;
 
-mod types;
-pub use types::{Ty, Type};
-
 #[macro_use]
 mod utils;
 
 use utils::*;
+
+mod sub;
+pub use sub::{Arg, Sub, Ty, Type};
 
 #[derive(Debug)]
 pub struct Error(pub String);
@@ -21,6 +21,8 @@ impl std::fmt::Display for Error {
         write!(f, "{}", self.0)
     }
 }
+
+type Result<T> = std::result::Result<T, (Error, Span)>;
 
 #[derive(Debug, Clone, derive_more::From)]
 pub enum Statement {
@@ -89,11 +91,8 @@ pub enum BlockStmt {
     },
     Else,
 
-    Sub {
-        name: Ident,
-        args: Vec<(Ident, Type)>,
-        ret_type: Type,
-    },
+    Sub(sub::Sub),
+
     Return,
 
     End,
@@ -114,10 +113,7 @@ impl LookItem for Option<&lex::Token> {
     }
 }
 
-fn parse_target<'a, T>(
-    tks: &mut std::iter::Peekable<T>,
-    last: usize,
-) -> Result<Target, (Error, Span)>
+fn parse_target<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Target>
 where
     T: Iterator<Item = (usize, &'a lex::Token)>,
 {
@@ -142,7 +138,7 @@ where
     }
 }
 
-pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
+pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
     use lex::{Command, Keyword};
 
     // index 0 is reserved for placeholder
@@ -418,49 +414,11 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed, (Error, Span)> {
 
                 lex::Command::Sub => parse_block!(stmts, idx, {
                     // "Sub" <name> ";"
-                    let (i, tk) = tks
-                        .next()
-                        .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
-                    let name = if let LangItem::Ident(name) = &tk.item {
-                        name
-                    } else {
-                        return Err((Error("Expected subroutine name".into()), i.into()));
-                    };
-
-                    let (i, tk) = tks
-                        .peek()
-                        .ok_or_else(|| (Error("Unexpected end of Sub".into()), last.into()))?
-                        .clone();
-
-                    let mut ret_type = types::Type::nothing();
-                    let /*mut*/ args = vec![];
-                    match &tk.item {
-                        LangItem::Key(Keyword::With) => {
-                            // parse arguments
-                            todo!()
-                        }
-                        LangItem::Key(Keyword::Results) => {
-                            // parse result type
-                            let _ = tks.next();
-                            expects!("expected In", LangItem::Key(Keyword::In), tks, last);
-                            ret_type = types::Type::try_parse(&mut tks, last)?;
-                        }
-                        LangItem::Semi => { /* End of the statement */ }
-                        _ => {
-                            return Err((
-                                Error("Unexpected token in parsing Sub".into()),
-                                i.into(),
-                            ))
-                        }
-                    }
+                    let sub = sub::try_parse(&mut tks, last)?;
 
                     expects_semi!(tks, last);
 
-                    BlockStmt::Sub {
-                        name: Ident(name.clone(), i.into()),
-                        args,
-                        ret_type,
-                    }
+                    BlockStmt::Sub(sub)
                 }),
 
                 lex::Command::Return => parse_block!(stmts, idx, {

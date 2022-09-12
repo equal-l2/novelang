@@ -257,7 +257,7 @@ impl Runtime {
     pub fn exec_call(
         &mut self,
         name: &Expr,
-        args: Vec<Expr>,
+        args: Option<Vec<Expr>>,
         target: Option<Target>,
         index: usize,
     ) -> usize {
@@ -268,24 +268,33 @@ impl Runtime {
 
         if let Val::Sub(ref sub) = var_sub {
             // Check the args types
-            for (arg, expr) in std::iter::zip(sub.args.iter(), args.iter()) {
-                let expected = &arg.1;
-                let actual = expr.eval(self).unwrap(); // FIXME: error
-                if expected != &actual.into() {
-                    unreachable!("args must be checked in semck")
+            match (sub.args.as_ref(), args) {
+                (None, None) => { /* OK */ }
+                (Some(expected), Some(actual)) => {
+                    for (arg, expr) in std::iter::zip(expected.iter(), actual.iter()) {
+                        let expected = &arg.1;
+                        let actual = expr.eval(self).unwrap(); // FIXME: error
+                        if expected != &actual.ty() {
+                            unreachable!("args mismatch (semck defect)")
+                        }
+                    }
+                }
+                _ => {
+                    unreachable!("args mismatch (semck defect)")
                 }
             }
 
             // Check the target type
-            let ret_expected = &sub.ret_type;
-            if let Some(ref target) = target {
-                let ret_actual = self.resolve_target(&target).unwrap(); // FIXME: error
-                if ret_expected != &ret_actual.into() {
-                    unreachable!("ret_type must be checked in semck")
+            match (&sub.ret_type, &target) {
+                (None, None) => { /* OK */ }
+                (Some(ret_expected), Some(target)) => {
+                    let ret_actual = self.resolve_target(target).unwrap(); // FIXME: error
+                    if ret_expected != &ret_actual.ty() {
+                        unreachable!("ret_type mismatch (semck defect)")
+                    }
                 }
-            } else {
-                if ret_expected != &crate::semck::Type::Nothing {
-                    unreachable!("ret_type must be checked in semck")
+                _ => {
+                    unreachable!("ret_type mismatch (semck defect)")
                 }
             }
 
@@ -375,7 +384,7 @@ pub fn run(prog: Ast) {
             }
             Statement::Call { name } => {
                 // TODO: handle args and target
-                i = rt.exec_call(name, vec![], None, i);
+                i = rt.exec_call(name, None, None, i);
             }
             Statement::While {
                 cond,

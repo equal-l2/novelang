@@ -5,8 +5,8 @@ use crate::types::IntType;
 #[derive(Debug, Clone)]
 pub struct Sub {
     pub start: usize,
-    pub args: Vec<(IdentName, Type)>,
-    pub ret_type: Type,
+    pub args: Option<Vec<(IdentName, Type)>>,
+    pub ret_type: Option<Type>,
 }
 
 impl From<Sub> for Val {
@@ -104,17 +104,5 @@ impl std::fmt::Display for Val {
                 Ok(())
             }
         }
-    }
-}
-
-impl From<Val> for Type {
-    fn from(v: Val) -> Self {
-        v.into()
-    }
-}
-
-impl From<&mut Val> for Type {
-    fn from(v: &mut Val) -> Self {
-        v.into()
     }
 }
