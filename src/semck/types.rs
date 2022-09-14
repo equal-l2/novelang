@@ -5,27 +5,46 @@ pub enum Type {
     Bool,
     Num,
     Str,
-    Sub,
+    Sub {
+        args: Option<Vec<Self>>,
+        res: Option<Box<Self>>,
+    },
     Arr(Box<Self>),
     Invalid,
 }
 
 impl std::fmt::Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}", self.typename())
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool => write!(f, "Bool"),
+            Self::Num => write!(f, "Num"),
+            Self::Str => write!(f, "Str"),
+            Self::Sub { args, res } => {
+                if let Some(args) = args {
+                    let mut it = args.iter();
+                    let first = it.next().unwrap();
+                    write!(f, "{first}")?;
+                    for arg in it {
+                        write!(f, ", {arg}")?;
+                    }
+                }
+                write!(f, ")")?;
+
+                if let Some(res) = res {
+                    write!(f, " -> {res}")?;
+                }
+
+                Ok(())
+            }
+            Self::Arr(i) => write!(f, "Arr[{}]", i.typename()),
+            Self::Invalid => write!(f, "Invalid"),
+        }
     }
 }
 
 impl Type {
     pub fn typename(&self) -> String {
-        match self {
-            Self::Bool => "Bool".to_owned(),
-            Self::Num => "Num".to_owned(),
-            Self::Str => "Str".to_owned(),
-            Self::Sub => "Sub".to_owned(),
-            Self::Arr(i) => format!("Arr[{}]", i.typename()),
-            Self::Invalid => "Invalid".to_owned(),
-        }
+        self.to_string()
     }
 
     pub fn is_printable(&self) -> bool {

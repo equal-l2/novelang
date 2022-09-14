@@ -10,8 +10,15 @@ mod utils;
 
 use utils::*;
 
-mod sub;
-pub use sub::{Arg, Sub, Ty, Type};
+mod stmt;
+pub use stmt::call::Call;
+pub use stmt::sub::{Arg, Sub, Ty, Type};
+
+mod target;
+use target::parse_target;
+
+mod look_item;
+pub(self) use look_item::LookItem;
 
 #[derive(Debug)]
 pub struct Error(pub String);
@@ -43,9 +50,7 @@ pub enum NormalStmt {
         mesg: Expr,
         cond: Expr,
     },
-    Call {
-        name: Expr,
-    },
+    Call(Call),
     Halt,
     Input {
         prompt: Option<String>,
@@ -91,7 +96,7 @@ pub enum BlockStmt {
     },
     Else,
 
-    Sub(sub::Sub),
+    Sub(Sub),
 
     Return,
 
@@ -101,41 +106,6 @@ pub enum BlockStmt {
 #[derive(Debug, Clone)]
 pub struct Parsed {
     pub stmts: Vec<Statement>,
-}
-
-trait LookItem {
-    fn item(self) -> Option<LangItem>;
-}
-
-impl LookItem for Option<&lex::Token> {
-    fn item(self) -> Option<LangItem> {
-        self.map(|t| t.item.clone())
-    }
-}
-
-fn parse_target<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Target>
-where
-    T: Iterator<Item = (usize, &'a lex::Token)>,
-{
-    let (i, tk) = tks
-        .peek()
-        .ok_or_else(|| (Error("expected Ident".into()), last.into()))?;
-    if let LangItem::Ident(name) = &tk.item {
-        let mut val = Target::Scalar(Ident(name.clone(), (*i).into()));
-        let _ = tks.next().unwrap();
-        loop {
-            if tks.peek().item() == Some(LangItem::LBra) {
-                let _ = tks.next().unwrap();
-                let expr = parse_expr(tks, last)?;
-                expects!("expected RBra", LangItem::RBra, tks, last);
-                val = Target::Vector(Box::from(val), Box::from(expr));
-            } else {
-                return Ok(val);
-            }
-        }
-    } else {
-        Err((Error("expected Ident".into()), (*i).into()))
-    }
 }
 
 pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
@@ -174,9 +144,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
 
                 lex::Command::Call => parse_normal!(stmts, {
                     // "Call" <name> ";"
-                    let name = parse_expr(&mut tks, last)?;
-                    expects_semi!(tks, last);
-                    NormalStmt::Call { name: name.clone() }
+                    NormalStmt::Call(Call::try_parse(&mut tks, last)?)
                 }),
 
                 lex::Command::Halt => parse_normal!(stmts, {
@@ -414,11 +382,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
 
                 lex::Command::Sub => parse_block!(stmts, idx, {
                     // "Sub" <name> ";"
-                    let sub = sub::try_parse(&mut tks, last)?;
-
-                    expects_semi!(tks, last);
-
-                    BlockStmt::Sub(sub)
+                    BlockStmt::Sub(Sub::try_parse(&mut tks, last)?)
                 }),
 
                 lex::Command::Return => parse_block!(stmts, idx, {

@@ -256,12 +256,12 @@ impl Runtime {
 
     pub fn exec_call(
         &mut self,
-        name: &Expr,
+        callee: &Expr,
         args: Option<Vec<Expr>>,
         target: Option<Target>,
         index: usize,
     ) -> usize {
-        let var_sub = name.eval(self).unwrap_or_else(|e| {
+        let var_sub = callee.eval(self).unwrap_or_else(|e| {
             // FIXME: better error handle
             die!("Runtime error: failed to eval Sub to call: {}", e);
         });
@@ -272,9 +272,9 @@ impl Runtime {
                 (None, None) => { /* OK */ }
                 (Some(expected), Some(actual)) => {
                     for (arg, expr) in std::iter::zip(expected.iter(), actual.iter()) {
-                        let expected = &arg.1;
-                        let actual = expr.eval(self).unwrap(); // FIXME: error
-                        if expected != &actual.ty() {
+                        let expected = &arg.ty;
+                        let actual = expr.eval(self).unwrap().ty(); // FIXME: error
+                        if expected != &actual {
                             unreachable!("args mismatch (semck defect)")
                         }
                     }
@@ -285,7 +285,7 @@ impl Runtime {
             }
 
             // Check the target type
-            match (&sub.ret_type, &target) {
+            match (&sub.res_type, &target) {
                 (None, None) => { /* OK */ }
                 (Some(ret_expected), Some(target)) => {
                     let ret_actual = self.resolve_target(target).unwrap(); // FIXME: error
@@ -368,23 +368,18 @@ pub fn run(prog: Ast) {
             Statement::Print { args } => {
                 rt.exec_print(args);
             }
-            Statement::Sub {
-                name,
-                args,
-                ret_type,
-                offset_to_end,
-            } => {
-                let sub = val::Sub {
+            Statement::Sub { sub, offset_to_end } => {
+                let var_sub = val::Sub {
                     start: i,
-                    args: args.clone(),
-                    ret_type: ret_type.clone(),
+                    args: sub.args.clone(),
+                    res_type: sub.res_type.clone(),
                 };
-                rt.decl_var(name.clone(), sub.into());
+                rt.decl_var(sub.name.clone(), var_sub.into());
                 i += offset_to_end;
             }
-            Statement::Call { name } => {
+            Statement::Call(sub) => {
                 // TODO: handle args and target
-                i = rt.exec_call(name, None, None, i);
+                i = rt.exec_call(&sub.callee, None, None, i);
             }
             Statement::While {
                 cond,

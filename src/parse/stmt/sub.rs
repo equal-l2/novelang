@@ -1,4 +1,4 @@
-use super::{Error, Ident, Result};
+use super::super::{Error, Ident, Result};
 use crate::lex::{Keyword, LangItem, Token, TypeName};
 use crate::span::{Span, Spannable};
 
@@ -12,35 +12,39 @@ pub struct Arg {
 pub struct Sub {
     pub name: Ident,
     pub args: Option<Vec<Arg>>,
-    pub ret_type: Option<Type>,
+    pub res: Option<Type>,
 }
 
-pub fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Sub>
-where
-    T: Iterator<Item = (usize, &'a Token)>,
-{
-    let (i, tk) = tks
-        .next()
-        .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
-    let name = if let LangItem::Ident(name) = &tk.item {
-        name
-    } else {
-        return Err((Error("Expected subroutine name".into()), i.into()));
-    };
+impl Sub {
+    pub fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
+    where
+        T: Iterator<Item = (usize, &'a Token)>,
+    {
+        let (i, tk) = tks
+            .next()
+            .ok_or_else(|| (Error("expected subrountine name".into()), last.into()))?;
+        let name = if let LangItem::Ident(name) = &tk.item {
+            name
+        } else {
+            return Err((Error("Expected subroutine name".into()), i.into()));
+        };
 
-    let (args, ret_type) = try_parse_args_and_result(tks, last)?;
+        let (args, ret_type) = try_parse_args_and_result(tks, last)?;
 
-    Ok(Sub {
-        name: Ident(name.clone(), i.into()),
-        args,
-        ret_type,
-    })
+        expects_semi!(tks, last);
+
+        Ok(Sub {
+            name: Ident(name.clone(), i.into()),
+            args,
+            res: ret_type,
+        })
+    }
 }
 
 fn try_parse_args_and_result<'a, T>(
     tks: &mut std::iter::Peekable<T>,
     last: usize,
-) -> super::Result<(Option<Vec<Arg>>, Option<Type>)>
+) -> Result<(Option<Vec<Arg>>, Option<Type>)>
 where
     T: Iterator<Item = (usize, &'a Token)>,
 {
@@ -61,7 +65,6 @@ where
         .ok_or_else(|| (Error("Unexpected end of Sub".into()), last.into()))?;
 
     let ret_type = if LangItem::Key(Keyword::Results) == tk.item {
-        eprintln!("ret_type detect");
         let _ = tks.next();
         expects!("expected In", LangItem::Key(Keyword::In), tks, last);
         Some(Type::try_parse(tks, last)?)
@@ -73,7 +76,7 @@ where
     Ok((args, ret_type))
 }
 
-fn try_parse_args<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> super::Result<Vec<Arg>>
+fn try_parse_args<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Vec<Arg>>
 where
     T: Iterator<Item = (usize, &'a Token)>,
 {
@@ -81,7 +84,7 @@ where
     loop {
         let (i, tk) = tks
             .peek()
-            .ok_or_else(|| (super::Error("Arg abruptly ended".into()), last.into()))?;
+            .ok_or_else(|| (Error("Arg abruptly ended".into()), last.into()))?;
 
         match tk.item {
             LangItem::Key(Keyword::With) | LangItem::Comma => {
@@ -96,7 +99,7 @@ where
             }
             _ => {
                 return Err((
-                    super::Error("Failed to parse arg because of this token".into()),
+                    Error("Failed to parse arg because of this token".into()),
                     (*i).into(),
                 ))
             }
@@ -106,27 +109,27 @@ where
     Ok(ret)
 }
 
-fn try_parse_an_arg<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> super::Result<Arg>
+fn try_parse_an_arg<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Arg>
 where
     T: Iterator<Item = (usize, &'a Token)>,
 {
-    let err_exhaust = || (super::Error("Arg abruptly ended".into()), last.into());
+    let err_exhaust = || (Error("Arg abruptly ended".into()), last.into());
 
     let (i, tk) = tks.next().ok_or_else(err_exhaust)?;
 
     let ident = if let LangItem::Ident(name) = &tk.item {
         Ok(Ident(name.clone(), i.into()))
     } else {
-        Err((super::Error("expected Ident".into()), i.into()))
+        Err((Error("expected Ident".into()), i.into()))
     }?;
 
     let (i, tk) = tks.next().ok_or_else(err_exhaust)?;
 
     if !matches!(tk.item, LangItem::Key(Keyword::In)) {
-        return Err((super::Error("expected In".into()), i.into()));
+        return Err((Error("expected In".into()), i.into()));
     }
 
-    let ty = super::Type::try_parse(tks, last)?;
+    let ty = Type::try_parse(tks, last)?;
 
     Ok(Arg { ident, ty })
 }
@@ -152,14 +155,14 @@ pub enum Ty {
 }
 
 impl Type {
-    fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> super::Result<Self>
+    fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         T: Iterator<Item = (usize, &'a Token)>,
         Self: Sized,
     {
         let (i, tk) = tks
             .next()
-            .ok_or_else(|| (super::Error("Type abruptly ended".into()), last.into()))?;
+            .ok_or_else(|| (Error("Type abruptly ended".into()), last.into()))?;
         Ok(match tk.item {
             LangItem::Type(TypeName::Bool) => Self {
                 ty: Ty::Bool,
@@ -173,7 +176,7 @@ impl Type {
                 ty: Ty::Str,
                 span: i.into(),
             },
-            _ => return Err((super::Error("expected type".into()), i.into())),
+            _ => return Err((Error("expected type".into()), i.into())),
         })
     }
 

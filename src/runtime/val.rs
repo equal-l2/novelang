@@ -1,12 +1,12 @@
+use crate::semck::Arg;
 use crate::semck::Type;
-use crate::types::IdentName;
 use crate::types::IntType;
 
 #[derive(Debug, Clone)]
 pub struct Sub {
     pub start: usize,
-    pub args: Option<Vec<(IdentName, Type)>>,
-    pub ret_type: Option<Type>,
+    pub args: Option<Vec<Arg>>,
+    pub res_type: Option<Type>,
 }
 
 impl From<Sub> for Val {
@@ -41,7 +41,13 @@ impl Val {
             Self::Bool(_) => Type::Bool,
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,
-            Self::Sub(_) => Type::Sub,
+            Self::Sub(sub) => Type::Sub {
+                args: sub
+                    .args
+                    .as_ref()
+                    .map(|v| v.iter().map(|a| a.ty.clone()).collect()),
+                res: sub.res_type.as_ref().map(|ty| Box::new(ty.clone().into())),
+            },
             Self::Arr(t, _) => Type::Arr(Box::new(t.clone())),
         }
     }
