@@ -69,7 +69,7 @@ pub enum Statement {
         sub: Sub,
         offset_to_end: usize,
     },
-    Return,
+    Return(Option<Expr>),
     End,
     Ill,
 }
@@ -652,9 +652,9 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         offset_to_end,
                     }
                 }
-                BlockStmt::Return => {
+                BlockStmt::Return(res) => {
                     // "Return" ";"
-                    Statement::Return
+                    Statement::Return(res)
                 }
                 BlockStmt::End => {
                     // Pop stack and assign end index

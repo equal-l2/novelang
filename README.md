@@ -28,7 +28,7 @@
 <else>     ::= "else" ";"
 <sub>      ::= "sub" IDENT ["with" IDENT "in" TYPE {"," IDENT "in" TYPE}] ["results" "in" TARGET]";"
 <end>      ::= "end" ";"
-<return>   ::= "return" ";"
+<return>   ::= "return" ["with" EXPR] ";"
 
 EXPR      ::= <log>
 <log>     ::= <equ> {("&&" | "||") <equ>}

@@ -624,7 +624,7 @@ pub fn run(prog: Ast) {
                     }
                 }
             }
-            Statement::Return => {
+            Statement::Return(_res) => {
                 i = loop {
                     if let Some(scope) = rt.pop() {
                         if let ScopeKind::Sub(_sub, _target) = scope.kind {

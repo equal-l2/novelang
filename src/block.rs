@@ -60,7 +60,7 @@ pub enum BlockStmt {
         sub: parse::Sub,
         offset_to_end: usize,
     },
-    Return,
+    Return(Option<Expr>),
     End,
 }
 
@@ -273,7 +273,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                         offset_to_end: 0,
                     })
                 }
-                parse::BlockStmt::Return => {
+                parse::BlockStmt::Return(ret) => {
                     // "Return" ";"
                     let mut sub_found = false;
                     for k in scope_stack.kinds() {
@@ -286,7 +286,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                     if !sub_found {
                         errors.push((Error::NotInASub, span));
                     }
-                    Statement::Block(BlockStmt::Return)
+                    Statement::Block(BlockStmt::Return(ret))
                 }
                 parse::BlockStmt::End => {
                     // Pop stack and assign end index

@@ -98,7 +98,7 @@ pub enum BlockStmt {
 
     Sub(Sub),
 
-    Return,
+    Return(Option<Expr>),
 
     End,
 }
@@ -386,9 +386,21 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
                 }),
 
                 lex::Command::Return => parse_block!(stmts, idx, {
-                    // "Return" ";"
+                    let (_, tk) = tks
+                        .peek()
+                        .ok_or_else(|| (Error("Arg abruptly ended".into()), last.into()))?;
+
+                    let ret = if tk.item == LangItem::Key(Keyword::With) {
+                        // with a return value
+                        let _ = tks.next();
+                        Some(parse_expr(&mut tks, last)?)
+                    } else {
+                        None
+                    };
+
                     expects_semi!(tks, last);
-                    BlockStmt::Return
+
+                    BlockStmt::Return(ret)
                 }),
 
                 lex::Command::End => parse_block!(stmts, idx, {
