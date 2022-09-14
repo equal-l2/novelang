@@ -13,7 +13,6 @@ impl Call {
     where
         T: Iterator<Item = (usize, &'a Token)>,
     {
-        // TODO: parse args and ret
         let callee = utils::parse_expr(tks, last)?;
 
         let (args, res) = try_parse_args_and_res(tks, last)?;

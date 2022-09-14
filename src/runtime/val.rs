@@ -46,7 +46,7 @@ impl Val {
                     .args
                     .as_ref()
                     .map(|v| v.iter().map(|a| a.ty.clone()).collect()),
-                res: sub.res_type.as_ref().map(|ty| Box::new(ty.clone().into())),
+                res: sub.res_type.as_ref().map(|ty| Box::new(ty.clone())),
             },
             Self::Arr(t, _) => Type::Arr(Box::new(t.clone())),
         }

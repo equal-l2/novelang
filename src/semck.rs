@@ -173,7 +173,6 @@ impl ScopeStack {
                 .cloned()
                 .ok_or_else(|| exprs::ErrorKind::VariableNotFound(i.0.clone())),
             Target::Vector(l, _) => {
-                // TODO: refactor
                 let v = self.get_type_info(l);
                 match v {
                     Ok(TypeInfo { ty, is_mut }) => match ty {
@@ -359,7 +358,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                             match (res, &call.res) {
                                 (None, None) => { /* OK */ }
                                 (Some(expected), Some(res)) => {
-                                    match scope_stack.get_type_info(&res) {
+                                    match scope_stack.get_type_info(res) {
                                         Ok(TypeInfo { ty: actual, is_mut }) => {
                                             if !is_mut {
                                                 errors.push((
@@ -622,6 +621,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                 }
                 BlockStmt::Sub { sub, offset_to_end } => {
                     let name = &sub.name;
+
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
                         name.clone().into(),
@@ -647,13 +647,29 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     // create new scope
                     scope_stack.push(stmts.len());
 
+                    // add args to vars
+                    if let Some(ref args) = sub.args {
+                        for crate::parse::Arg { ident, ty } in args {
+                            scope_stack
+                                .add_var(
+                                    ident.as_ref().into(),
+                                    TypeInfo {
+                                        ty: ty.clone().into(),
+                                        is_mut: false,
+                                    },
+                                )
+                                .then_some(())
+                                .unwrap();
+                        }
+                    }
+
                     Statement::Sub {
                         sub: sub.into(),
                         offset_to_end,
                     }
                 }
                 BlockStmt::Return(res) => {
-                    // "Return" ";"
+                    // TODO: check return type
                     Statement::Return(res)
                 }
                 BlockStmt::End => {

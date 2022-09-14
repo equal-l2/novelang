@@ -3,6 +3,7 @@ mod val;
 
 use crate::die;
 use crate::exprs::Expr;
+use crate::parse::Call;
 use crate::semck::{Ast, Statement};
 use crate::target::Target;
 use crate::types::{IdentName, IntType};
@@ -254,13 +255,7 @@ impl Runtime {
         }
     }
 
-    pub fn exec_call(
-        &mut self,
-        callee: &Expr,
-        args: Option<Vec<Expr>>,
-        target: Option<Target>,
-        index: usize,
-    ) -> usize {
+    pub fn exec_call(&mut self, Call { callee, args, res }: &Call, index: usize) -> usize {
         let var_sub = callee.eval(self).unwrap_or_else(|e| {
             // FIXME: better error handle
             die!("Runtime error: failed to eval Sub to call: {}", e);
@@ -271,36 +266,49 @@ impl Runtime {
             match (sub.args.as_ref(), args) {
                 (None, None) => { /* OK */ }
                 (Some(expected), Some(actual)) => {
+                    if expected.len() != actual.len() {
+                        unreachable!("args count mismatch (semck defect)")
+                    }
+
                     for (arg, expr) in std::iter::zip(expected.iter(), actual.iter()) {
                         let expected = &arg.ty;
                         let actual = expr.eval(self).unwrap().ty(); // FIXME: error
                         if expected != &actual {
-                            unreachable!("args mismatch (semck defect)")
+                            unreachable!("args type mismatch (semck defect)")
                         }
                     }
                 }
                 _ => {
-                    unreachable!("args mismatch (semck defect)")
+                    unreachable!("args existence mismatch (semck defect)")
                 }
             }
 
             // Check the target type
-            match (&sub.res_type, &target) {
+            match (&sub.res_type, &res) {
                 (None, None) => { /* OK */ }
                 (Some(ret_expected), Some(target)) => {
                     let ret_actual = self.resolve_target(target).unwrap(); // FIXME: error
                     if ret_expected != &ret_actual.ty() {
-                        unreachable!("ret_type mismatch (semck defect)")
+                        unreachable!("ret type mismatch (semck defect)")
                     }
                 }
-                _ => {
-                    unreachable!("ret_type mismatch (semck defect)")
+                (Some(_), None) => { /* Discard the return value */ }
+                (None, Some(_)) => {
+                    unreachable!("ret existence mismatch (semck defect)")
                 }
             }
 
             // Push scope
             // register address to return (the next line)
-            self.push(ScopeKind::Sub(sub.clone(), target), index + 1);
+            self.push(ScopeKind::Sub(sub.clone(), res.clone()), index + 1);
+
+            // Add args
+            if let Some(args) = args {
+                for (an_arg, expr) in std::iter::zip(sub.args.as_ref().unwrap(), args) {
+                    let val = expr.eval(self).unwrap(); // TODO: error check
+                    self.decl_var(an_arg.ident.clone(), val);
+                }
+            }
 
             sub.start
         } else {
@@ -378,8 +386,7 @@ pub fn run(prog: Ast) {
                 i += offset_to_end;
             }
             Statement::Call(sub) => {
-                // TODO: handle args and target
-                i = rt.exec_call(&sub.callee, None, None, i);
+                i = rt.exec_call(sub, i);
             }
             Statement::While {
                 cond,
@@ -628,7 +635,7 @@ pub fn run(prog: Ast) {
                 i = loop {
                     if let Some(scope) = rt.pop() {
                         if let ScopeKind::Sub(_sub, _target) = scope.kind {
-                            // TODO: set return value to target with typecheck
+                            // TODO: set the return value to target
                             break scope.ret_idx;
                         }
                     } else {
