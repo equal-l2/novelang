@@ -3,6 +3,8 @@ use super::{macros::*, utils::*};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LangItem {
     Key(Keyword),
+    Type(TypeName),
+    Bool(Boolean),
     Cmd(Command),
     Op(Ops),
     Num(crate::types::IntType, usize),
@@ -23,9 +25,20 @@ decl_reserved!(Keyword, {
     Dice => "dice",
     With => "with",
     Faces => "faces",
+    From => "from",
+    Results => "results",
+    In => "in",
+});
+
+decl_reserved!(TypeName, {
+    Bool => "bool",
+    Num => "num",
+    Str => "str",
+});
+
+decl_reserved!(Boolean, {
     True => "true",
     False => "false",
-    From => "from",
 });
 
 decl_reserved!(Command, {
@@ -91,6 +104,8 @@ impl LangItem {
         use LangItem::*;
         match self {
             Key(i) => i.len(),
+            Type(i) => i.len(),
+            Bool(i) => i.len(),
             Cmd(i) => i.len(),
             Op(i) => i.len(),
             Num(_, l) => *l,
@@ -106,6 +121,8 @@ impl std::fmt::Display for LangItem {
         use LangItem::*;
         match self {
             Key(i) => write!(f, "{}", i.as_str()),
+            Type(i) => write!(f, "{}", i.as_str()),
+            Bool(i) => write!(f, "{}", i.as_str()),
             Cmd(i) => write!(f, "{}", i.as_str()),
             Op(i) => write!(f, "{}", i.as_str()),
             Num(i, _) => write!(f, "{}", i),

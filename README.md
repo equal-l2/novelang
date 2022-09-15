@@ -12,7 +12,7 @@
              | <sub> | <return> | <end>
 
 <assert>   ::= "assert" [EXPR "with"] EXPR ";"
-<call>     ::= "call" EXPR ";"
+<call>     ::= "call" EXPR ["with" EXPR {"," EXPR}] ["results" "in" TARGET]";"
 <halt>     ::= "halt" ";"
 <input>    ::= "input" [STRING] "to" TARGET ";"
 <let>      ::= "let" IDENT "be" EXPR ["asmut"] ";"
@@ -26,9 +26,9 @@
 <if>       ::= "if" EXPR ";"
 <elif>     ::= "else" "if" EXPR ";"
 <else>     ::= "else" ";"
-<sub>      ::= "sub" IDENT ";"
+<sub>      ::= "sub" IDENT ["with" IDENT "in" TYPE {"," IDENT "in" TYPE}] ["results" "in" TARGET]";"
 <end>      ::= "end" ";"
-<return>   ::= "return" ";"
+<return>   ::= "return" ["with" EXPR] ";"
 
 EXPR      ::= <log>
 <log>     ::= <equ> {("&&" | "||") <equ>}
@@ -51,5 +51,4 @@ TARGET ::= IDENT {"[" EXPR "]"}
 
 ## TODO
 
-- add subroutine with return value
 - add regex matching?

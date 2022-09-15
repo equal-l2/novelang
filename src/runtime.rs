@@ -3,6 +3,7 @@ mod val;
 
 use crate::die;
 use crate::exprs::Expr;
+use crate::parse::Call;
 use crate::semck::{Ast, Statement};
 use crate::target::Target;
 use crate::types::{IdentName, IntType};
@@ -30,11 +31,11 @@ impl Scope {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 enum ScopeKind {
     Branch,
     Loop,
-    Sub,
+    Sub(Option<Target>),
     ForWrap,
 }
 
@@ -58,7 +59,8 @@ impl exprs::VarsMap for Runtime {
             let l = l.eval(self)?;
             match l {
                 Val::Str(s) => s.chars().nth(n as usize).map(|c| Val::Str(c.into())),
-                Val::Arr(v) => v.get(n as usize).cloned(),
+                // TODO: check type with debug_assert?
+                Val::Arr(_, v) => v.get(n as usize).cloned(),
                 _ => unreachable!("Type {} cannot be indexed", l.typename()),
             }
             .ok_or(EvalError::IndexOutOfBounds(n))
@@ -112,7 +114,7 @@ impl Runtime {
                 let r = r.eval(self)?;
                 if let Val::Num(n) = r {
                     let resolved = self.resolve_target(l)?;
-                    if let Val::Arr(v) = resolved {
+                    if let Val::Arr(_, v) = resolved {
                         v.get_mut(n as usize)
                             .ok_or(exprs::EvalError::IndexOutOfBounds(n))
                     } else {
@@ -252,6 +254,68 @@ impl Runtime {
             self.modify_var(name, Val::Str(input));
         }
     }
+
+    pub fn exec_call(&mut self, Call { callee, args, res }: &Call, index: usize) -> usize {
+        let var_sub = callee.eval(self).unwrap_or_else(|e| {
+            // FIXME: better error handle
+            die!("Runtime error: failed to eval Sub to call: {}", e);
+        });
+
+        if let Val::Sub(ref sub) = var_sub {
+            // Check the args types
+            match (sub.args.as_ref(), args) {
+                (None, None) => { /* OK */ }
+                (Some(expected), Some(actual)) => {
+                    if expected.len() != actual.len() {
+                        unreachable!("args count mismatch (semck defect)")
+                    }
+
+                    for (arg, expr) in std::iter::zip(expected.iter(), actual.iter()) {
+                        let expected = &arg.ty;
+                        let actual = expr.eval(self).unwrap().ty(); // FIXME: error
+                        if expected != &actual {
+                            unreachable!("args type mismatch (semck defect)")
+                        }
+                    }
+                }
+                _ => {
+                    unreachable!("args existence mismatch (semck defect)")
+                }
+            }
+
+            // Check the target type
+            match (&sub.res_type, &res) {
+                (None, None) => { /* OK */ }
+                (Some(ret_expected), Some(target)) => {
+                    let ret_actual = self.resolve_target(target).unwrap(); // FIXME: error
+                    if ret_expected != &ret_actual.ty() {
+                        unreachable!("ret type mismatch (semck defect)")
+                    }
+                }
+                (Some(_), None) => { /* Discard the return value */ }
+                (None, Some(_)) => {
+                    unreachable!("ret existence mismatch (semck defect)")
+                }
+            }
+
+            // Push scope
+            // register address to return (the next line)
+            self.push(ScopeKind::Sub(res.clone()), index + 1);
+
+            // Add args
+            if let Some(args) = args {
+                for (an_arg, expr) in std::iter::zip(sub.args.as_ref().unwrap(), args) {
+                    let val = expr.eval(self).unwrap(); // TODO: error check
+                    self.decl_var(an_arg.ident.clone(), val);
+                }
+            }
+
+            sub.start
+        } else {
+            // FIXME: better error handle
+            unreachable!("Runtime error: Sub expected, got {}", var_sub.typename());
+        }
+    }
 }
 
 fn read_line_from_stdin() -> String {
@@ -292,14 +356,6 @@ fn unwrap_num(val: &Val) -> IntType {
     }
 }
 
-fn unwrap_sub(val: &Val) -> usize {
-    if let Val::Sub(n) = val {
-        *n
-    } else {
-        panic!("Runtime error: Sub expected, got {}", val.typename());
-    }
-}
-
 fn unwrap_str(val: &Val) -> String {
     if let Val::Str(s) = val {
         s.clone()
@@ -320,25 +376,17 @@ pub fn run(prog: Ast) {
             Statement::Print { args } => {
                 rt.exec_print(args);
             }
-            Statement::Sub {
-                name,
-                offset_to_end,
-            } => {
-                rt.decl_var(name.clone(), Val::Sub(i));
+            Statement::Sub { sub, offset_to_end } => {
+                let var_sub = val::Sub {
+                    start: i,
+                    args: sub.args.clone(),
+                    res_type: sub.res_type.clone(),
+                };
+                rt.decl_var(sub.name.clone(), var_sub.into());
                 i += offset_to_end;
             }
-            Statement::Call { name } => {
-                let name_val = name.eval(&rt).unwrap_or_else(|e| {
-                    // FIXME
-                    die!("Runtime error: failed to eval Sub to call: {}", e);
-                });
-                let idx = unwrap_sub(&name_val);
-
-                // register address to return (the next line)
-                rt.push(ScopeKind::Sub, i + 1);
-
-                // jump to the address of the sub
-                i = idx;
+            Statement::Call(sub) => {
+                i = rt.exec_call(sub, i);
             }
             Statement::While {
                 cond,
@@ -479,13 +527,10 @@ pub fn run(prog: Ast) {
                                 // go to starting stmt
                                 break scope.ret_idx;
                             }
-                            ScopeKind::Sub => {
-                                panic!("Runtime error: cannot break in sub scope");
-                            }
                             ScopeKind::Branch => {
                                 // break the outer scope
                             }
-                            _ => panic!("unexpected scope kind: {:?}", scope.kind),
+                            _ => panic!("unexpected scope kind for Break: {:?}", scope.kind),
                         }
                     } else {
                         die!("Runtime error: scope stack is empty");
@@ -513,13 +558,10 @@ pub fn run(prog: Ast) {
                             ScopeKind::Loop => {
                                 break scope.ret_idx;
                             }
-                            ScopeKind::Sub => {
-                                panic!("Runtime error: cannot continue in sub scope");
-                            }
                             ScopeKind::Branch => {
                                 // break the outer scope
                             }
-                            _ => panic!("unexpected scope kind: {:?}", scope.kind),
+                            _ => panic!("unexpected scope kind for Continue: {:?}", scope.kind),
                         }
                     } else {
                         panic!("Runtime error: scope stack is empty");
@@ -550,7 +592,7 @@ pub fn run(prog: Ast) {
                 } else {
                     let on_for;
                     if let Some(scope) = rt.peek() {
-                        on_for = scope.kind == ScopeKind::ForWrap;
+                        on_for = matches!(scope.kind, ScopeKind::ForWrap);
                     } else {
                         on_for = false;
                     }
@@ -589,16 +631,35 @@ pub fn run(prog: Ast) {
                     }
                 }
             }
-            Statement::Return => {
-                i = loop {
+            Statement::Return(res) => {
+                let res_val = res.as_ref().map(|expr| {
+                    expr.eval(&rt).unwrap_or_else(|e| {
+                        die!("Runtime error: failed to eval the return value: {}", e);
+                    })
+                });
+
+                // use loop to recursively exit scopes
+                // (e.g. Return can be happen in a If in a Sub)
+                let (ret_idx, target) = loop {
                     if let Some(scope) = rt.pop() {
-                        if scope.kind == ScopeKind::Sub {
-                            break scope.ret_idx;
+                        if let ScopeKind::Sub(target) = scope.kind {
+                            let target = target.map(|tgt| rt.resolve_target(&tgt).unwrap());
+                            break (scope.ret_idx, target);
                         }
                     } else {
                         die!("Runtime error: scope stack is empty");
                     }
                 };
+
+                // assign the result to the target
+                match (target, res_val) {
+                    (None, _) => { /* OK */ }
+                    (Some(target_resolved), Some(val)) => {
+                        *target_resolved = val;
+                    }
+                    (Some(_), None) => unreachable!("The callee has no result"),
+                }
+                i = ret_idx;
                 continue;
             }
             Statement::Ill => panic!("Unreachable statement"),

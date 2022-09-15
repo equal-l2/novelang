@@ -1,12 +1,15 @@
 use crate::exprs::Expr;
+use crate::parse::Call;
 use crate::span::*;
 use crate::target::Target;
 use crate::types::IdentName;
 
 mod exprs;
+mod stmt;
 mod types;
+pub use stmt::sub::{Arg, Sub};
 
-use types::Type;
+pub use types::Type;
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -14,9 +17,7 @@ pub enum Statement {
         mesg: Expr,
         cond: Expr,
     },
-    Call {
-        name: Expr,
-    },
+    Call(Call),
     Halt,
     Input {
         prompt: Option<String>,
@@ -65,10 +66,10 @@ pub enum Statement {
         offset_to_end: usize,
     },
     Sub {
-        name: IdentName,
+        sub: Sub,
         offset_to_end: usize,
     },
-    Return,
+    Return(Option<Expr>),
     End,
     Ill,
 }
@@ -90,13 +91,21 @@ type VarMap = std::collections::HashMap<IdentName, TypeInfo>;
 struct Scope {
     map: VarMap,
     ret_idx: usize,
+    kind: ScopeKind,
+}
+
+#[derive(Debug)]
+enum ScopeKind {
+    Sub(Option<Type>),
+    Other,
 }
 
 impl Scope {
-    fn new(ret_idx: usize) -> Self {
+    fn new(ret_idx: usize, kind: ScopeKind) -> Self {
         Self {
             map: VarMap::new(),
             ret_idx,
+            kind,
         }
     }
 
@@ -114,6 +123,7 @@ impl Scope {
     }
 }
 
+#[derive(Debug)]
 struct ScopeStack {
     scopes: Vec<Scope>,
 }
@@ -123,7 +133,7 @@ impl ScopeStack {
         &[("_wait", Type::Bool), ("_explicit_assert", Type::Bool)];
 
     fn new() -> Self {
-        let mut internals = Scope::new(0);
+        let mut internals = Scope::new(0, ScopeKind::Other);
         for var in Self::INTERNAL_VARS {
             internals.add_var(
                 IdentName::from(var.0),
@@ -139,7 +149,12 @@ impl ScopeStack {
     }
 
     fn push(&mut self, ret_idx: usize) {
-        self.scopes.push(Scope::new(ret_idx));
+        self.scopes.push(Scope::new(ret_idx, ScopeKind::Other));
+    }
+
+    fn push_with_res(&mut self, ret_idx: usize, res_ty: Option<Type>) {
+        self.scopes
+            .push(Scope::new(ret_idx, ScopeKind::Sub(res_ty)));
     }
 
     fn pop(&mut self) -> Option<usize> {
@@ -172,7 +187,6 @@ impl ScopeStack {
                 .cloned()
                 .ok_or_else(|| exprs::ErrorKind::VariableNotFound(i.0.clone())),
             Target::Vector(l, _) => {
-                // TODO: refactor
                 let v = self.get_type_info(l);
                 match v {
                     Ok(TypeInfo { ty, is_mut }) => match ty {
@@ -191,6 +205,19 @@ impl ScopeStack {
     fn is_empty(&self) -> bool {
         self.scopes.len() == 1
     }
+
+    fn res_ty(&self) -> Option<&Option<Type>> {
+        self.scopes
+            .iter()
+            .rfind(|x| matches!(x.kind, ScopeKind::Sub(_)))
+            .map(|sc| {
+                if let ScopeKind::Sub(ref ty) = sc.kind {
+                    ty
+                } else {
+                    unreachable!()
+                }
+            })
+    }
 }
 
 pub enum Error {
@@ -202,6 +229,11 @@ pub enum Error {
         // Expected <some-type>
         expected: Type,
         actual: Type,
+    },
+    ArgsCountMismatch {
+        // Expected <some-type>
+        expected: usize,
+        actual: usize,
     },
     Expr(exprs::ErrorKind),
     GodMistake(Box<Self>),
@@ -224,6 +256,9 @@ impl std::fmt::Display for Error {
             Error::TypeMismatch { expected, actual } => {
                 write!(f, "Expected type \"{}\", found \"{}\"", expected, actual)
             }
+            Error::ArgsCountMismatch { expected, actual } => {
+                write!(f, "Expected {} arg(s), found {}", expected, actual)
+            }
             Error::Expr(e) => write!(f, "{}", e),
             Error::GodMistake(e) => write!(f, "Can God make a mistake? ({})", e),
             Error::Other(error) => write!(f, "{}", error),
@@ -232,7 +267,7 @@ impl std::fmt::Display for Error {
 }
 
 macro_rules! check_expr_type {
-    ($expr: ident, $expected: expr, $scope_stack: ident, $errors: ident) => {
+    ($expr: expr, $expected: expr, $scope_stack: ident, $errors: ident) => {
         match $expr.check_type(&$scope_stack) {
             Ok(ty) if ty == $expected => { /* OK */ }
             Ok(ty) => {
@@ -279,9 +314,119 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     check_expr_type!(cond, Type::Bool, scope_stack, errors);
                     Statement::Assert { mesg, cond }
                 }
-                NormalStmt::Call { name } => {
-                    check_expr_type!(name, Type::Sub, scope_stack, errors);
-                    Statement::Call { name: name.clone() }
+                NormalStmt::Call(call) => {
+                    let callee_type = call.callee.check_type(&scope_stack);
+
+                    match callee_type {
+                        Ok(Type::Sub { args, res }) => {
+                            // check args type
+                            match (args, &call.args) {
+                                (None, None) => { /* OK */ }
+                                (Some(expected), Some(actual)) => {
+                                    let actual_span = Span(
+                                        actual.first().unwrap().span().0,
+                                        actual.last().unwrap().span().1,
+                                    );
+                                    if expected.len() != actual.len() {
+                                        errors.push((
+                                            Error::ArgsCountMismatch {
+                                                expected: expected.len(),
+                                                actual: actual.len(),
+                                            },
+                                            actual_span,
+                                        ));
+                                    } else {
+                                        for (expected, arg) in std::iter::zip(expected, actual) {
+                                            match arg.check_type(&scope_stack) {
+                                                Ok(actual) => {
+                                                    if expected != actual {
+                                                        errors.push((
+                                                            Error::TypeMismatch {
+                                                                expected,
+                                                                actual,
+                                                            },
+                                                            arg.span(),
+                                                        ));
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    errors.push((Error::Expr(e.kind), e.span));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                (Some(expected), None) => {
+                                    errors.push((
+                                        Error::ArgsCountMismatch {
+                                            expected: expected.len(),
+                                            actual: 0,
+                                        },
+                                        // TODO: correct span (whole statement?)
+                                        call.callee.span(),
+                                    ));
+                                }
+                                (None, Some(actual)) => {
+                                    errors.push((
+                                        Error::ArgsCountMismatch {
+                                            expected: 0,
+                                            actual: actual.len(),
+                                        },
+                                        // span for actual args
+                                        Span(
+                                            actual.first().unwrap().span().0,
+                                            actual.last().unwrap().span().1,
+                                        ),
+                                    ));
+                                }
+                            }
+
+                            // check res type
+                            match (res, &call.res) {
+                                (None, None) => { /* OK */ }
+                                (Some(expected), Some(res)) => {
+                                    match scope_stack.get_type_info(res) {
+                                        Ok(TypeInfo { ty: actual, is_mut }) => {
+                                            if !is_mut {
+                                                errors.push((
+                                                    Error::Other("target is immutable".into()),
+                                                    res.span(),
+                                                ));
+                                            } else if *expected != actual {
+                                                errors.push((
+                                                    Error::TypeMismatch {
+                                                        expected: *expected,
+                                                        actual,
+                                                    },
+                                                    res.span(),
+                                                ));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            errors.push((Error::Expr(e), res.span()));
+                                        }
+                                    }
+                                }
+                                (Some(_), None) => { /* Discard the result */ }
+                                (None, Some(res)) => {
+                                    errors.push((
+                                        Error::Other("The called Sub returns no result".into()),
+                                        res.span(),
+                                    ));
+                                }
+                            }
+                        }
+                        Ok(ty) => {
+                            errors.push((
+                                Error::Other(format!("Expected Sub types, found {}", ty)),
+                                call.callee.span(),
+                            ));
+                        }
+                        Err(e) => {
+                            errors.push((Error::Expr(e.kind), e.span));
+                        }
+                    }
+                    Statement::Call(call.clone())
                 }
                 NormalStmt::Halt => Statement::Halt,
                 NormalStmt::Input { prompt, target } => {
@@ -501,34 +646,90 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     scope_stack.push(stmts.len());
                     Statement::Else { offset_to_end }
                 }
-                BlockStmt::Sub {
-                    name,
-                    offset_to_end,
-                } => {
+                BlockStmt::Sub { sub, offset_to_end } => {
+                    let name = &sub.name;
+
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
-                        name.0.clone(),
+                        name.clone().into(),
                         TypeInfo {
-                            ty: Type::Sub,
+                            ty: Type::Sub {
+                                args: sub
+                                    .args
+                                    .as_ref()
+                                    .map(|v| v.iter().map(|a| a.ty.clone().into()).collect()),
+                                res: sub.res.as_ref().map(|ty| Box::new(ty.clone().into())),
+                            },
                             is_mut: false,
                         },
                     );
 
                     if !success {
-                        errors.push((Error::SubroutineAlreadyDefined(name.0.clone()), name.span()));
+                        errors.push((
+                            Error::SubroutineAlreadyDefined(name.clone().into()),
+                            name.span(),
+                        ));
                     }
 
                     // create new scope
-                    scope_stack.push(stmts.len());
+                    scope_stack.push_with_res(stmts.len(), sub.res.clone().map(Into::into));
+
+                    // add args to vars
+                    if let Some(ref args) = sub.args {
+                        for crate::parse::Arg { ident, ty } in args {
+                            scope_stack
+                                .add_var(
+                                    ident.as_ref().into(),
+                                    TypeInfo {
+                                        ty: ty.clone().into(),
+                                        is_mut: false,
+                                    },
+                                )
+                                .then_some(())
+                                .unwrap();
+                        }
+                    }
 
                     Statement::Sub {
-                        name: name.0.clone(),
+                        sub: sub.into(),
                         offset_to_end,
                     }
                 }
-                BlockStmt::Return => {
-                    // "Return" ";"
-                    Statement::Return
+                BlockStmt::Return(res) => {
+                    // this should not panic because it is already ensured
+                    // the return is in a sub scope
+                    let res_ty = scope_stack.res_ty().unwrap();
+
+                    match (res_ty, &res) {
+                        (None, None) => { /* OK */ }
+                        (Some(expected), None) => {
+                            // TODO: needs a span pointing to the whole statement
+                            todo!("expected a return value in type {}", expected);
+                        }
+                        (None, Some(expr)) => {
+                            errors.push((
+                                Error::Other("expected no return value".into()),
+                                expr.span(),
+                            ));
+                        }
+                        (Some(expected), Some(expr)) => match expr.check_type(&scope_stack) {
+                            Ok(actual) => {
+                                if expected != &actual {
+                                    errors.push((
+                                        Error::TypeMismatch {
+                                            expected: expected.clone(),
+                                            actual,
+                                        },
+                                        expr.span(),
+                                    ));
+                                }
+                            }
+                            Err(e) => {
+                                errors.push((Error::Expr(e.kind), e.span));
+                            }
+                        },
+                    }
+                    Statement::Return(res)
                 }
                 BlockStmt::End => {
                     // Pop stack and assign end index

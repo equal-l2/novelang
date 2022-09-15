@@ -1,5 +1,5 @@
 // Cotains the index of the start token and the end token
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Span(pub usize, pub usize);
 
 impl From<usize> for Span {

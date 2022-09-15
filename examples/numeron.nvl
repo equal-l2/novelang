@@ -30,10 +30,10 @@ while true;
         continue;
     end;
 
-    let in be [in_num/100, (in_num/10)%10, in_num%10];
-    print in[0], in[1], in[2];
+    let digit be [in_num/100, (in_num/10)%10, in_num%10];
+    print digit[0], digit[1], digit[2];
 
-    if in[0] == in[1] || in[1] == in[2] || in[2] == in[0];
+    if digit[0] == digit[1] || digit[1] == digit[2] || digit[2] == digit[0];
         print "all number occurs only once, try again!";
         continue;
     end;
@@ -41,27 +41,27 @@ while true;
     let eat be 0 asmut;
     let bite be 0 asmut;
 
-    if n[0] == in[0];
+    if n[0] == digit[0];
         modify eat to eat+1;
-    else if n[0] == in[1];
+    else if n[0] == digit[1];
         modify bite to bite+1;
-    else if n[0] == in[2];
+    else if n[0] == digit[2];
         modify bite to bite+1;
     end;
 
-    if n[1] == in[1];
+    if n[1] == digit[1];
         modify eat to eat+1;
-    else if n[1] == in[0];
+    else if n[1] == digit[0];
         modify bite to bite+1;
-    else if n[1] == in[2];
+    else if n[1] == digit[2];
         modify bite to bite+1;
     end;
 
-    if n[2] == in[2];
+    if n[2] == digit[2];
         modify eat to eat+1;
-    else if n[2] == in[0];
+    else if n[2] == digit[0];
         modify bite to bite+1;
-    else if n[2] == in[1];
+    else if n[2] == digit[1];
         modify bite to bite+1;
     end;
 

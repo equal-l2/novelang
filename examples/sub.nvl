@@ -1,0 +1,16 @@
+sub fib with n in num results in num;
+    if n <= 1;
+        return with n;
+    end;
+    let f1 be 0 asmut;
+    let f2 be 0 asmut;
+    call fib with n-1 results in f1;
+    call fib with n-2 results in f2;
+    return with f1+f2;
+end;
+
+for i from 0 to 10;
+    let ret be 0 asmut;
+    call fib with i results in ret;
+    print i, ret;
+end;

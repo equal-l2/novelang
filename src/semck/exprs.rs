@@ -122,7 +122,7 @@ impl TypeCheck for Rel {
                 let l_ty = l.check_type(stack)?;
                 let r_ty = r.check_type(stack)?;
 
-                if l_ty == r_ty && !matches!(l_ty, Type::Sub | Type::Arr(_)) {
+                if l_ty == r_ty && !matches!(l_ty, Type::Sub { .. } | Type::Arr(_)) {
                     Ok(Type::Bool)
                 } else {
                     let op = match self {
@@ -150,7 +150,7 @@ impl TypeCheck for AddSub {
                 let l_ty = l.check_type(stack)?;
                 let r_ty = r.check_type(stack)?;
 
-                if l_ty == r_ty && l_ty != Type::Sub {
+                if l_ty == r_ty && !matches!(l_ty, Type::Sub { .. }) {
                     Ok(l_ty)
                 } else {
                     Err(Error {
@@ -224,7 +224,7 @@ impl TypeCheck for Node {
             Self::Single(i) => i.check_type(stack),
             Self::Plus(i, _) | Self::Minus(i, _) => {
                 let ty = i.check_type(stack)?;
-                if matches!(ty, Type::Sub) {
+                if matches!(ty, Type::Sub { .. }) {
                     let op = if matches!(self, Self::Plus(_, _)) {
                         "+"
                     } else {

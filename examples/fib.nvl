@@ -1,10 +1,10 @@
-# "fibonacci number calculator";
+# fibonacci number calculator
 
 let i be 0 asmut;
 let j be 1 asmut;
 let cnt be 0 asmut;
 
-while 1==1;
+while true;
     print cnt, i;
     let oldi be i;
     modify i to j;

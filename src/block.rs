@@ -57,10 +57,10 @@ pub enum BlockStmt {
         offset_to_end: usize,
     },
     Sub {
-        name: Ident,
+        sub: parse::Sub,
         offset_to_end: usize,
     },
-    Return,
+    Return(Option<Expr>),
     End,
 }
 
@@ -264,16 +264,16 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                     scope_stack.push(ScopeKind::Other, span, stmts.len());
                     Statement::Block(BlockStmt::Else { offset_to_end: 0 })
                 }
-                parse::BlockStmt::Sub { name } => {
+                parse::BlockStmt::Sub(sub) => {
                     // create new scope
                     scope_stack.push(ScopeKind::Sub, span, stmts.len());
 
                     Statement::Block(BlockStmt::Sub {
-                        name: name.clone(),
+                        sub: sub.clone(),
                         offset_to_end: 0,
                     })
                 }
-                parse::BlockStmt::Return => {
+                parse::BlockStmt::Return(ret) => {
                     // "Return" ";"
                     let mut sub_found = false;
                     for k in scope_stack.kinds() {
@@ -286,7 +286,7 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                     if !sub_found {
                         errors.push((Error::NotInASub, span));
                     }
-                    Statement::Block(BlockStmt::Return)
+                    Statement::Block(BlockStmt::Return(ret))
                 }
                 parse::BlockStmt::End => {
                     // Pop stack and assign end index
@@ -297,11 +297,8 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
 
                         let prev = stmts[prev_idx].clone();
                         stmts[prev_idx] = match prev {
-                            Statement::Block(BlockStmt::Sub { name, .. }) => {
-                                Statement::Block(BlockStmt::Sub {
-                                    name,
-                                    offset_to_end,
-                                })
+                            Statement::Block(BlockStmt::Sub { sub, .. }) => {
+                                Statement::Block(BlockStmt::Sub { sub, offset_to_end })
                             }
                             Statement::Block(BlockStmt::While { cond, .. }) => {
                                 Statement::Block(BlockStmt::While {
