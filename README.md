@@ -52,3 +52,4 @@ TARGET ::= IDENT {"[" EXPR "]"}
 ## TODO
 
 - add regex matching?
+- Implement flow analysis
