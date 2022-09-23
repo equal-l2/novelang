@@ -2,25 +2,28 @@ use super::super::types::Type;
 use super::from_tokens::*;
 
 #[derive(Clone, Debug)]
-pub struct Arg {
+pub struct SubArg {
     pub ident: Ident,
     pub ty: Type,
 }
 
 #[derive(Debug, Clone)]
-pub struct Args(pub Vec<Arg>);
+pub struct SubArgs(pub Vec<SubArg>);
 
 #[derive(Debug, Clone)]
-pub struct Res(pub Type);
+pub struct SubRes(pub Type);
+
+#[derive(Debug, Clone)]
+pub struct SubName(pub Ident);
 
 #[derive(Clone, Debug)]
 pub struct Sub {
-    pub name: Ident,
-    pub args: Option<Args>,
-    pub res: Option<Res>,
+    pub name: SubName,
+    pub args: Option<SubArgs>,
+    pub res: Option<SubRes>,
 }
 
-type ArgsResPair = (Option<Args>, Option<Res>);
+type ArgsResPair = (Option<SubArgs>, Option<SubRes>);
 
 impl FromTokens for Sub {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
@@ -42,7 +45,7 @@ impl FromTokens for Sub {
         expects_semi!(tks, last);
 
         Ok(Sub {
-            name: Ident(name.clone(), i.into()),
+            name: SubName(Ident(name.clone(), i.into())),
             args,
             res: ret_type,
         })
@@ -62,7 +65,7 @@ impl FromTokens for ArgsResPair {
         // parse arguments
         let args = if LangItem::Key(Keyword::With) == tk.item {
             // `With` will be handled in try_parse_args
-            Some(Args::try_parse(tks, last)?)
+            Some(SubArgs::try_parse(tks, last)?)
         } else {
             None
         };
@@ -74,7 +77,7 @@ impl FromTokens for ArgsResPair {
         let ret_type = if LangItem::Key(Keyword::Results) == tk.item {
             let _ = tks.next();
             expects!("expected In", LangItem::Key(Keyword::In), tks, last);
-            Some(Res(Type::try_parse(tks, last)?))
+            Some(SubRes(Type::try_parse(tks, last)?))
         } else {
             eprintln!("{}", tk);
             None
@@ -84,7 +87,7 @@ impl FromTokens for ArgsResPair {
     }
 }
 
-impl FromTokens for Args {
+impl FromTokens for SubArgs {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
@@ -100,7 +103,7 @@ impl FromTokens for Args {
                 LangItem::Key(Keyword::With) | LangItem::Comma => {
                     // start of an arg
                     let _ = tks.next();
-                    let an_arg = Arg::try_parse(tks, last)?;
+                    let an_arg = SubArg::try_parse(tks, last)?;
                     ret.push(an_arg);
                 }
                 LangItem::Key(Keyword::Results) | LangItem::Semi => {
@@ -120,7 +123,7 @@ impl FromTokens for Args {
     }
 }
 
-impl FromTokens for Arg {
+impl FromTokens for SubArg {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
@@ -144,6 +147,6 @@ impl FromTokens for Arg {
 
         let ty = Type::try_parse(tks, last)?;
 
-        Ok(Arg { ident, ty })
+        Ok(SubArg { ident, ty })
     }
 }

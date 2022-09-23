@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;
 use exprs::Eval;
 use val::Val;
 
-use crate::parse::stmt::call::{Args as CallArgs, Res as CallRes};
+use crate::parse::stmt::call::{CallArgs, CallRes};
 
 type VarTable = std::collections::HashMap<IdentName, Val>;
 
@@ -258,7 +258,7 @@ impl Runtime {
     }
 
     pub fn exec_call(&mut self, Call { callee, args, res }: &Call, index: usize) -> usize {
-        let var_sub = callee.eval(self).unwrap_or_else(|e| {
+        let var_sub = callee.0.eval(self).unwrap_or_else(|e| {
             // FIXME: better error handle
             die!("Runtime error: failed to eval Sub to call: {}", e);
         });
@@ -645,7 +645,8 @@ pub fn run(prog: Ast) {
                 let (ret_idx, target) = loop {
                     if let Some(scope) = rt.pop() {
                         if let ScopeKind::Sub(target) = scope.kind {
-                            let target = target.map(|tgt| rt.resolve_target(&tgt.into()).unwrap());
+                            let target =
+                                target.map(|tgt| rt.resolve_target(&tgt.0.into()).unwrap());
                             break (scope.ret_idx, target);
                         }
                     } else {

@@ -1,26 +1,36 @@
 use super::from_tokens::*;
+use crate::span::Spannable;
 
-#[derive(Debug, Clone, derive_more::Into)]
-pub struct Args(pub Vec<Expr>);
+#[derive(Debug, Clone)]
+pub struct CallArgs(pub Vec<Expr>);
 
-#[derive(Debug, Clone, derive_more::Into)]
-pub struct Res(pub Target);
+#[derive(Debug, Clone)]
+pub struct CallRes(pub Target);
+
+#[derive(Debug, Clone)]
+pub struct Callee(pub Expr);
+
+impl Spannable for Callee {
+    fn span(&self) -> crate::span::Span {
+        self.0.span()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Call {
-    pub callee: Expr,
-    pub args: Option<Args>,
-    pub res: Option<Res>,
+    pub callee: Callee,
+    pub args: Option<CallArgs>,
+    pub res: Option<CallRes>,
 }
 
-type ArgsResPair = (Option<Args>, Option<Res>);
+type ArgsResPair = (Option<CallArgs>, Option<CallRes>);
 
 impl FromTokens for Call {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         T: Iterator<Item = (usize, &'a Token)>,
     {
-        let callee = utils::parse_expr(tks, last)?;
+        let callee = Callee(utils::parse_expr(tks, last)?);
 
         let (args, res) = ArgsResPair::try_parse(tks, last)?;
 
@@ -43,7 +53,7 @@ impl FromTokens for ArgsResPair {
         // parse arguments
         let args = if LangItem::Key(Keyword::With) == tk.item {
             // `With` will be handled in try_parse_args
-            Some(Args::try_parse(tks, last)?)
+            Some(CallArgs::try_parse(tks, last)?)
         } else {
             None
         };
@@ -55,7 +65,7 @@ impl FromTokens for ArgsResPair {
         let res = if LangItem::Key(Keyword::Results) == tk.item {
             let _ = tks.next();
             expects!("expected In", LangItem::Key(Keyword::In), tks, last);
-            Some(Res(Target::try_parse(tks, last)?))
+            Some(CallRes(Target::try_parse(tks, last)?))
         } else {
             eprintln!("{}", tk);
             None
@@ -65,7 +75,7 @@ impl FromTokens for ArgsResPair {
     }
 }
 
-impl FromTokens for Args {
+impl FromTokens for CallArgs {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

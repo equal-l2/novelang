@@ -302,7 +302,7 @@ use crate::span::Spannable;
 
 pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(Error, Span)>> {
     use crate::block::{BlockStmt, Statement as ParsedStmt};
-    use crate::parse::stmt::call::{Args as CallArgs, Res as CallRes};
+    use crate::parse::stmt::call::{CallArgs, CallRes};
     use crate::parse::NormalStmt;
     use exprs::TypeCheck;
     let mut stmts = Vec::<Statement>::new();
@@ -318,7 +318,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     Statement::Assert { mesg, cond }
                 }
                 NormalStmt::Call(call) => {
-                    let callee_type = call.callee.check_type(&scope_stack);
+                    let callee_type = call.callee.0.check_type(&scope_stack);
 
                     match callee_type {
                         Ok(Type::Sub {
@@ -653,12 +653,12 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     Statement::Else { offset_to_end }
                 }
                 BlockStmt::Sub { sub, offset_to_end } => {
-                    use crate::parse::stmt::sub::{Args as SubArgs, Res as SubRes};
+                    use crate::parse::stmt::sub::{SubArgs, SubRes};
                     let name = &sub.name;
 
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
-                        name.clone().into(),
+                        name.clone().0.into(),
                         TypeInfo {
                             ty: Type::Sub {
                                 args: sub.args.as_ref().map(|SubArgs(v)| {
@@ -675,8 +675,8 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
 
                     if !success {
                         errors.push((
-                            Error::SubroutineAlreadyDefined(name.clone().into()),
-                            name.span(),
+                            Error::SubroutineAlreadyDefined(name.clone().0.into()),
+                            name.0.span(),
                         ));
                     }
 
@@ -684,7 +684,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     scope_stack
                         .push_with_res(stmts.len(), sub.res.clone().map(|SubRes(ty)| ty.into()));
 
-                    use crate::parse::stmt::sub::Arg as SubArg;
+                    use crate::parse::stmt::sub::SubArg;
                     // add args to vars
                     if let Some(SubArgs(ref args)) = sub.args {
                         for SubArg { ident, ty } in args {

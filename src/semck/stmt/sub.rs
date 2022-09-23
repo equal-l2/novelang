@@ -1,7 +1,5 @@
 use super::super::Type;
-use crate::parse::stmt::sub::{
-    Arg as ParsedArg, Args as ParsedArgs, Res as ParsedRes, Sub as ParsedSub,
-};
+use crate::parse::stmt::sub::{Sub as ParsedSub, SubArg, SubArgs, SubName, SubRes};
 use crate::types::IdentName;
 
 #[derive(Clone, Debug)]
@@ -19,18 +17,19 @@ pub struct Sub {
 
 impl From<ParsedSub> for Sub {
     fn from(sub: ParsedSub) -> Self {
+        let SubName(ident) = sub.name;
         Self {
-            name: sub.name.into(),
+            name: ident.into(),
             args: sub
                 .args
-                .map(|ParsedArgs(v)| v.into_iter().map(Into::into).collect()),
-            res_type: sub.res.map(|ParsedRes(t)| t.into()),
+                .map(|SubArgs(v)| v.into_iter().map(Into::into).collect()),
+            res_type: sub.res.map(|SubRes(t)| t.into()),
         }
     }
 }
 
-impl From<ParsedArg> for Arg {
-    fn from(arg: ParsedArg) -> Self {
+impl From<SubArg> for Arg {
+    fn from(arg: SubArg) -> Self {
         Self {
             ident: arg.ident.into(),
             ty: arg.ty.into(),
