@@ -1,6 +1,7 @@
 use crate::exprs::Expr;
 use crate::lex::{self, LangItem};
 use crate::span::{Span, Spannable};
+use crate::target::Target;
 
 mod exprs;
 
@@ -16,7 +17,6 @@ use stmt::sub::Sub;
 pub mod types;
 
 mod target;
-use target::parse_target;
 
 mod look_item;
 pub(self) use look_item::LookItem;
@@ -174,7 +174,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
 
                     expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
-                    let target = parse_target(&mut tks, last)?;
+                    let target = Target::try_parse(&mut tks, last)?;
 
                     expects_semi!(tks, last);
                     NormalStmt::Input { prompt, target }
@@ -235,7 +235,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
 
                 lex::Command::Modify => parse_normal!(stmts, {
                     // "Modify" <target> "To" <expr> ";"
-                    let target = parse_target(&mut tks, last)?;
+                    let target = Target::try_parse(&mut tks, last)?;
                     expects!("To expected", LangItem::Key(Keyword::To), tks, last);
 
                     let expr = parse_expr(&mut tks, last)?;
@@ -287,7 +287,7 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
                     );
                     expects!("\"To\" expected", LangItem::Key(Keyword::To), tks, last);
 
-                    let target = parse_target(&mut tks, last)?;
+                    let target = Target::try_parse(&mut tks, last)?;
 
                     expects_semi!(tks, last);
                     NormalStmt::Roll {

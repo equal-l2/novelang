@@ -55,7 +55,7 @@ impl FromTokens for ArgsResPair {
         let res = if LangItem::Key(Keyword::Results) == tk.item {
             let _ = tks.next();
             expects!("expected In", LangItem::Key(Keyword::In), tks, last);
-            Some(Res(super::super::target::parse_target(tks, last)?))
+            Some(Res(Target::try_parse(tks, last)?))
         } else {
             eprintln!("{}", tk);
             None
