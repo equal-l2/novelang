@@ -30,7 +30,7 @@ impl FromTokens for Call {
     where
         T: Iterator<Item = (usize, &'a Token)>,
     {
-        let callee = Callee(utils::parse_expr(tks, last)?);
+        let callee = Callee(parse_expr(tks, last)?);
 
         let (args, res) = ArgsResPair::try_parse(tks, last)?;
 
@@ -91,7 +91,7 @@ impl FromTokens for CallArgs {
                 LangItem::Key(Keyword::With) | LangItem::Comma => {
                     // start of an arg
                     let _ = tks.next();
-                    let an_arg = utils::parse_expr(tks, last)?;
+                    let an_arg = parse_expr(tks, last)?;
                     ret.push(an_arg);
                 }
                 LangItem::Key(Keyword::Results) | LangItem::Semi => {

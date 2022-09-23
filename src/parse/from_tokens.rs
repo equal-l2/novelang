@@ -1,5 +1,5 @@
 pub(super) use crate::lex::{Keyword, LangItem, Token};
-pub(super) use crate::parse::{utils, Error, Expr, Result};
+pub(super) use crate::parse::{utils::*, Error, Expr, Result};
 pub(super) use crate::target::{Ident, Target};
 
 pub(super) trait FromTokens {

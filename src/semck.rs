@@ -303,6 +303,7 @@ use crate::span::Spannable;
 pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(Error, Span)>> {
     use crate::block::{BlockStmt, Statement as ParsedStmt};
     use crate::parse::stmt::call::{CallArgs, CallRes};
+    use crate::parse::stmt::variant;
     use crate::parse::NormalStmt;
     use exprs::TypeCheck;
     let mut stmts = Vec::<Statement>::new();
@@ -312,7 +313,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
     for parsed_stmt in parsed.stmts {
         stmts.push(match parsed_stmt {
             ParsedStmt::Normal(normal) => match normal {
-                NormalStmt::Assert { mesg, cond } => {
+                NormalStmt::Assert(variant::Assert { mesg, cond }) => {
                     check_expr_type!(mesg, Type::Str, scope_stack, errors);
                     check_expr_type!(cond, Type::Bool, scope_stack, errors);
                     Statement::Assert { mesg, cond }
@@ -435,7 +436,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     Statement::Call(call.clone())
                 }
                 NormalStmt::Halt => Statement::Halt,
-                NormalStmt::Input { prompt, target } => {
+                NormalStmt::Input(variant::Input { prompt, target }) => {
                     let as_num = match scope_stack.get_type_info(&target) {
                         Ok(TypeInfo { ty, is_mut }) => {
                             if !is_mut {
@@ -468,7 +469,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         as_num,
                     }
                 }
-                NormalStmt::Let { name, init, is_mut } => {
+                NormalStmt::Let(variant::Let { name, init, is_mut }) => {
                     let mut let_errors = vec![];
 
                     let init_ty = match init.check_type(&scope_stack) {
@@ -507,7 +508,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         is_mut,
                     }
                 }
-                NormalStmt::Modify { target, expr } => {
+                NormalStmt::Modify(variant::Modify { target, expr }) => {
                     match scope_stack.get_type_info(&target) {
                         Ok(TypeInfo { ty, is_mut }) => {
                             if !is_mut {
@@ -525,7 +526,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
 
                     Statement::Modify { target, expr }
                 }
-                NormalStmt::Print { args } => {
+                NormalStmt::Print(variant::Print(args)) => {
                     for a in &args {
                         let ty = get_type!(a, scope_stack, errors);
                         if !ty.is_printable() {
@@ -535,11 +536,11 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
 
                     Statement::Print { args: args.clone() }
                 }
-                NormalStmt::Roll {
+                NormalStmt::Roll(variant::Roll {
                     count,
                     faces,
                     target,
-                } => {
+                }) => {
                     check_expr_type!(count, Type::Num, scope_stack, errors);
                     check_expr_type!(faces, Type::Num, scope_stack, errors);
 
@@ -575,9 +576,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
             },
             ParsedStmt::Block(block) => match block {
                 BlockStmt::For {
-                    counter,
-                    from,
-                    to,
+                    r#for: variant::For { counter, from, to },
                     offset_to_end,
                 } => {
                     // "For" <name> "from" <expr> "to" <expr> ";"
@@ -706,7 +705,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         offset_to_end,
                     }
                 }
-                BlockStmt::Return(res) => {
+                BlockStmt::Return(variant::Return(res)) => {
                     // this should not panic because it is already ensured
                     // the return is in a sub scope
                     let res_ty = scope_stack.res_ty().unwrap();

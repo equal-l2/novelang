@@ -1,7 +1,6 @@
 use crate::exprs::Expr;
 use crate::parse;
 use crate::span::Span;
-use crate::target::Ident;
 
 #[derive(Debug)]
 pub enum Error {
@@ -31,12 +30,12 @@ pub enum Statement {
     Ill,
 }
 
+use parse::stmt::variant;
+
 #[derive(Debug, Clone)]
 pub enum BlockStmt {
     For {
-        counter: Ident,
-        from: Expr,
-        to: Expr,
+        r#for: variant::For,
         offset_to_end: usize,
     },
     While {
@@ -60,7 +59,7 @@ pub enum BlockStmt {
         sub: parse::stmt::sub::Sub,
         offset_to_end: usize,
     },
-    Return(Option<Expr>),
+    Return(variant::Return),
     End,
 }
 
@@ -133,13 +132,11 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
         let stmt = match parsed_stmt {
             parse::Statement::Normal(normal) => Statement::Normal(normal),
             parse::Statement::Block(block, span) => match block {
-                parse::BlockStmt::For { counter, from, to } => {
+                parse::BlockStmt::For(r#for) => {
                     // "For" <name> "from" <expr> "to" <expr> ";"
                     scope_stack.push(ScopeKind::Loop, span, stmts.len());
                     Statement::Block(BlockStmt::For {
-                        counter,
-                        from,
-                        to,
+                        r#for,
                         offset_to_end: 0,
                     })
                 }
@@ -321,14 +318,12 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
                             Statement::Block(BlockStmt::Else { .. }) => {
                                 Statement::Block(BlockStmt::Else { offset_to_end })
                             }
-                            Statement::Block(BlockStmt::For {
-                                counter, from, to, ..
-                            }) => Statement::Block(BlockStmt::For {
-                                counter,
-                                from,
-                                to,
-                                offset_to_end,
-                            }),
+                            Statement::Block(BlockStmt::For { r#for, .. }) => {
+                                Statement::Block(BlockStmt::For {
+                                    r#for,
+                                    offset_to_end,
+                                })
+                            }
                             _ => {
                                 // TODO: proper error handling
                                 panic!("Invalid statement was finding End");
