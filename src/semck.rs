@@ -1,5 +1,5 @@
 use crate::exprs::Expr;
-use crate::parse::Call;
+use crate::parse::stmt::call::Call;
 use crate::span::*;
 use crate::target::Target;
 use crate::types::IdentName;
@@ -298,8 +298,11 @@ macro_rules! get_type {
     };
 }
 
+use crate::span::Spannable;
+
 pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(Error, Span)>> {
     use crate::block::{BlockStmt, Statement as ParsedStmt};
+    use crate::parse::stmt::call::{Args as CallArgs, Res as CallRes};
     use crate::parse::NormalStmt;
     use exprs::TypeCheck;
     let mut stmts = Vec::<Statement>::new();
@@ -318,11 +321,14 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     let callee_type = call.callee.check_type(&scope_stack);
 
                     match callee_type {
-                        Ok(Type::Sub { args, res }) => {
+                        Ok(Type::Sub {
+                            args: args_expected,
+                            res: res_actual,
+                        }) => {
                             // check args type
-                            match (args, &call.args) {
+                            match (args_expected, &call.args) {
                                 (None, None) => { /* OK */ }
-                                (Some(expected), Some(actual)) => {
+                                (Some(expected), Some(CallArgs(actual))) => {
                                     let actual_span = Span(
                                         actual.first().unwrap().span().0,
                                         actual.last().unwrap().span().1,
@@ -366,7 +372,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                                         call.callee.span(),
                                     ));
                                 }
-                                (None, Some(actual)) => {
+                                (None, Some(CallArgs(actual))) => {
                                     errors.push((
                                         Error::ArgsCountMismatch {
                                             expected: 0,
@@ -382,9 +388,9 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                             }
 
                             // check res type
-                            match (res, &call.res) {
+                            match (res_actual, &call.res) {
                                 (None, None) => { /* OK */ }
-                                (Some(expected), Some(res)) => {
+                                (Some(expected), Some(CallRes(res))) => {
                                     match scope_stack.get_type_info(res) {
                                         Ok(TypeInfo { ty: actual, is_mut }) => {
                                             if !is_mut {
@@ -408,7 +414,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                                     }
                                 }
                                 (Some(_), None) => { /* Discard the result */ }
-                                (None, Some(res)) => {
+                                (None, Some(CallRes(res))) => {
                                     errors.push((
                                         Error::Other("The called Sub returns no result".into()),
                                         res.span(),
@@ -647,6 +653,7 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     Statement::Else { offset_to_end }
                 }
                 BlockStmt::Sub { sub, offset_to_end } => {
+                    use crate::parse::stmt::sub::{Args as SubArgs, Res as SubRes};
                     let name = &sub.name;
 
                     // Add this sub to var table BEFORE creating a new scope
@@ -654,11 +661,13 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         name.clone().into(),
                         TypeInfo {
                             ty: Type::Sub {
-                                args: sub
-                                    .args
+                                args: sub.args.as_ref().map(|SubArgs(v)| {
+                                    v.iter().map(|a| a.ty.clone().into()).collect()
+                                }),
+                                res: sub
+                                    .res
                                     .as_ref()
-                                    .map(|v| v.iter().map(|a| a.ty.clone().into()).collect()),
-                                res: sub.res.as_ref().map(|ty| Box::new(ty.clone().into())),
+                                    .map(|SubRes(ty)| Box::new(ty.clone().into())),
                             },
                             is_mut: false,
                         },
@@ -672,11 +681,13 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     }
 
                     // create new scope
-                    scope_stack.push_with_res(stmts.len(), sub.res.clone().map(Into::into));
+                    scope_stack
+                        .push_with_res(stmts.len(), sub.res.clone().map(|SubRes(ty)| ty.into()));
 
+                    use crate::parse::stmt::sub::Arg as SubArg;
                     // add args to vars
-                    if let Some(ref args) = sub.args {
-                        for crate::parse::Arg { ident, ty } in args {
+                    if let Some(SubArgs(ref args)) = sub.args {
+                        for SubArg { ident, ty } in args {
                             scope_stack
                                 .add_var(
                                     ident.as_ref().into(),

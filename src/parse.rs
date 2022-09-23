@@ -1,7 +1,6 @@
 use crate::exprs::Expr;
 use crate::lex::{self, LangItem};
 use crate::span::{Span, Spannable};
-use crate::target::{Ident, Target};
 
 mod exprs;
 
@@ -10,15 +9,20 @@ mod utils;
 
 use utils::*;
 
-mod stmt;
-pub use stmt::call::Call;
-pub use stmt::sub::{Arg, Sub, Ty, Type};
+pub mod stmt;
+use stmt::call::Call;
+use stmt::sub::Sub;
+
+pub mod types;
 
 mod target;
 use target::parse_target;
 
 mod look_item;
 pub(self) use look_item::LookItem;
+
+mod from_tokens;
+use from_tokens::*;
 
 #[derive(Debug)]
 pub struct Error(pub String);
@@ -109,7 +113,7 @@ pub struct Parsed {
 }
 
 pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
-    use lex::{Command, Keyword};
+    use lex::Command;
 
     // index 0 is reserved for placeholder
     let mut stmts = vec![Statement::Ill];

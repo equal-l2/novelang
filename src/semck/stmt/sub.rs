@@ -1,5 +1,7 @@
 use super::super::Type;
-use crate::parse::{Arg as ParsedArg, Sub as ParsedSub};
+use crate::parse::stmt::sub::{
+    Arg as ParsedArg, Args as ParsedArgs, Res as ParsedRes, Sub as ParsedSub,
+};
 use crate::types::IdentName;
 
 #[derive(Clone, Debug)]
@@ -19,8 +21,10 @@ impl From<ParsedSub> for Sub {
     fn from(sub: ParsedSub) -> Self {
         Self {
             name: sub.name.into(),
-            args: sub.args.map(|v| v.into_iter().map(Into::into).collect()),
-            res_type: sub.res.map(Into::into),
+            args: sub
+                .args
+                .map(|ParsedArgs(v)| v.into_iter().map(Into::into).collect()),
+            res_type: sub.res.map(|ParsedRes(t)| t.into()),
         }
     }
 }

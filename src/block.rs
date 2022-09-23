@@ -57,7 +57,7 @@ pub enum BlockStmt {
         offset_to_end: usize,
     },
     Sub {
-        sub: parse::Sub,
+        sub: parse::stmt::sub::Sub,
         offset_to_end: usize,
     },
     Return(Option<Expr>),

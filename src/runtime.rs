@@ -3,7 +3,7 @@ mod val;
 
 use crate::die;
 use crate::exprs::Expr;
-use crate::parse::Call;
+use crate::parse::stmt::call::Call;
 use crate::semck::{Ast, Statement};
 use crate::target::Target;
 use crate::types::{IdentName, IntType};
@@ -11,6 +11,8 @@ use once_cell::sync::Lazy;
 
 use exprs::Eval;
 use val::Val;
+
+use crate::parse::stmt::call::{Args as CallArgs, Res as CallRes};
 
 type VarTable = std::collections::HashMap<IdentName, Val>;
 
@@ -35,7 +37,7 @@ impl Scope {
 enum ScopeKind {
     Branch,
     Loop,
-    Sub(Option<Target>),
+    Sub(Option<CallRes>),
     ForWrap,
 }
 
@@ -265,7 +267,7 @@ impl Runtime {
             // Check the args types
             match (sub.args.as_ref(), args) {
                 (None, None) => { /* OK */ }
-                (Some(expected), Some(actual)) => {
+                (Some(expected), Some(CallArgs(actual))) => {
                     if expected.len() != actual.len() {
                         unreachable!("args count mismatch (semck defect)")
                     }
@@ -286,7 +288,7 @@ impl Runtime {
             // Check the target type
             match (&sub.res_type, &res) {
                 (None, None) => { /* OK */ }
-                (Some(ret_expected), Some(target)) => {
+                (Some(ret_expected), Some(CallRes(target))) => {
                     let ret_actual = self.resolve_target(target).unwrap(); // FIXME: error
                     if ret_expected != &ret_actual.ty() {
                         unreachable!("ret type mismatch (semck defect)")
@@ -300,10 +302,10 @@ impl Runtime {
 
             // Push scope
             // register address to return (the next line)
-            self.push(ScopeKind::Sub(res.clone()), index + 1);
+            self.push(ScopeKind::Sub(res.clone().map(Into::into)), index + 1);
 
             // Add args
-            if let Some(args) = args {
+            if let Some(CallArgs(args)) = args {
                 for (an_arg, expr) in std::iter::zip(sub.args.as_ref().unwrap(), args) {
                     let val = expr.eval(self).unwrap(); // TODO: error check
                     self.decl_var(an_arg.ident.clone(), val);
@@ -643,7 +645,7 @@ pub fn run(prog: Ast) {
                 let (ret_idx, target) = loop {
                     if let Some(scope) = rt.pop() {
                         if let ScopeKind::Sub(target) = scope.kind {
-                            let target = target.map(|tgt| rt.resolve_target(&tgt).unwrap());
+                            let target = target.map(|tgt| rt.resolve_target(&tgt.into()).unwrap());
                             break (scope.ret_idx, target);
                         }
                     } else {

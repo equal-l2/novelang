@@ -1,4 +1,4 @@
-use crate::parse::{Ty, Type as ParseType};
+use crate::parse::types::{Ty, Type as ParseType};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
