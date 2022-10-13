@@ -15,12 +15,12 @@ function! GetNovelangIndent(...)
     let l:plnum = prevnonblank(v:lnum-1)
     let l:previndent = indent(plnum)
     let l:prevline = getline(plnum)
-    let l:indentreg = '\v^\s*(sub|if|else|while)'
+    let l:indentreg = '\v^\s*(sub|if|else|while|for)'
     let l:dedentreg = '\v^\s*(else|end)'
 
     if getline(v:lnum) =~? l:dedentreg
         if l:prevline =~? l:indentreg
-            # when prev body is empty
+            " when prev body is empty
             let l:res = l:previndent
         else
             let l:res = l:previndent - &l:shiftwidth
