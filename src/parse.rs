@@ -134,9 +134,9 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
 
                 lex::Command::While => parse_block!(stmts, idx, {
                     // "While" <cond> ";"
-                    let expr = parse_expr(&mut tks, last)?;
+                    let cond = parse_expr(&mut tks, last)?;
                     expects_semi!(tks, last);
-                    BlockStmt::While { cond: expr }
+                    BlockStmt::While { cond }
                 }),
 
                 lex::Command::Break => parse_block!(stmts, idx, {

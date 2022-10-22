@@ -1,6 +1,183 @@
 use crate::exprs::Expr;
 use crate::parse;
-use crate::span::Span;
+
+#[derive(Debug, Clone)]
+pub enum Statement {
+    Normal(parse::NormalStmt),
+    Block(BlockStmt),
+    Ill,
+}
+
+pub type BlockList = Vec<Statement>;
+
+#[derive(Debug, Clone)]
+pub struct Conditional {
+    pub cond: Expr,
+    pub body: BlockList,
+}
+
+use crate::target::Ident;
+use parse::stmt::sub::*;
+
+#[derive(Debug, Clone)]
+pub enum BlockStmt {
+    For {
+        counter: Ident,
+        from: Expr,
+        to: Expr,
+        body: BlockList,
+    },
+    While {
+        cond: Expr,
+        body: BlockList,
+    },
+    Break,
+    Continue,
+    If {
+        main: Conditional,
+        elif: Vec<Conditional>,
+    },
+    Sub {
+        name: SubName,
+        args: Option<SubArgs>,
+        res: Option<SubRes>,
+        body: BlockList,
+    },
+    Return(Option<Expr>),
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockParsed {
+    pub blocks: BlockList,
+}
+
+type ParsedStmt = parse::Statement;
+
+trait TryIntoBlock {
+    fn try_from_stmts<'a, T>(stmts: &mut std::iter::Peekable<T>) -> Result<Self, ()>
+    where
+        Self: Sized,
+        T: Iterator<Item = ParsedStmt>;
+}
+
+impl TryIntoBlock for BlockList {
+    fn try_from_stmts<'a, T>(stmts: &mut std::iter::Peekable<T>) -> Result<Self, ()>
+    where
+        Self: Sized,
+        T: Iterator<Item = ParsedStmt>,
+    {
+        use parse::stmt::variant::*;
+        use parse::BlockStmt as ParsedBlockStmt;
+        let mut blocks = vec![];
+
+        while let Some(stmt) = stmts.next() {
+            blocks.push(match stmt {
+                ParsedStmt::Normal(stmt) => Statement::Normal(stmt),
+                ParsedStmt::Block(stmt, span) => Statement::Block(match stmt {
+                    ParsedBlockStmt::For(inner) => {
+                        let For { counter, from, to } = inner;
+                        let body = BlockList::try_from_stmts(stmts)?;
+
+                        // TODO: proper error handling
+                        assert!(matches!(
+                            stmts.next(),
+                            Some(ParsedStmt::Block(ParsedBlockStmt::End, _))
+                        ));
+
+                        BlockStmt::For {
+                            counter,
+                            from,
+                            to,
+                            body,
+                        }
+                    }
+
+                    ParsedBlockStmt::While { cond } => {
+                        let body = BlockList::try_from_stmts(stmts)?;
+
+                        // TODO: proper error handling
+                        assert!(matches!(
+                            stmts.next(),
+                            Some(ParsedStmt::Block(ParsedBlockStmt::End, _))
+                        ));
+
+                        BlockStmt::While { cond, body }
+                    }
+
+                    ParsedBlockStmt::Break => BlockStmt::Break,
+                    ParsedBlockStmt::Continue => BlockStmt::Continue,
+
+                    ParsedBlockStmt::If { cond } => {
+                        let body = BlockList::try_from_stmts(stmts)?;
+                        let main = Conditional { cond, body };
+
+                        let elif = vec![];
+                        loop {
+                            let tail = stmts.next();
+                            match tail {
+                                Some(ParsedStmt::Block(inner, _span)) => match inner {
+                                    ParsedBlockStmt::ElIf { cond } => {
+                                        let body = BlockList::try_from_stmts(stmts)?;
+                                        elif.push(Conditional { cond, body })
+                                    }
+                                    ParsedBlockStmt::Else => {
+                                        let cond = Expr::r#true();
+                                        let body = BlockList::try_from_stmts(stmts)?;
+                                        elif.push(Conditional { cond, body })
+                                    }
+                                    ParsedBlockStmt::End => break BlockStmt::If { main, elif },
+                                    _ => todo!("error!"),
+                                },
+                                _ => todo!("error!"),
+                            }
+                        }
+                    }
+
+                    ParsedBlockStmt::Sub(inner) => {
+                        let Sub { name, args, res } = inner;
+                        let body = BlockList::try_from_stmts(stmts)?;
+
+                        // TODO: proper error handling
+                        assert!(matches!(
+                            stmts.next(),
+                            Some(ParsedStmt::Block(ParsedBlockStmt::End, _))
+                        ));
+
+                        BlockStmt::Sub {
+                            name,
+                            args,
+                            res,
+                            body,
+                        }
+                    }
+
+                    ParsedBlockStmt::Return(inner) => BlockStmt::Return(inner.0),
+
+                    ParsedBlockStmt::End | ParsedBlockStmt::ElIf { .. } | ParsedBlockStmt::Else => {
+                        // must be handled by the outer parser
+                        return Ok(blocks);
+                    }
+
+                    _ => {
+                        todo!("Invalid statements for this context")
+                    }
+                }),
+                ParsedStmt::Ill => Statement::Ill,
+            })
+        }
+
+        Ok(blocks)
+    }
+}
+
+pub fn parse_block(parsed: crate::parse::Parsed) -> BlockParsed {
+    let blocks = BlockList::try_from_stmts(&mut parsed.stmts.into_iter().peekable())
+        .expect("error handling TODO");
+    BlockParsed { blocks }
+}
+
+// TODO: move the diagnostics logics into semck
+/*
 
 #[derive(Debug)]
 pub enum Error {
@@ -21,46 +198,6 @@ impl std::fmt::Display for Error {
             Error::NotInASub => write!(f, "This statement must be in a Sub"),
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum Statement {
-    Normal(parse::NormalStmt),
-    Block(BlockStmt),
-    Ill,
-}
-
-use parse::stmt::variant;
-
-#[derive(Debug, Clone)]
-pub enum BlockStmt {
-    For {
-        r#for: variant::For,
-        offset_to_end: usize,
-    },
-    While {
-        cond: Expr,
-        offset_to_end: usize,
-    },
-    Break,
-    Continue,
-    If {
-        cond: Expr,
-        offset_to_next: usize,
-    },
-    ElIf {
-        cond: Expr,
-        offset_to_next: usize,
-    },
-    Else {
-        offset_to_end: usize,
-    },
-    Sub {
-        sub: parse::stmt::sub::Sub,
-        offset_to_end: usize,
-    },
-    Return(variant::Return),
-    End,
 }
 
 #[derive(Debug, Clone)]
@@ -123,7 +260,7 @@ impl ScopeStack {
     }
 }
 
-pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Error, Span)>> {
+pub fn parse_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Error, Span)>> {
     let mut stmts = Vec::<Statement>::new();
     let mut scope_stack = ScopeStack::new();
     let mut errors = vec![];
@@ -133,7 +270,6 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
             parse::Statement::Normal(normal) => Statement::Normal(normal),
             parse::Statement::Block(block, span) => match block {
                 parse::BlockStmt::For(r#for) => {
-                    // "For" <name> "from" <expr> "to" <expr> ";"
                     scope_stack.push(ScopeKind::Loop, span, stmts.len());
                     Statement::Block(BlockStmt::For {
                         r#for,
@@ -353,3 +489,4 @@ pub fn check_block(parsed: crate::parse::Parsed) -> Result<BlockChecked, Vec<(Er
         Err(errors)
     }
 }
+*/

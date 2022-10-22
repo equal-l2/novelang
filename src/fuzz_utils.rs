@@ -61,7 +61,7 @@ pub fn fuzz_entry_point(input: Vec<FuzzItem>) {
         _ => return,
     };
 
-    let block_checked = match crate::block::check_block(parsed) {
+    let block_checked = match crate::block::parse_block(parsed) {
         Ok(i) => i,
         _ => return,
     };

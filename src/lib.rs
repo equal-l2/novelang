@@ -85,7 +85,7 @@ pub fn compile<S: AsRef<str>>(s: &[S]) -> Result<Ast, Error> {
     let parsed =
         parse::parse(&lexed).map_err(|(e, s)| Error::Parse(e, span_to_range(s, &lexed.tokens)))?;
 
-    let block_checked = block::check_block(parsed).map_err(|v| {
+    let block_checked = block::parse_block(parsed).map_err(|v| {
         Error::Block(
             v.into_iter()
                 .map(|(e, s)| (e, span_to_range(s, &lexed.tokens)))
