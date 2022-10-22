@@ -1,5 +1,5 @@
-use crate::lex::Token;
 pub use crate::lex::LangItem;
+use crate::lex::Token;
 
 pub trait LookItem {
     fn item(self) -> Option<LangItem>;

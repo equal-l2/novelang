@@ -7,9 +7,9 @@ use crate::types::IdentName;
 mod exprs;
 mod stmt;
 mod types;
-pub use stmt::sub::{Arg, Sub};
-
 pub use types::Type;
+
+use crate::parse::stmt::sub::*;
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -46,11 +46,11 @@ pub enum Statement {
         counter: IdentName,
         from: Expr,
         to: Expr,
-        offset_to_end: usize,
+        body: Vec<Statement>,
     },
     While {
         cond: Expr,
-        offset_to_end: usize,
+        body: Vec<Statement>,
     },
     Break,
     Continue,
@@ -58,19 +58,13 @@ pub enum Statement {
         cond: Expr,
         offset_to_next: usize,
     },
-    ElIf {
-        cond: Expr,
-        offset_to_next: usize,
-    },
-    Else {
-        offset_to_end: usize,
-    },
     Sub {
-        sub: Sub,
-        offset_to_end: usize,
+        name: SubName,
+        args: Option<SubArgs>,
+        res: Option<SubRes>,
+        body: Vec<Statement>,
     },
     Return(Option<Expr>),
-    End,
     Ill,
 }
 
@@ -97,6 +91,7 @@ struct Scope {
 #[derive(Debug)]
 enum ScopeKind {
     Sub(Option<Type>),
+    Loop,
     Other,
 }
 
@@ -576,8 +571,10 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
             },
             ParsedStmt::Block(block) => match block {
                 BlockStmt::For {
-                    r#for: variant::For { counter, from, to },
-                    offset_to_end,
+                    counter,
+                    from,
+                    to,
+                    body,
                 } => {
                     // "For" <name> "from" <expr> "to" <expr> ";"
                     check_expr_type!(from, Type::Num, scope_stack, errors);
@@ -598,29 +595,20 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         counter: counter.0,
                         from,
                         to,
-                        offset_to_end,
+                        body,
                     }
                 }
-                BlockStmt::While {
-                    cond,
-                    offset_to_end,
-                } => {
+                BlockStmt::While { cond, body } => {
                     scope_stack.push(stmts.len());
                     check_expr_type!(cond, Type::Bool, scope_stack, errors);
-                    Statement::While {
-                        cond,
-                        offset_to_end,
-                    }
+                    Statement::While { cond, body }
                 }
                 BlockStmt::Break => Statement::Break,
                 BlockStmt::Continue => {
                     // "Continue" ";"
                     Statement::Continue
                 }
-                BlockStmt::If {
-                    cond,
-                    offset_to_next,
-                } => {
+                BlockStmt::If { main, elif } => {
                     scope_stack.push(stmts.len());
 
                     check_expr_type!(cond, Type::Bool, scope_stack, errors);
@@ -630,43 +618,21 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         offset_to_next,
                     }
                 }
-                BlockStmt::ElIf {
-                    cond,
-                    offset_to_next,
+                BlockStmt::Sub {
+                    name,
+                    args,
+                    res,
+                    body,
                 } => {
-                    let _ = scope_stack.pop();
-
-                    scope_stack.push(stmts.len());
-
-                    check_expr_type!(cond, Type::Bool, scope_stack, errors);
-
-                    Statement::ElIf {
-                        cond,
-                        offset_to_next,
-                    }
-                }
-                BlockStmt::Else { offset_to_end } => {
-                    let _ = scope_stack.pop();
-
-                    scope_stack.push(stmts.len());
-                    Statement::Else { offset_to_end }
-                }
-                BlockStmt::Sub { sub, offset_to_end } => {
-                    use crate::parse::stmt::sub::{SubArgs, SubRes};
-                    let name = &sub.name;
-
                     // Add this sub to var table BEFORE creating a new scope
                     let success = scope_stack.add_var(
                         name.clone().0.into(),
                         TypeInfo {
                             ty: Type::Sub {
-                                args: sub.args.as_ref().map(|SubArgs(v)| {
+                                args: args.as_ref().map(|SubArgs(v)| {
                                     v.iter().map(|a| a.ty.clone().into()).collect()
                                 }),
-                                res: sub
-                                    .res
-                                    .as_ref()
-                                    .map(|SubRes(ty)| Box::new(ty.clone().into())),
+                                res: res.as_ref().map(|SubRes(ty)| Box::new(ty.clone().into())),
                             },
                             is_mut: false,
                         },
@@ -680,12 +646,10 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     }
 
                     // create new scope
-                    scope_stack
-                        .push_with_res(stmts.len(), sub.res.clone().map(|SubRes(ty)| ty.into()));
+                    scope_stack.push_with_res(stmts.len(), res.clone().map(|SubRes(ty)| ty.into()));
 
-                    use crate::parse::stmt::sub::SubArg;
                     // add args to vars
-                    if let Some(SubArgs(ref args)) = sub.args {
+                    if let Some(SubArgs(ref args)) = args {
                         for SubArg { ident, ty } in args {
                             scope_stack
                                 .add_var(
@@ -701,11 +665,13 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                     }
 
                     Statement::Sub {
-                        sub: sub.into(),
-                        offset_to_end,
+                        name,
+                        args,
+                        res,
+                        body,
                     }
                 }
-                BlockStmt::Return(variant::Return(res)) => {
+                BlockStmt::Return(res) => {
                     // this should not panic because it is already ensured
                     // the return is in a sub scope
                     let res_ty = scope_stack.res_ty().unwrap();
@@ -740,12 +706,6 @@ pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(E
                         },
                     }
                     Statement::Return(res)
-                }
-                BlockStmt::End => {
-                    // Pop stack and assign end index
-                    let _ = scope_stack.pop();
-
-                    Statement::End
                 }
             },
             ParsedStmt::Ill => Statement::Ill,
