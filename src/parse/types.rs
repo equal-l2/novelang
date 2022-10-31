@@ -1,4 +1,4 @@
-use super::from_tokens::*;
+use super::prelude::*;
 use crate::span::{Span, Spannable};
 
 #[derive(Clone, Debug)]
@@ -27,7 +27,7 @@ pub enum Ty {
     Str,
 }
 
-impl FromTokens for Type {
+impl TryFromTokens for Type {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

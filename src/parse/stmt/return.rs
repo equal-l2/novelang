@@ -1,9 +1,9 @@
-use super::from_tokens::*;
+use super::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Return(pub Option<Expr>);
 
-impl FromTokens for Return {
+impl TryFromTokens for Return {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

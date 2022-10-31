@@ -1,4 +1,4 @@
-use super::from_tokens::*;
+use super::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Let {
@@ -7,7 +7,7 @@ pub struct Let {
     pub is_mut: bool,
 }
 
-impl FromTokens for Let {
+impl TryFromTokens for Let {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

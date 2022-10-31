@@ -1,4 +1,4 @@
-use super::from_tokens::*;
+use super::prelude::*;
 use crate::span::Spannable;
 
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ pub struct Call {
 
 type ArgsResPair = (Option<CallArgs>, Option<CallRes>);
 
-impl FromTokens for Call {
+impl TryFromTokens for Call {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         T: Iterator<Item = (usize, &'a Token)>,
@@ -40,7 +40,7 @@ impl FromTokens for Call {
     }
 }
 
-impl FromTokens for ArgsResPair {
+impl TryFromTokens for ArgsResPair {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
@@ -75,7 +75,7 @@ impl FromTokens for ArgsResPair {
     }
 }
 
-impl FromTokens for CallArgs {
+impl TryFromTokens for CallArgs {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

@@ -20,30 +20,39 @@ use crate::target::Ident;
 use parse::stmt::sub::*;
 
 #[derive(Debug, Clone)]
+pub struct For {
+    pub counter: Ident,
+    pub from: Expr,
+    pub to: Expr,
+    pub body: BlockList,
+}
+
+#[derive(Debug, Clone)]
+pub struct If {
+    pub branches: Vec<Conditional>,
+    pub r#else: Option<BlockList>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Sub {
+    pub name: SubName,
+    pub args: Option<SubArgs>,
+    pub res: Option<SubRes>,
+    pub body: BlockList,
+}
+
+#[derive(Debug, Clone)]
+pub struct While {
+    pub cond: Expr,
+    pub body: BlockList,
+}
+
+#[derive(Debug, Clone)]
 pub enum BlockStmt {
-    For {
-        counter: Ident,
-        from: Expr,
-        to: Expr,
-        body: BlockList,
-    },
-    While {
-        cond: Expr,
-        body: BlockList,
-    },
-    Break,
-    Continue,
-    If {
-        main: Conditional,
-        elif: Vec<Conditional>,
-    },
-    Sub {
-        name: SubName,
-        args: Option<SubArgs>,
-        res: Option<SubRes>,
-        body: BlockList,
-    },
-    Return(Option<Expr>),
+    For(For),
+    While(While),
+    If(If),
+    Sub(Sub),
 }
 
 #[derive(Debug, Clone)]
@@ -51,81 +60,83 @@ pub struct BlockParsed {
     pub blocks: BlockList,
 }
 
-type ParsedStmt = parse::Statement;
+use parse::Statement as ParseStmt;
 
-trait TryIntoBlock {
+trait TryFromStmts {
     fn try_from_stmts<'a, T>(stmts: &mut std::iter::Peekable<T>) -> Result<Self, ()>
     where
         Self: Sized,
-        T: Iterator<Item = ParsedStmt>;
+        T: Iterator<Item = ParseStmt>;
 }
 
-impl TryIntoBlock for BlockList {
+impl TryFromStmts for BlockList {
     fn try_from_stmts<'a, T>(stmts: &mut std::iter::Peekable<T>) -> Result<Self, ()>
     where
         Self: Sized,
-        T: Iterator<Item = ParsedStmt>,
+        T: Iterator<Item = ParseStmt>,
     {
-        use parse::stmt::variant::*;
-        use parse::BlockStmt as ParsedBlockStmt;
+        use parse::stmt::variant as parse_var;
+        use parse::BlockStmt as ParseBlockStmt;
         let mut blocks = vec![];
 
         while let Some(stmt) = stmts.next() {
             blocks.push(match stmt {
-                ParsedStmt::Normal(stmt) => Statement::Normal(stmt),
-                ParsedStmt::Block(stmt, span) => Statement::Block(match stmt {
-                    ParsedBlockStmt::For(inner) => {
-                        let For { counter, from, to } = inner;
+                ParseStmt::Normal(stmt) => Statement::Normal(stmt),
+                ParseStmt::Block(stmt, span) => Statement::Block(match stmt {
+                    ParseBlockStmt::For(inner) => {
+                        let parse_var::For { counter, from, to } = inner;
                         let body = BlockList::try_from_stmts(stmts)?;
 
                         // TODO: proper error handling
                         assert!(matches!(
                             stmts.next(),
-                            Some(ParsedStmt::Block(ParsedBlockStmt::End, _))
+                            Some(ParseStmt::Block(ParseBlockStmt::End, _))
                         ));
 
-                        BlockStmt::For {
+                        BlockStmt::For(For {
                             counter,
                             from,
                             to,
                             body,
-                        }
+                        })
                     }
 
-                    ParsedBlockStmt::While { cond } => {
+                    ParseBlockStmt::While { cond } => {
                         let body = BlockList::try_from_stmts(stmts)?;
 
                         // TODO: proper error handling
                         assert!(matches!(
                             stmts.next(),
-                            Some(ParsedStmt::Block(ParsedBlockStmt::End, _))
+                            Some(ParseStmt::Block(ParseBlockStmt::End, _))
                         ));
 
-                        BlockStmt::While { cond, body }
+                        BlockStmt::While(While { cond, body })
                     }
 
-                    ParsedBlockStmt::Break => BlockStmt::Break,
-                    ParsedBlockStmt::Continue => BlockStmt::Continue,
+                    ParseBlockStmt::If { cond } => {
+                        let mut branches = vec![];
 
-                    ParsedBlockStmt::If { cond } => {
+                        // parse head If
                         let body = BlockList::try_from_stmts(stmts)?;
-                        let main = Conditional { cond, body };
+                        branches.push(Conditional { cond, body });
 
-                        let elif = vec![];
+                        let mut r#else = None;
                         loop {
                             let tail = stmts.next();
                             match tail {
-                                Some(ParsedStmt::Block(inner, _span)) => match inner {
-                                    ParsedBlockStmt::ElIf { cond } => {
+                                Some(ParseStmt::Block(inner, _span)) => match inner {
+                                    ParseBlockStmt::ElIf { cond } => {
                                         let body = BlockList::try_from_stmts(stmts)?;
-                                        elif.push(Conditional { cond, body })
+                                        branches.push(Conditional { cond, body })
                                     }
-                                    ParsedBlockStmt::Else => {
-                                        let cond = Expr::r#true();
-                                        let body = BlockList::try_from_stmts(stmts)?;
-                                        elif.push(Conditional { cond, body })
+                                    ParseBlockStmt::Else => {
+                                        // TODO: handle
+                                        assert!(r#else.is_none());
+                                        r#else = Some(BlockList::try_from_stmts(stmts)?);
                                     }
-                                    ParsedBlockStmt::End => break BlockStmt::If { main, elif },
+                                    ParseBlockStmt::End => {
+                                        break BlockStmt::If(If { branches, r#else })
+                                    }
                                     _ => todo!("error!"),
                                 },
                                 _ => todo!("error!"),
@@ -133,27 +144,25 @@ impl TryIntoBlock for BlockList {
                         }
                     }
 
-                    ParsedBlockStmt::Sub(inner) => {
-                        let Sub { name, args, res } = inner;
+                    ParseBlockStmt::Sub(inner) => {
+                        let parse_var::Sub { name, args, res } = inner;
                         let body = BlockList::try_from_stmts(stmts)?;
 
                         // TODO: proper error handling
                         assert!(matches!(
                             stmts.next(),
-                            Some(ParsedStmt::Block(ParsedBlockStmt::End, _))
+                            Some(ParseStmt::Block(ParseBlockStmt::End, _))
                         ));
 
-                        BlockStmt::Sub {
+                        BlockStmt::Sub(Sub {
                             name,
                             args,
                             res,
                             body,
-                        }
+                        })
                     }
 
-                    ParsedBlockStmt::Return(inner) => BlockStmt::Return(inner.0),
-
-                    ParsedBlockStmt::End | ParsedBlockStmt::ElIf { .. } | ParsedBlockStmt::Else => {
+                    ParseBlockStmt::End | ParseBlockStmt::ElIf { .. } | ParseBlockStmt::Else => {
                         // must be handled by the outer parser
                         return Ok(blocks);
                     }
@@ -162,7 +171,7 @@ impl TryIntoBlock for BlockList {
                         todo!("Invalid statements for this context")
                     }
                 }),
-                ParsedStmt::Ill => Statement::Ill,
+                ParseStmt::Ill => Statement::Ill,
             })
         }
 
@@ -170,10 +179,10 @@ impl TryIntoBlock for BlockList {
     }
 }
 
-pub fn parse_block(parsed: crate::parse::Parsed) -> BlockParsed {
+pub fn parse_block(parsed: crate::parse::Parsed) -> Result<BlockParsed, ()> {
     let blocks = BlockList::try_from_stmts(&mut parsed.stmts.into_iter().peekable())
         .expect("error handling TODO");
-    BlockParsed { blocks }
+    Ok(BlockParsed { blocks })
 }
 
 // TODO: move the diagnostics logics into semck

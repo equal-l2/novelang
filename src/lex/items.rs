@@ -42,23 +42,29 @@ decl_reserved!(Boolean, {
 });
 
 decl_reserved!(Command, {
-    Print => "print",
-    Sub => "sub",
+    Assert => "assert",
     Call => "call",
-    While => "while",
+    Input => "input",
     Let => "let",
     Modify => "modify",
-    Input => "input",
+    Print => "print",
+    Roll => "roll",
+
+    Break => "break",
+    Continue => "continue",
+    Return => "return",
+
+    Halt => "halt",
+
+    For => "for",
+    While => "while",
+
     If => "if",
     Else => "else",
+
+    Sub => "sub",
+
     End => "end",
-    Roll => "roll",
-    Halt => "halt",
-    Break => "break",
-    Assert => "assert",
-    Continue => "continue",
-    For => "for",
-    Return => "return",
 });
 
 #[derive(Debug, Clone, PartialEq, Eq)]

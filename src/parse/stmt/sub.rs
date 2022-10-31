@@ -1,5 +1,5 @@
 use super::super::types::Type;
-use super::from_tokens::*;
+use super::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct SubArg {
@@ -25,7 +25,7 @@ pub struct Sub {
 
 type ArgsResPair = (Option<SubArgs>, Option<SubRes>);
 
-impl FromTokens for Sub {
+impl TryFromTokens for Sub {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
@@ -52,7 +52,7 @@ impl FromTokens for Sub {
     }
 }
 
-impl FromTokens for ArgsResPair {
+impl TryFromTokens for ArgsResPair {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
@@ -87,7 +87,7 @@ impl FromTokens for ArgsResPair {
     }
 }
 
-impl FromTokens for SubArgs {
+impl TryFromTokens for SubArgs {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
@@ -123,7 +123,7 @@ impl FromTokens for SubArgs {
     }
 }
 
-impl FromTokens for SubArg {
+impl TryFromTokens for SubArg {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

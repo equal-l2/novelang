@@ -1,4 +1,4 @@
-use super::from_tokens::*;
+use super::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct For {
@@ -7,7 +7,7 @@ pub struct For {
     pub to: Expr,
 }
 
-impl FromTokens for For {
+impl TryFromTokens for For {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

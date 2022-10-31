@@ -1,4 +1,4 @@
-use super::from_tokens::*;
+use super::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Roll {
@@ -7,7 +7,7 @@ pub struct Roll {
     pub target: Target,
 }
 
-impl FromTokens for Roll {
+impl TryFromTokens for Roll {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,

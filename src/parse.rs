@@ -1,5 +1,4 @@
 use crate::exprs::Expr;
-use crate::lex::{self, LangItem};
 use crate::span::{Span, Spannable};
 
 mod exprs;
@@ -17,10 +16,33 @@ pub mod types;
 mod target;
 
 mod look_item;
-pub(self) use look_item::LookItem;
 
-mod from_tokens;
-use from_tokens::*;
+mod prelude {
+    pub(super) use super::LookItem;
+    pub(super) use super::TryFromTokens;
+    pub(super) use crate::lex::{Keyword, LangItem, Token};
+    pub(super) use crate::parse::{utils::*, Error, Expr, Result};
+    pub(super) use crate::target::{Ident, Target};
+}
+
+use prelude::*;
+
+pub trait LookItem {
+    fn item(self) -> Option<LangItem>;
+}
+
+impl LookItem for Option<Token> {
+    fn item(self) -> Option<LangItem> {
+        self.map(|t| t.item.clone())
+    }
+}
+
+pub(self) trait TryFromTokens {
+    fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
+    where
+        Self: Sized,
+        T: Iterator<Item = (usize, &'a Token)>;
+}
 
 #[derive(Debug)]
 pub struct Error(pub String);
@@ -50,28 +72,29 @@ pub enum Statement {
 pub enum NormalStmt {
     Assert(Assert),
     Call(Call),
-    Halt,
     Input(Input),
     Let(Let),
     Modify(Modify),
     Print(Print),
     Roll(Roll),
+
+    Break,
+    Continue,
+    Return(Return),
+
+    Halt,
 }
 
 #[derive(Debug, Clone)]
 pub enum BlockStmt {
     For(For),
     While { cond: Expr },
-    Break,
-    Continue,
 
     If { cond: Expr },
     ElIf { cond: Expr },
     Else,
 
     Sub(Sub),
-
-    Return(Return),
 
     End,
 }
@@ -81,9 +104,8 @@ pub struct Parsed {
     pub stmts: Vec<Statement>,
 }
 
-pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
-    use lex::Command;
-
+pub fn parse(lexed: &crate::lex::Lexed) -> Result<Parsed> {
+    use crate::lex::Command;
     // index 0 is reserved for placeholder
     let mut stmts = vec![Statement::Ill];
 
@@ -97,25 +119,19 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
                     NormalStmt::Assert(Assert::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::Call => parse_normal!(stmts, {
+                Command::Call => parse_normal!(stmts, {
                     NormalStmt::Call(Call::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::Halt => parse_normal!(stmts, {
-                    // "Halt" ";"
-                    expects_semi!(tks, last);
-                    NormalStmt::Halt
-                }),
-
-                lex::Command::Input => parse_normal!(stmts, {
+                Command::Input => parse_normal!(stmts, {
                     NormalStmt::Input(Input::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::Let => {
+                Command::Let => {
                     parse_normal!(stmts, { NormalStmt::Let(Let::try_parse(&mut tks, last)?) })
                 }
 
-                lex::Command::Modify => parse_normal!(stmts, {
+                Command::Modify => parse_normal!(stmts, {
                     NormalStmt::Modify(Modify::try_parse(&mut tks, last)?)
                 }),
 
@@ -123,49 +139,59 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
                     NormalStmt::Print(Print::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::Roll => parse_normal!(stmts, {
+                Command::Roll => parse_normal!(stmts, {
                     NormalStmt::Roll(Roll::try_parse(&mut tks, last)?)
                 }),
 
+                Command::Break => parse_normal!(stmts, {
+                    // "Break" ";"
+                    expects_semi!(tks, last);
+                    NormalStmt::Break
+                }),
+
+                Command::Continue => parse_normal!(stmts, {
+                    // "Continue" ";"
+                    expects_semi!(tks, last);
+                    NormalStmt::Continue
+                }),
+
+                Command::Return => parse_normal!(stmts, {
+                    NormalStmt::Return(Return::try_parse(&mut tks, last)?)
+                }),
+
+                Command::Halt => parse_normal!(stmts, {
+                    // "Halt" ";"
+                    expects_semi!(tks, last);
+                    NormalStmt::Halt
+                }),
+
                 /* block statements */
-                lex::Command::For => parse_block!(stmts, idx, {
+                Command::For => parse_block!(stmts, idx, {
                     BlockStmt::For(For::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::While => parse_block!(stmts, idx, {
+                Command::While => parse_block!(stmts, idx, {
                     // "While" <cond> ";"
                     let cond = parse_expr(&mut tks, last)?;
                     expects_semi!(tks, last);
                     BlockStmt::While { cond }
                 }),
 
-                lex::Command::Break => parse_block!(stmts, idx, {
-                    // "Break" ";"
-                    expects_semi!(tks, last);
-                    BlockStmt::Break
-                }),
-
-                lex::Command::Continue => parse_block!(stmts, idx, {
-                    // "Continue" ";"
-                    expects_semi!(tks, last);
-                    BlockStmt::Continue
-                }),
-
-                lex::Command::If => parse_block!(stmts, idx, {
+                Command::If => parse_block!(stmts, idx, {
                     // "If" <cond> ";"
                     let cond = parse_expr(&mut tks, last)?;
                     expects_semi!(tks, last);
                     BlockStmt::If { cond }
                 }),
 
-                lex::Command::Else => {
+                Command::Else => {
                     stmts.push({
                         // "Else" ("If" <cond>) ";"
                         let (_, tk) = tks.peek().ok_or_else(|| {
                             (Error("expected Semicolon or If".into()), last.into())
                         })?;
 
-                        if tk.item == LangItem::Cmd(lex::Command::If) {
+                        if tk.item == LangItem::Cmd(Command::If) {
                             // "Else" "If" <cond> ";"
                             let _ = tks.next().unwrap();
 
@@ -181,15 +207,11 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
                     });
                 }
 
-                lex::Command::Sub => parse_block!(stmts, idx, {
+                Command::Sub => parse_block!(stmts, idx, {
                     BlockStmt::Sub(Sub::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::Return => parse_block!(stmts, idx, {
-                    BlockStmt::Return(Return::try_parse(&mut tks, last)?)
-                }),
-
-                lex::Command::End => parse_block!(stmts, idx, {
+                Command::End => parse_block!(stmts, idx, {
                     // "End" ";"
                     expects_semi!(tks, last);
                     BlockStmt::End

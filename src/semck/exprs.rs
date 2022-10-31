@@ -50,17 +50,17 @@ impl std::fmt::Display for ErrorKind {
 type Result = std::result::Result<Type, Error>;
 
 pub(super) trait TypeCheck {
-    fn check_type(&self, stack: &ScopeStack) -> Result;
+    fn check_type(&self, stack: &impl ScopeStack) -> Result;
 }
 
 impl TypeCheck for Expr {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         self.content.check_type(stack)
     }
 }
 
 impl TypeCheck for Log {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::And(l, r) | Self::Or(l, r) => {
@@ -86,7 +86,7 @@ impl TypeCheck for Log {
 }
 
 impl TypeCheck for Equ {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::Equal(l, r) | Self::NotEqual(l, r) => {
@@ -112,7 +112,7 @@ impl TypeCheck for Equ {
 }
 
 impl TypeCheck for Rel {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::LessEqual(l, r)
@@ -143,7 +143,7 @@ impl TypeCheck for Rel {
 }
 
 impl TypeCheck for AddSub {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::Add(l, r) => {
@@ -177,7 +177,7 @@ impl TypeCheck for AddSub {
 }
 
 impl TypeCheck for MulDiv {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::Mul(l, r) => {
@@ -219,7 +219,7 @@ impl TypeCheck for MulDiv {
 }
 
 impl TypeCheck for Node {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::Plus(i, _) | Self::Minus(i, _) => {
@@ -243,7 +243,7 @@ impl TypeCheck for Node {
 }
 
 impl TypeCheck for Value {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Single(i) => i.check_type(stack),
             Self::ArrElem(l, r, _) => {
@@ -270,7 +270,7 @@ impl TypeCheck for Value {
 }
 
 impl TypeCheck for Core {
-    fn check_type(&self, stack: &ScopeStack) -> Result {
+    fn check_type(&self, stack: &impl ScopeStack) -> Result {
         match self {
             Self::Str(_, _) => Ok(Type::Str),
             Self::Num(_, _) => Ok(Type::Num),

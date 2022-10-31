@@ -1,4 +1,4 @@
-use super::from_tokens::*;
+use super::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Assert {
@@ -6,7 +6,7 @@ pub struct Assert {
     pub cond: Expr,
 }
 
-impl FromTokens for Assert {
+impl TryFromTokens for Assert {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>
     where
         Self: Sized,
