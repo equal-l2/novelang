@@ -5,7 +5,7 @@ use novelang::{die, Range};
 struct Opt {
     filename: String,
     #[clap(long)]
-    compile: bool, // don't run
+    check: bool, // don't run
 }
 
 #[derive(Debug)]
@@ -85,26 +85,37 @@ pub fn generate_source_info<S: AsRef<str>>(lines: &[S], range: Range) -> String 
     s
 }
 
-fn print_compile_errors<S: AsRef<str>>(e: novelang::Error, lines: &[S]) {
+pub fn error_count(e: &novelang::Error) -> usize {
+    use novelang::Error::*;
     match e {
-        novelang::Error::Lex(es) => {
+        Lex(v) => v.len(),
+        Block(v) => v.len(),
+        Semck(v) => v.len(),
+        Parse(..) => 1,
+    }
+}
+
+fn print_compile_errors<S: AsRef<str>>(e: novelang::Error, lines: &[S]) {
+    use novelang::Error::*;
+    match e {
+        Lex(es) => {
             println!("{}", es.len());
             for (e, r) in es {
                 let info = generate_source_info(lines, r);
                 eprintln!("Lex syntax error: {}\n{}", e, info)
             }
         }
-        novelang::Error::Parse(e, r) => {
+        Parse(e, r) => {
             let info = generate_source_info(lines, r);
             eprintln!("Parse error: {}\n{}", e, info)
         }
-        novelang::Error::Block(es) => {
+        Block(es) => {
             for (e, r) in es {
                 let info = generate_source_info(lines, r);
                 eprintln!("Block syntax error: {}\n{}", e, info)
             }
         }
-        novelang::Error::Semck(es) => {
+        Semck(es) => {
             for (e, r) in es {
                 let info = generate_source_info(lines, r);
                 eprintln!("Semantic error: {}\n{}", e, info)
@@ -118,12 +129,14 @@ fn main() {
     let lines = read_input(&opt.filename).unwrap_or_else(|e| die!("Input error: {}", e));
 
     let insts = novelang::compile(&lines).unwrap_or_else(|e| {
+        let cnt = error_count(&e);
         print_compile_errors(e, &lines);
-        die!("Exiting...");
+        die!("{cnt} error(s) found, exiting...");
     });
-    eprintln!("Successfully compiled");
 
-    if !opt.compile {
+    if opt.check {
+        eprintln!("Successfully compiled");
+    } else {
         novelang::run(insts);
     }
 }
