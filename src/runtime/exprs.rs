@@ -188,11 +188,7 @@ impl Eval for MulDiv {
                         } else {
                             let (n, t) = {
                                 let t = t.clone();
-                                if n < 0 {
-                                    (-n, -t)
-                                } else {
-                                    (n, t)
-                                }
+                                if n < 0 { (-n, -t) } else { (n, t) }
                             };
                             Ok(match t {
                                 Val::Str(s) => Val::Str(s.repeat(n as usize)),

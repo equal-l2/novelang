@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, Result};
 
-use super::{items::*, Expr};
+use super::{Expr, items::*};
 
 impl Display for Expr {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {

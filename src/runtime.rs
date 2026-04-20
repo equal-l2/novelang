@@ -7,7 +7,7 @@ use crate::parse::stmt::call::Call;
 use crate::semck::{Ast, Statement};
 use crate::target::Target;
 use crate::types::{IdentName, IntType};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use exprs::Eval;
 use val::Val;
@@ -72,7 +72,7 @@ impl exprs::VarsMap for Runtime {
     }
 }
 
-static WAIT: Lazy<IdentName> = Lazy::new(|| "_wait".into());
+static WAIT: LazyLock<IdentName> = LazyLock::new(|| "_wait".into());
 
 impl Runtime {
     fn new() -> Self {
@@ -86,7 +86,8 @@ impl Runtime {
             vt
         };
 
-        let rng = rand::rngs::SmallRng::from_entropy();
+        let rng =
+            rand::rngs::SmallRng::from_rng(&mut rand::rand_core::UnwrapErr(rand::rngs::SysRng));
 
         Self {
             stack: vec![],
@@ -184,7 +185,7 @@ impl Runtime {
     }
 
     pub fn exec_roll(&mut self, cnt: &Expr, faces: &Expr, name: &Target) {
-        use rand::Rng;
+        use rand::RngExt;
 
         let cnt = unwrap_num(&cnt.eval(self).unwrap_or_else(|e| {
             die!("Runtime error: Failed to eval count of Roll: {}", e);
@@ -201,7 +202,7 @@ impl Runtime {
             die!("Runtime error: Faces for Roll must be a positive integer");
         }
 
-        let val = std::iter::repeat_with(|| self.rng.gen_range(1..=faces))
+        let val = std::iter::repeat_with(|| self.rng.random_range(1..=faces))
             .take(cnt as usize)
             .sum();
 

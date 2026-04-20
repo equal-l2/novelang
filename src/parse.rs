@@ -111,9 +111,9 @@ pub fn parse(lexed: &lex::Lexed) -> Result<Parsed> {
                     NormalStmt::Input(Input::try_parse(&mut tks, last)?)
                 }),
 
-                lex::Command::Let => parse_normal!(stmts, {
-                    NormalStmt::Let(Let::try_parse(&mut tks, last)?)
-                }),
+                lex::Command::Let => {
+                    parse_normal!(stmts, { NormalStmt::Let(Let::try_parse(&mut tks, last)?) })
+                }
 
                 lex::Command::Modify => parse_normal!(stmts, {
                     NormalStmt::Modify(Modify::try_parse(&mut tks, last)?)

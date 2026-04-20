@@ -1,5 +1,5 @@
 use clap::Parser;
-use novelang::{die, Range};
+use novelang::{Range, die};
 
 #[derive(clap::Parser)]
 struct Opt {

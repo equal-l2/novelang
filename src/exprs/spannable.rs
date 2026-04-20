@@ -1,5 +1,5 @@
-use super::items::*;
 use super::Expr;
+use super::items::*;
 pub use crate::span::{Span, Spannable};
 
 impl Spannable for Expr {

@@ -302,9 +302,9 @@ use crate::span::Spannable;
 
 pub fn check_semantics(parsed: crate::block::BlockChecked) -> Result<Ast, Vec<(Error, Span)>> {
     use crate::block::{BlockStmt, Statement as ParsedStmt};
+    use crate::parse::NormalStmt;
     use crate::parse::stmt::call::{CallArgs, CallRes};
     use crate::parse::stmt::variant;
-    use crate::parse::NormalStmt;
     use exprs::TypeCheck;
     let mut stmts = Vec::<Statement>::new();
     let mut scope_stack = ScopeStack::new();

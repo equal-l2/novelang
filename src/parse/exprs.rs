@@ -1,8 +1,8 @@
 use std::iter::Peekable;
 
 use super::{
-    lex::{self, LangItem, Token},
     Expr, LookItem, Span, Spannable,
+    lex::{self, LangItem, Token},
 };
 
 use crate::exprs::items::*;

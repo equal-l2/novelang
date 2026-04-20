@@ -102,7 +102,7 @@ impl FromTokens for CallArgs {
                     return Err((
                         Error("Failed to parse arg because of this token".into()),
                         (*i).into(),
-                    ))
+                    ));
                 }
             }
         }

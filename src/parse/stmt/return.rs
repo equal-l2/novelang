@@ -23,7 +23,6 @@ impl FromTokens for Return {
 
         expects_semi!(tks, last);
 
-
         Ok(Self(ret))
     }
 }

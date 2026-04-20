@@ -1,6 +1,6 @@
+use super::LookItem;
 use super::from_tokens::*;
 use super::utils::parse_expr;
-use super::LookItem;
 
 impl FromTokens for Target {
     fn try_parse<'a, T>(tks: &mut std::iter::Peekable<T>, last: usize) -> Result<Self>

@@ -14,11 +14,11 @@ pub mod sub;
 pub mod variant {
     pub use super::assert::Assert;
     pub use super::call::Call;
+    pub use super::r#for::For;
     pub use super::input::Input;
+    pub use super::r#let::Let;
     pub use super::modify::Modify;
     pub use super::print::Print;
-    pub use super::r#for::For;
-    pub use super::r#let::Let;
     pub use super::r#return::Return;
     pub use super::roll::Roll;
     pub use super::sub::Sub;

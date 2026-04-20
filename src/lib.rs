@@ -1,12 +1,10 @@
 #![warn(
+    clippy::nursery,
+    clippy::pedantic,
     future_incompatible,
     nonstandard_style,
     rust_2018_idioms,
-    rust_2018_compatibility,
-    rust_2021_compatibility,
-    unused,
-    clippy::pedantic,
-    clippy::nursery
+    unused
 )]
 #![allow(
     clippy::cast_possible_truncation,
