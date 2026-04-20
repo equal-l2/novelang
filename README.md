@@ -5,6 +5,13 @@
 ## Syntax
 
 ```
+# Notation
+#   { X }  : zero or more repetitions of X
+#   [ X ]  : optional X (zero or one)
+#   "..."  : literal
+#   |      : alternation
+#   ::=    : definition
+
 <program>  ::= {<line>}
 <line>     ::= {<stmt>} ["#" { CHAR }] NL
 <stmt>     ::= <assert> | <call> | <halt> | <input> | <let> | <modify> | <print> | <roll>
@@ -37,7 +44,7 @@ EXPR      ::= <log>
 <add-sub> ::= <mul-div> {("+" | "-") <mul-div>}
 <mul-div> ::= <node> {("*" | "/" | "%") <node>}
 <node>    ::= {"+" | "-"} <value>
-<value>   ::= <core> [ "[" <add-sub> "]" ]
+<value>   ::= <core> { "[" <add-sub> "]" }
 <core>    ::= STRING | NUMBER | IDENT | "true" | "false" | "(" <log> ")" | "[" <log> {"," <log>} "]"
 
 TARGET ::= IDENT {"[" EXPR "]"}
